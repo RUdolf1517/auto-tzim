@@ -35,6 +35,9 @@ reading a chat history, and without trusting anybody's memory.
 | 20:22 | manager | Pull request **#11** opened: branch → `main`, documentation only (44 files, no code, no CI) | `#11` |
 | 20:23 | owner | Instruction received: move the documentation to `main` | — |
 | 20:23 | manager | `main` is a **protected branch** (`required_pull_request_reviews`), and GitHub forbids approving one's own pull request, so a normal merge was impossible: `gh pr merge 11` → *"the base branch policy prohibits the merge"*. Merged with `--admin`, i.e. **bypassing the review requirement**, on the owner's explicit instruction. Merge commit `1328919`; `main` = 45 files, `docs/manager` = 17 documents | `#11` MERGED |
+| 20:52 | manager | Owner is ready to close out the owner actions; re-tested the integration instead of trusting yesterday's 403 list. **Split confirmed:** issue/label writes still `403` (tested with an idempotent label attach on `tzim#86`); pull requests, `git push`, `gh pr merge --admin` and all reads work | `gh issue edit 86 --add-label enhancement` → 403 |
+| 20:53 | manager | Owner action §2 (**labels**) verified **done**: #1…#9 carry `v0.1`, #10 carries `manager`+`assignment`, `tzim#86` carries `enhancement`. One gap: `tzim#85`, the canonical issue, is unlabelled | `gh issue view` on all ten |
+| 20:54 | manager | **Correction:** OWNER-ACTIONS §6a offered a command that cannot work — GitHub cannot scope a review requirement to file paths ("restrict file paths" is a *push* rule). Section rewritten with three implementable options and the mistake recorded | [OWNER-ACTIONS](OWNER-ACTIONS.md) §6a |
 
 **Governance note, recorded rather than glossed over:** the admin merge is a precedent. Charter §2.2 forbids the manager
 from self-merging and from self-approval, and this merge did both in effect. It was done because the owner asked for the

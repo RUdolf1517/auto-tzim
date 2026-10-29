@@ -207,6 +207,10 @@ version would have created a rule that gates markdown exactly as hard as code. R
 reviewer with its own identity — the same login that authors the pull requests. With one identity, "required review" is
 not a gate; it is a dialog that can only ever end in `--admin`.
 
+**Status: deferred by the owner on 2026-10-29** — recorded as [D-24](DECISIONS.md), together with the interim rule
+that lets documentation-only pull requests merge with `--admin` while every code pull request waits for this decision.
+Nothing below has been applied; `main` protection is exactly as it was.
+
 Three implementable options. The first is my recommendation.
 
 ### Option 1 — machine gates only (recommended while there is one identity)

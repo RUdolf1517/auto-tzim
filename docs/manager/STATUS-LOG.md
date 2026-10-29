@@ -38,6 +38,9 @@ reading a chat history, and without trusting anybody's memory.
 | 20:52 | manager | Owner is ready to close out the owner actions; re-tested the integration instead of trusting yesterday's 403 list. **Split confirmed:** issue/label writes still `403` (tested with an idempotent label attach on `tzim#86`); pull requests, `git push`, `gh pr merge --admin` and all reads work | `gh issue edit 86 --add-label enhancement` → 403 |
 | 20:53 | manager | Owner action §2 (**labels**) verified **done**: #1…#9 carry `v0.1`, #10 carries `manager`+`assignment`, `tzim#86` carries `enhancement`. One gap: `tzim#85`, the canonical issue, is unlabelled | `gh issue view` on all ten |
 | 20:54 | manager | **Correction:** OWNER-ACTIONS §6a offered a command that cannot work — GitHub cannot scope a review requirement to file paths ("restrict file paths" is a *push* rule). Section rewritten with three implementable options and the mistake recorded | [OWNER-ACTIONS](OWNER-ACTIONS.md) §6a |
+| 20:58 | owner | Decision on §6a: **defer** — no change to `main` protection today; documentation-only pull requests continue to merge with `--admin` and are logged | [D-24](DECISIONS.md) |
+| 20:58 | owner | Decision on `tzim#86`: close it now, do not port the JSON sketches into `#85`. **Not executed** — issue writes are still `403` for me (re-tested with an idempotent `PATCH state=open`), so it needs the owner's own shell | [OWNER-ACTIONS](OWNER-ACTIONS.md) §1 |
+| 20:59 | owner | Decision on this branch: merge to `main` **after** the §6a decision. Since §6a is now deferred, the corrections stay on `arena/db523563-auto-tzim` until that changes | branch `84348ec` |
 
 **Governance note, recorded rather than glossed over:** the admin merge is a precedent. Charter §2.2 forbids the manager
 from self-merging and from self-approval, and this merge did both in effect. It was done because the owner asked for the

@@ -29,6 +29,7 @@ invent it; the owner may change it without cost), **superseded**.
 | D-21 | No PTY is ever allocated; `stdin=DEVNULL`; no `pty` import | adopted | charter §6-12 | AT-05 |
 | D-22 | One upstream issue for a capabilities/structured-reasons API, outside this repo's PRs — it is `tzim#85`; my duplicate `#86` is to be closed | adopted | charter §16 P-01 | none here |
 | D-23 | A candidate plan is not a promise of eligibility or gain | adopted | charter §8.4 | AT-03, AT-04, AT-09 |
+| D-24 | `main` protection: **decision deferred** by the owner on 2026-10-29; interim rule is that an `--admin` merge is permitted for documentation-only pull requests and must be logged in STATUS-LOG | deferred (interim rule adopted) | [OWNER-ACTIONS](OWNER-ACTIONS.md) §6a; charter §2.2 | every future PR to `main` |
 
 ---
 
@@ -253,3 +254,24 @@ it is **not** part of any `tzim` pull request, and this project does not wait fo
 Scan output is a statement about which files our policy would hand over, not about whether `tzim` will change them or
 by how much. Documentation must not call it eligibility, savings, or "would optimize"; the status of a planned file is
 `planned`, and the outcome exists only after an apply.
+
+## D-24 · `main` protection — deferred, with an interim rule
+
+**Decision as given by the owner on 2026-10-29: do not decide yet.** Three options are on the table in
+[OWNER-ACTIONS](OWNER-ACTIONS.md) §6a (machine gates only; a second approving identity; status quo with logged bypasses).
+None was chosen, so the project runs on an interim rule rather than on an unwritten habit:
+
+1. A pull request against `main` that the owner's own account opens may be merged with `--admin` **only** when it is
+   documentation-only.
+2. Every such merge gets a [STATUS-LOG](STATUS-LOG.md) line naming the reason. Two have been logged so far (#11, #12).
+3. The first pull request that touches code, tests, fixtures or CI is **not** covered by this interim rule: it waits for
+   the §6a decision, because the entire point of that decision is what protects code.
+4. If a documentation pull request ever changes an acceptance-relevant fact — a gate row, a fixture id, a decision, a hash —
+   it stops being "documentation-only" for this purpose and is treated under (3).
+
+**Why not simply keep the rule and bypass it silently:** a gate that is always bypassed stops being a gate and starts
+training the habit of bypassing. Recording the deferral, and its interim rule, keeps the bypass visible and keeps the code
+case open instead of letting it inherit the documentation case.
+
+**Known cost, accepted:** until the decision lands, no pull request to `main` can carry an independent approval, because
+the only identity able to approve is the one that authored it.

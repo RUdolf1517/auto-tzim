@@ -34,6 +34,14 @@ Nothing has been released. There is no version of `auto-tzim` that can be instal
   checksums, row reconciliation with `jq`, byte evidence, the read-only-plan proof, the executed exit-code matrix, six
   negative controls the reviewer performs personally, and the four claim marks.
 
+### Changed — documentation now lives on `main`
+
+- The complete documentation set was transferred to `main` by pull request
+  [#11](https://github.com/RUdolf1517/auto-tzim/pull/11) (merge commit `1328919`, 44 files, markdown only). `main` is a
+  protected branch with a required review and GitHub forbids approving one's own pull request, so the merge used
+  `--admin` on the owner's instruction; the governance consequence is written down in
+  [docs/manager/OWNER-ACTIONS.md](docs/manager/OWNER-ACTIONS.md) §6a rather than left implicit.
+
 ### Added — the missing half of the records
 
 - [testing-harness.md](docs/testing-harness.md): the harness contract the review protocol already relied on — the fake

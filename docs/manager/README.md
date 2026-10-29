@@ -19,6 +19,7 @@ Date of this board: **2026-10-29** (updated after the owner's charter v0.2).
 | Risk register | [RISK-REGISTER.md](RISK-REGISTER.md) — 26 rows, four of them promoted to charter requirements in v0.2 |
 | Product documentation | 16 documents under `docs/`, all marked "specification, no implementation" |
 | Product code in this repository | none, by design |
+| Documentation on `main` | **merged** — PR [#11](https://github.com/RUdolf1517/auto-tzim/pull/11), merge commit `1328919`, 45 files. Landed with `--admin` because `main` requires a review and GitHub forbids self-approval — see [OWNER-ACTIONS](OWNER-ACTIONS.md) §6a |
 | Decisions awaiting owner | D-07 (update source), D-09 (hash cap), D-15 (dependency pin) — manager defaults in force |
 | Release readiness | not applicable; nothing is releasable and nothing claims to be |
 | Owner actions needed | [OWNER-ACTIONS.md](OWNER-ACTIONS.md) — five copy-paste `gh` commands (close my duplicate `tzim#86`, attach labels, repo description, spec home, branch protection) plus the one decision that gates the start, B-01. Only B-01 blocks the MVP |

@@ -171,6 +171,36 @@ gh issue comment 10 --repo RUdolf1517/auto-tzim \
   --body "start — B-01 cleared: <merge link or park comment>. MVP assignment authorised."
 ```
 
+## 6a. Decide what `main` protection should do (now that PR #11 needed a bypass)
+
+**What happened:** `main` is protected with `required_pull_request_reviews`, the pull request was opened by the same
+account that owns the repository, GitHub does not allow approving your own pull request, and the only way to land a
+documentation-only change was `gh pr merge 11 --merge --admin`. That bypasses the review gate you configured, which makes
+it a policy decision rather than a technical detail.
+
+Three options, in order of preference for this project:
+
+```sh
+# A. Keep one required review, but let a documentation-only change skip it:
+#    add a bypass actor for admins and require the rule only on code paths.
+#    (Requires a ruleset rather than classic protection; the review requirement then
+#     applies to what matters — src/, tests/, CI — and not to markdown.)
+gh api repos/RUdolf1517/auto-tzim/rulesets --method POST \
+  -f name="main: code needs review" -f target=branch -f enforcement=active \
+  -f 'conditions[ref_name][include][]=refs/heads/main' \
+  -F 'rules[][type]=pull_request' \
+  -f 'rules[][parameters][required_approving_review_count]=1' \
+  -f 'rules[][parameters][dismiss_stale_reviews_on_push]=true'
+
+# B. Drop the review requirement while the project has one human and one agent:
+gh api -X DELETE repos/RUdolf1517/auto-tzim/branches/main/protection/required_pull_request_reviews
+
+# C. Keep it exactly as it is, and treat `--admin` as the documented path for
+#    documentation-only pull requests opened by the owner's own account.
+```
+
+Whichever option you pick, record it in [DECISIONS](DECISIONS.md) — the next merge should not have to rediscover this.
+
 ## 6. Branch protection (optional, later)
 
 Not needed for the MVP (one coder, one PR, owner merges). If you want it enforced by the platform rather than by the

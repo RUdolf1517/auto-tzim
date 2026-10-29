@@ -16,10 +16,15 @@
 | assignment | [#10](https://github.com/RUdolf1517/auto-tzim/issues/10) | Consolidated coder assignment — **prepared, start blocked** |
 | upstream | [RUdolf1517/tzim#86](https://github.com/RUdolf1517/tzim/issues/86) | Capabilities and structured skip/refusal reasons (request, not a dependency) |
 
-Known defect in the issue set, recorded rather than hidden: **#10's body refers to `RUdolf1517/tzim#85`, which is wrong —
-the upstream request is #86.** The GitHub integration used here can create issues but not edit them or comment (HTTP 403,
-"Resource not accessible by integration"), so the correction is this line and cannot be applied to #10 itself. One manual
-edit by the owner fixes it; nothing else depends on the number.
+Known defects in the issue set, recorded rather than hidden — the integration used here may create issues and labels but
+every edit, comment and label-attach call returns HTTP 403 ("Resource not accessible by integration"):
+
+1. **#10's body refers to `RUdolf1517/tzim#85`; the upstream request is #86.** One manual edit fixes it; nothing else
+   depends on the number.
+2. **Labels were created but cannot be attached.** `v0.1` belongs on #1…#9, `assignment` and `manager` on #10, `upstream`
+   on nothing here (it describes `tzim#86`).
+
+Both are one-click actions for the owner and are listed on the [status board](README.md).
 
 Stage boundaries are load-bearing: nothing from v0.2+ may be merged into the MVP pull request, even "while we are here".
 

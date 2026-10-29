@@ -21,7 +21,7 @@ Date of this board: **2026-10-29** (updated after the owner's charter v0.2).
 | Product code in this repository | none, by design |
 | Decisions awaiting owner | D-07 (update source), D-09 (hash cap), D-15 (dependency pin) — manager defaults in force |
 | Release readiness | not applicable; nothing is releasable and nothing claims to be |
-| Known defect | #10's body cites `tzim#85`; the correct number is **#86**. The integration can create issues but not edit or comment (403), so the correction is recorded in [ROADMAP-ISSUES.md](ROADMAP-ISSUES.md) and needs one manual edit |
+| Known GitHub-permission limits | (1) #10's body cites `tzim#85`; the correct number is **#86**. (2) The labels `v0.1`, `manager`, `assignment`, `upstream` were created but cannot be attached to issues. The integration here may create issues and labels, but every edit, comment and label-attach call returns HTTP 403 "Resource not accessible by integration". Both corrections are recorded in the repository ([ROADMAP-ISSUES.md](ROADMAP-ISSUES.md)) and each needs one manual action: edit one line in #10, attach `v0.1` to #1…#9 and `assignment`+`manager` to #10 |
 
 ## Documents
 

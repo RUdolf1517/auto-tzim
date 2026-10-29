@@ -11,13 +11,15 @@ Date of this board: **2026-10-29**.
 | --- | --- |
 | Repository | `RUdolf1517/auto-tzim`, public, MIT, initial commit `dc184df` |
 | Specification copies | done — [`SPEC.md`](../../SPEC.md) v0.1 and [`MANAGER-SPEC.md`](../../MANAGER-SPEC.md), provenance recorded |
-| Launch preconditions (charter §3) | **2 of 6 not met** — see [pre-flight](PREFLIGHT-2026-10-29.md) |
-| GitHub issues for AT-01…AT-09 | **not created yet** — blocked on owner authorisation (Q1) |
+| Owner decision (2026-10-29) | **Q1 = wait; documentation only.** Q2–Q4 = "describe the problem", no decision — see [answers](QUESTIONS-TO-OWNER.md#0-answers-received-2026-10-29) |
+| Documentation set | **complete for the MVP contract** — 16 product documents under `docs/`, 10 manager records under `docs/manager/` |
+| Launch preconditions (charter §3) | P1 answered "wait"; **P2 still not met** (the `tzim` set is unfinished) — see [pre-flight](PREFLIGHT-2026-10-29.md) |
+| GitHub issues for AT-01…AT-09 | **not created** — implementation is not authorised |
 | Coder assignment | **not issued** — draft only, see [assignment draft](ASSIGNMENT-AT-MVP-DRAFT.md) |
 | Product code in this repository | none, by design |
-| Decisions awaiting owner | D-01, D-03, D-04, D-05, D-09, D-10, D-13 (see [decisions](DECISIONS.md)) |
-| Open questions | [QUESTIONS-TO-OWNER.md](QUESTIONS-TO-OWNER.md) — 4 blocking, 6 secondary |
-| Unresolved Critical/High risks | [risk register](RISK-REGISTER.md) — all controls specified, none implemented yet |
+| Decisions awaiting owner | D-01, D-03, D-04, D-05, D-07, D-09, D-15, D-16, D-17 (see [decisions](DECISIONS.md)) |
+| Problems described, not decided | [P-01](problems/P-01-machine-interface.md) · [P-02](problems/P-02-dry-run-is-not-write-free.md) · [P-03](problems/P-03-exit-codes.md) |
+| Unresolved Critical/High risks | [risk register](RISK-REGISTER.md) — controls specified, none implemented |
 | Release readiness | not applicable; nothing is releasable and nothing claims to be |
 
 ## Documents
@@ -31,7 +33,14 @@ Date of this board: **2026-10-29**.
 | [RISK-REGISTER.md](RISK-REGISTER.md) | Risks, levels, the control that closes each, and the evidence that proves it |
 | [ROADMAP-ISSUES.md](ROADMAP-ISSUES.md) | AT-01…AT-09 with acceptance criteria and required evidence; later stages sketched only |
 | [GATES.md](GATES.md) | Pre-registered MVP acceptance matrix: specification clause → behavioural evidence |
+| [problems/](problems/README.md) | Three problems described in full, because the owner asked for the description rather than a decision |
 | [ASSIGNMENT-AT-MVP-DRAFT.md](ASSIGNMENT-AT-MVP-DRAFT.md) | Charter §11 assignment for the MVP, **draft, not issued** |
+
+Product documentation lives outside this directory, in `docs/`: [architecture](../architecture.md), [cli](../cli.md),
+[config](../config.md), [safety](../safety.md), [guarantees](../guarantees.md), [formats](../formats.md),
+[state](../state.md), [privacy](../privacy.md), [update](../update.md), [testing](../testing.md),
+[roadmap](../roadmap.md), [releases](../releases.md), [dependencies](../dependencies.md),
+[limitations](../limitations.md), [recovery](../recovery.md).
 
 ## Evidence legend
 

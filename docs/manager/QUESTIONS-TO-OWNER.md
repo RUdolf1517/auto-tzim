@@ -4,12 +4,36 @@ Date: **2026-10-29**. Charter §16 asks the manager to study the charter, study 
 is a question only the owner can answer; each carries the manager's recommendation so that "yes to the
 recommendation" is a valid answer. Decisions referenced by ID live in [DECISIONS.md](DECISIONS.md).
 
-Two questions are blocking everything: **Q1** (authorisation) and **Q4** (one missing exit code). Q2 and Q3 shape
-the first assignment and are much cheaper to settle now than after the code exists.
+Two questions were blocking everything: **Q1** (authorisation) and **Q4** (one missing exit code). All four were
+answered on 2026-10-29; the answers are recorded in §0 and, where they changed the plan, in
+[DECISIONS.md](DECISIONS.md).
 
 ---
 
-## Q1 — Authorisation and the state of the previous `tzim` work · **blocking**
+## 0. Answers received (2026-10-29)
+
+Verbatim, per question:
+
+| Q | Owner's answer | What the manager did |
+| --- | --- | --- |
+| Q1 | "жди сделай только всю документацию как в оригинальном репо tzim" — wait; produce the complete documentation, in the shape of the original `tzim` repository | No issues created, no assignment issued, no code. The full documentation set was written: product reference under `docs/`, manager records under `docs/manager/` |
+| Q2 | "ничего не делай распиши проблему" — do nothing, describe the problem | [P-01](problems/P-01-machine-interface.md): the missing machine interface, described in full. No upstream issue filed, no adapter adopted |
+| Q3 | "опиши подробно проблему" — describe the problem in detail | [P-02](problems/P-02-dry-run-is-not-write-free.md): a `tzim` dry run writes a temporary candidate into the destination directory |
+| Q4 | "опиши подробно проблему" — describe the problem in detail | [P-03](problems/P-03-exit-codes.md): no exit code for a run refused before processing, and the collision on `4` |
+
+Consequences of Q1 = wait, recorded so they are not re-litigated later:
+
+- **No GitHub issues exist** for AT-01…AT-09; the internal IDs stay internal
+  ([ROADMAP-ISSUES.md](ROADMAP-ISSUES.md) is the source).
+- **No implementation is authorised**; pre-flight P1 now reads "answered: wait", not "unverified", and P2 (the
+  unfinished `tzim` set) stays open.
+- **No decision is adopted** on Q2–Q4; the three problem notes describe options and their costs, and stop there.
+- **Documentation is now complete** for the MVP contract: a reader can review what the program must do, what it
+  refuses to do, and how it will be checked, without reading code — because there is none.
+
+---
+
+## Q1 — Authorisation and the state of the previous `tzim` work · **blocking** · **answered: wait**
 
 Charter §3.1 requires explicit permission to start, and §3.2 requires that the coder has finished the previously
 assigned `tzim` set. The second condition is factually unmet: **PR #84 is open with two failing measurement checks**
@@ -29,7 +53,7 @@ Options:
 What it blocks: creating issues, issuing the assignment. What it does not block: everything already in this
 repository.
 
-## Q2 — How to close the missing machine interface · **shapes AT-04**
+## Q2 — How to close the missing machine interface · **shapes AT-04** · **answered: describe only**
 
 `tzim` has no machine-readable capability list and no structured skip reason ([study G-1, G-2](TZIM-STUDY-2026-10-29.md)).
 The specification already answers what to do technically — a version-specific adapter with fail-closed behaviour,
@@ -46,7 +70,7 @@ Options:
 - **C:** adapter-only, no upstream issues. Cheapest now, but the gaps stay invisible to whoever maintains the
   pair of projects later.
 
-## Q3 — What exactly does `run --once --dry-run` do? · **shapes AT-03/AT-04/AT-06**
+## Q3 — What exactly does `run --once --dry-run` do? · **shapes AT-03/AT-04/AT-06** · **answered: describe only**
 
 `tzim`'s own dry run is not free: it builds and verifies a real candidate in the destination directory and then
 deletes it ([study B-1](TZIM-STUDY-2026-10-29.md)). So there are two honest meanings:
@@ -62,7 +86,7 @@ deletes it ([study B-1](TZIM-STUDY-2026-10-29.md)). So there are two honest mean
 Sub-question: does **either** variant satisfy the §8.1 first-run gate, or does the owner want the gate to require
 `scan` specifically? The manager recommends "either", recorded in history as a dry run.
 
-## Q4 — The missing exit code for a refused run · **blocking AT-06, changes SPEC §8.2**
+## Q4 — The missing exit code for a refused run · **blocking AT-06, changes SPEC §8.2** · **answered: describe only**
 
 The first-run gate, `pause`, and `min_free_bytes` all refuse a run before anything is touched, and §8.2 has no code
 for that: `0` would claim success, `1` claims a file failed, `2` claims a usage/config error, `3`/`4`/`5` mean other
@@ -130,11 +154,16 @@ merge, close issues or publish releases without explicit delegation (charter §2
 
 ## What happens after the answers
 
+Q1 was answered "wait": nothing below is triggered yet. The mapping is kept so that the next turn of the wheel is
+mechanical.
+
 | Answer | Manager action |
 | --- | --- |
-| Q1 = A | Nothing until #84 is merged or parked; then re-run the pre-flight and proceed |
-| Q1 = B or C | Create AT-01…AT-09 (or AT-01…AT-02), post the assignment from [the draft](ASSIGNMENT-AT-MVP-DRAFT.md), mark D-04/D-05/D-07 as adopted or amended |
-| Q1 = C | Narrow the assignment to the chosen slice; the rest stays described but unassigned |
-| Q4 = A | Update the gates and the assignment with exit code `6`; the specification change is recorded in DECISIONS as adopted |
-| Q4 = B or C | Record the choice, adjust the acceptance matrix, and note the cost in the risk register |
+| Q1 becomes "start" | Create AT-01…AT-09, post the assignment from [the draft](ASSIGNMENT-AT-MVP-DRAFT.md), mark D-04/D-05/D-07 as adopted or amended |
+| Q1 becomes "start a narrow slice" | Narrow the assignment to the chosen slice; the rest stays described but unassigned |
+| Q4 answered A | Exit code `6` enters the gates and the assignment; the specification change is recorded as adopted |
+| Q4 answered B or C | Record the choice, adjust the acceptance matrix, and note the cost in the risk register |
 | Q2, Q3, Q5–Q7 answered | Update DECISIONS.md, then issue the assignment with the resolved values |
+
+Until then the three problem notes are the answer: they describe what each option costs, so that whoever decides does
+not have to rediscover it.

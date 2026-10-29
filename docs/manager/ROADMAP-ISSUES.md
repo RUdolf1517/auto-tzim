@@ -1,8 +1,9 @@
 # Roadmap and issue breakdown
 
 Internal IDs are used until the issues exist in GitHub; after creation each ID is replaced by its real number, and
-no number is ever guessed. Stage boundaries are load-bearing: nothing from v0.2+ may be merged into the MVP pull
-request, even "while we are here".
+no number is ever guessed. **No issue exists today**: on 2026-10-29 the owner answered Q1 with "wait, documentation
+only", so this file is the source of the IDs rather than a mirror of GitHub. Stage boundaries are load-bearing:
+nothing from v0.2+ may be merged into the MVP pull request, even "while we are here".
 
 Scope of this stage: **MVP / v0.1**, derived from `SPEC.md` §17. Acceptance is defined clause by clause in
 [GATES.md](GATES.md).

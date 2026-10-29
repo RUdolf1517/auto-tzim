@@ -7,10 +7,10 @@ assignment. Evidence is labelled per the [legend](README.md#evidence-legend).
 
 | # | Precondition | State | Blocks |
 | --- | --- | --- | --- |
-| P1 | Owner authorised starting `auto-tzim` as a separate project | **unverified** | creating issues, issuing the assignment |
+| P1 | Owner authorised starting `auto-tzim` as a separate project | **answered 2026-10-29: wait — documentation only** | creating issues, issuing the assignment |
 | P2 | Coder finished the previously assigned `tzim` set | **not met** | issuing an assignment (charter §3.2) |
 | P3 | Separate repository exists, URL/owner known | **met** | — |
-| P4 | `SPEC.md` copied into the repository as a fixed-version document | **met (this turn)** | — (canonical home still open, Q10) |
+| P4 | `SPEC.md` copied into the repository as a fixed-version document | **met** | — (canonical home still open, Q9) |
 | P5 | Initial scope limited to MVP / v0.1 (spec §17) | **met as a declaration** | — (no assignment yet) |
 | P6 | No changes in the `tzim` repository; missing machine interfaces become an issue plus a fail-closed adapter | **met, with two gaps recorded** | AT-04 design (decisions D-01, D-02) |
 
@@ -20,17 +20,19 @@ manager.
 
 ---
 
-## P1 — owner authorisation · **unverified**
+## P1 — owner authorisation · **answered 2026-10-29: wait**
 
-The repository `RUdolf1517/auto-tzim` exists (created 2026-10-29T19:22:18Z, public, MIT, default branch `main`,
-issues enabled), and this session works on branch `arena/5e301052-auto-tzim`. A created repository is not by
-itself the "explicit permission to start" that charter §3.1 asks for, and the charter also says the owner is the
-only one who can change the product contract. So the authorisation is treated as **unverified** until the owner
-answers Q1 in [QUESTIONS-TO-OWNER.md](QUESTIONS-TO-OWNER.md).
+The owner's answer to Q1 was: *"жди сделай только всю документацию как в оригинальном репо tzim"* — wait, and produce
+the complete documentation, in the shape of the original `tzim` repository. The same answer applied to Q2–Q4 with
+"describe the problem, do nothing".
 
-**What it blocks:** creating the AT-01…AT-09 GitHub issues and issuing the assignment.
-**What it does not block:** documentation, the `tzim` study, risk register, gates and the assignment draft —
-all produced here.
+So: implementation is **not authorised**, no GitHub issue was created, no assignment was issued, and no decision was
+adopted. What was authorised — documentation — is complete: the specification copies, the manager records, the three
+problem notes, and the product reference set (architecture, CLI, config, safety, guarantees, formats, state, privacy,
+update, testing, limitations, recovery, roadmap, releases, dependencies, contributing).
+
+**What it blocks:** creating the AT-01…AT-09 GitHub issues and issuing the assignment, until the owner says
+"start".
 
 ## P2 — the previous `tzim` set is finished · **not met**
 

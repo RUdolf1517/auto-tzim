@@ -5,6 +5,12 @@ default, written before any implementation exists so that the choice is not made
 first. Entries marked **owner** change the product contract (`SPEC.md`) or a safety posture and cannot be adopted
 by the manager (charter §2.2).
 
+**On 2026-10-29 the owner answered Q1 with "wait"**: implementation is not authorised and no issue was created. So
+"adopted" below means "binding on the first implementation, when it is authorised", not "in force today". D-01…D-05,
+D-07, D-09, D-15, D-16 and D-17 stay **proposed**; the three owner-level questions Q2–Q4 were answered with "describe
+the problem", so their notes ([P-01](problems/P-01-machine-interface.md), [P-02](problems/P-02-dry-run-is-not-write-free.md),
+[P-03](problems/P-03-exit-codes.md)) carry the analysis and nothing was decided.
+
 | ID | Decision | State | Affects |
 | --- | --- | --- | --- |
 | D-01 | Version-keyed adapter for `tzim 0.14.x` + `--version` + a dry-run JSON probe; no human-output parsing | proposed (owner notice) | AT-04, AT-08 |
@@ -22,6 +28,8 @@ by the manager (charter §2.2).
 | D-13 | Integration tests pin a release artifact by SHA-256; "latest" is never used | adopted | AT-08, CI |
 | D-14 | Stability tests inject the clock; no test sleeps for `min_file_age_seconds` | adopted | AT-03, AT-08 |
 | D-15 | Runtime dependencies are pinned with hashes; the only write dependency is `tomli-w` | proposed | AT-01, AT-02 |
+| D-16 | Our own `--json` envelope: typed NDJSON, `schema: 1`, one `result` line or file rows plus a summary | proposed (owner notice) | AT-06 |
+| D-17 | Log format and retention: local JSONL, 30 days, size cap, no environment dump | proposed (privacy) | AT-05, AT-09 |
 
 ---
 
@@ -171,3 +179,22 @@ uses a 1-second age with a real sleep of at most 2 seconds, on one fixture, and 
 dependencies) — pinning it is a supply-chain decision, so it is listed here rather than assumed. Test-only
 dependencies (`pytest`, `pytest-timeout` if used) are pinned in a separate file. Every pin carries a hash and a
 `lockfile`-style CI job, following the pattern `tzim` already uses.
+
+## D-16 · Our own JSON envelope
+
+`SPEC.md` §8.1 requires every command to support `--json`; it does not fix field names. Leaving that to the coder
+would create a de-facto contract nobody reviewed. The text of the proposal is [docs/cli.md](../cli.md) §3: typed
+NDJSON, one `{"type":"result", …}` for single-answer commands, one `{"type":"file", …}` per file plus a
+`{"type":"run", …}` / `{"type":"plan", …}` summary for `scan`/`run`, `"schema": 1` everywhere, `null` meaning "not
+computed" rather than "unknown but fine", and diagnostics never on stdout.
+
+The coder implements it as written, or brings a decision. A field added in code without this page changing is a
+review finding.
+
+## D-17 · Logs
+
+Local structured JSONL under `AUTO_TZIM_HOME`, one object per event, fields fixed by [docs/state.md](../state.md):
+timestamp, level, event, run id, folder id, relative path (never a file's contents), `tzim` binary identity, and the
+normalized status. Retention: 30 days and a size cap, both configurable; a human view is rendered by `logs`. No
+environment variables are ever logged, no absolute path outside the root appears, and nothing is uploaded
+([privacy](../privacy.md)). A field that would identify a person beyond a path is refused in review.

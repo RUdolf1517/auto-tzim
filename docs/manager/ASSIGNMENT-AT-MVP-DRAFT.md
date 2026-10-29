@@ -1,9 +1,10 @@
 # Assignment — MVP / v0.1 (AT-01 … AT-09)
 
-**Status: DRAFT — not issued.** It becomes valid only when the owner answers Q1 (authorisation) in
-[QUESTIONS-TO-OWNER.md](QUESTIONS-TO-OWNER.md) and Q4 (the pre-flight exit code), after which the same text is
-posted as the body of the MVP tracking issue with an explicit start date. Until then no implementation is
-contracted, and work started against this draft would have no acceptance criteria.
+**Status: DRAFT — not issued.** On 2026-10-29 the owner answered Q1 with "wait, documentation only", and asked for
+the Q2–Q4 problems to be described rather than decided ([answers](QUESTIONS-TO-OWNER.md#0-answers-received-2026-10-29)).
+So this text is a plan, not a contract: it becomes valid when the owner says "start" and Q4 is answered, after which
+the same text is posted as the body of the MVP tracking issue with an explicit start date. Until then no
+implementation is contracted, and work started against this draft would have no acceptance criteria.
 
 Format follows charter §11.
 

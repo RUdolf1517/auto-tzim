@@ -38,6 +38,10 @@ Date of this board: **2026-10-29** (updated after the owner's charter v0.2).
 | [GATES.md](GATES.md) | Pre-registered MVP acceptance matrix: specification clause → behavioural evidence |
 | [FIXTURE-CORPUS.md](FIXTURE-CORPUS.md) | Frozen corpus: every case by ID, expected outcome, the gate row it proves |
 | [EVIDENCE-PROTOCOL.md](EVIDENCE-PROTOCOL.md) | How a handoff is verified: commands, reconciliations, the six controls I run myself |
+| [HANDOFF-TEMPLATE.md](HANDOFF-TEMPLATE.md) | The §12 handoff as a fill-in form, plus the artifact bundle it must point at |
+| [REVIEW-TEMPLATE.md](REVIEW-TEMPLATE.md) | The review report: binding, CI, reconciliation, matrix, controls, findings, one verdict |
+| [UPSTREAM.md](UPSTREAM.md) | The `tzim` issues and PRs that affect us, what we rely on, and how a change becomes visible |
+| [STATUS-LOG.md](STATUS-LOG.md) | Dated record of every manager action and decision, with artifacts |
 | [problems/](problems/README.md) | The three problem notes P-01…P-03, now **decided** — kept as the analysis behind D-02, D-04 and D-18/D-19 |
 | [ASSIGNMENT-AT-MVP-DRAFT.md](ASSIGNMENT-AT-MVP-DRAFT.md) | Charter §11 assignment for the MVP — **prepared, filed as #10, not started** |
 | [OWNER-ACTIONS.md](OWNER-ACTIONS.md) | The `gh` commands the owner has to run, why each is needed, and how to verify it |
@@ -45,8 +49,9 @@ Date of this board: **2026-10-29** (updated after the owner's charter v0.2).
 Product documentation lives outside this directory, in `docs/`: [architecture](../architecture.md), [cli](../cli.md),
 [config](../config.md), [safety](../safety.md), [guarantees](../guarantees.md), [formats](../formats.md),
 [state](../state.md), [privacy](../privacy.md), [update](../update.md), [testing](../testing.md),
-[roadmap](../roadmap.md), [releases](../releases.md), [dependencies](../dependencies.md),
-[limitations](../limitations.md), [recovery](../recovery.md).
+[testing harness](../testing-harness.md), [roadmap](../roadmap.md), [releases](../releases.md),
+[dependencies](../dependencies.md), [limitations](../limitations.md), [recovery](../recovery.md),
+[FAQ](../faq.md).
 
 ## Evidence legend
 

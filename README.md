@@ -88,7 +88,9 @@ line saying so. None of them describes behaviour you can observe today.
 | [privacy](docs/privacy.md) | The complete network surface and what is kept locally |
 | [update](docs/update.md) | Notify-only in v0.1; the rules a controlled update must satisfy |
 | [testing](docs/testing.md) | Test layers, fixtures, negative controls, planned traceability |
+| [testing harness](docs/testing-harness.md) | The fake `tzim`, the invocation log that proves a scan is read-only, the case runner, the pinned binary |
 | [limitations](docs/limitations.md) | No undo, untested platforms, and everything that will surprise a user |
+| [FAQ](docs/faq.md) | Short answers with links: why no undo, why exit `6`, why no capability list, can the coder start |
 | [recovery](docs/recovery.md) | What to do after an interruption, a stale lock, a corrupt file |
 | [roadmap](docs/roadmap.md) | v0.1 → v0.4 and what is deliberately absent |
 | [releases](docs/releases.md) | Versioning, artifacts, definition of done |
@@ -108,7 +110,9 @@ line saying so. None of them describes behaviour you can observe today.
 | [docs/manager/RISK-REGISTER.md](docs/manager/RISK-REGISTER.md) | Risks and the control that closes each |
 | [docs/manager/ROADMAP-ISSUES.md](docs/manager/ROADMAP-ISSUES.md) | Issue breakdown per stage, with acceptance criteria |
 | [docs/manager/GATES.md](docs/manager/GATES.md) | Pre-registered acceptance matrix for the MVP |
-| [docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md](docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md) | The MVP assignment — draft, not issued |
+| [docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md](docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md) | The MVP assignment — prepared, filed as #10, not started |
+| [docs/manager/HANDOFF-TEMPLATE.md](docs/manager/HANDOFF-TEMPLATE.md) · [REVIEW-TEMPLATE.md](docs/manager/REVIEW-TEMPLATE.md) | What the coder hands over, and how it is reviewed |
+| [docs/manager/UPSTREAM.md](docs/manager/UPSTREAM.md) · [STATUS-LOG.md](docs/manager/STATUS-LOG.md) · [OWNER-ACTIONS.md](docs/manager/OWNER-ACTIONS.md) | Upstream state, the dated log, the commands only the owner can run |
 | [CHANGELOG.md](CHANGELOG.md) | What changed; nothing has been released |
 
 ## Related project

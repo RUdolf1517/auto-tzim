@@ -34,6 +34,19 @@ Nothing has been released. There is no version of `auto-tzim` that can be instal
   checksums, row reconciliation with `jq`, byte evidence, the read-only-plan proof, the executed exit-code matrix, six
   negative controls the reviewer performs personally, and the four claim marks.
 
+### Added — the missing half of the records
+
+- [testing-harness.md](docs/testing-harness.md): the harness contract the review protocol already relied on — the fake
+  `tzim` scenario switchboard, the invocation-log schema (the proof that a scan is read-only), `run-case <ID>`, the pinned
+  binary fetcher with checksum enforcement, and the evidence bundle layout.
+- [HANDOFF-TEMPLATE.md](docs/manager/HANDOFF-TEMPLATE.md) and [REVIEW-TEMPLATE.md](docs/manager/REVIEW-TEMPLATE.md): charter
+  §12 as fill-in forms, plus the four claim marks and the single allowed verdict.
+- [UPSTREAM.md](docs/manager/UPSTREAM.md): the `tzim` items that affect this project (`#85` canonical, `#86` my duplicate,
+  `#83` prompt contract, `#82` JPEG default, PR #84), what we rely on, and how a change would become visible.
+- [STATUS-LOG.md](docs/manager/STATUS-LOG.md): dated record of every action and decision on 2026-10-29, including the
+  duplicate-issue mistake and its root cause.
+- [docs/faq.md](docs/faq.md): short answers with pointers, for users and for the next reviewer.
+
 ### Fixed — a duplicate upstream issue of my own making
 
 - `tzim#86` (filed by this project) duplicates `tzim#85`, which already described the same capabilities /

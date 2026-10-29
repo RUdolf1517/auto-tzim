@@ -3,7 +3,7 @@
 Status: **decided** — charter v0.2 §16 P-01 (2026-10-29) accepted this as a limitation and chose the restricted adapter:
 `tzim --version` only, default set delegated without `--formats`, `transforms` empty, nothing inferred from prose or
 `note`, generic `skipped_by_tzim`, unknown contract ⇒ `incompatible_tzim`. Recorded as **D-01, D-02, D-05**. The upstream
-request this note sketched was filed as [RUdolf1517/tzim#86](https://github.com/RUdolf1517/tzim/issues/86). The analysis
+request this note sketched exists as [RUdolf1517/tzim#85](https://github.com/RUdolf1517/tzim/issues/85) (my own #86 duplicates it). The analysis
 below is kept unchanged, as the reasoning behind those decisions.
 Sources: `tzim` at `d4e45974b32fc2bb696eee346892846fe3e0a5d1` (`source-inspected`), `SPEC.md` §2.1, §6.3, §7.1, §7.3,
 §7.4, §11.1.

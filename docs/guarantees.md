@@ -32,7 +32,7 @@ must not.
   file-processing `tzim` and does not need write access to the target root (charter §6-2, D-04).
 - **That a refusal is typed precisely.** `tzim` reports refusals as `skipped` with prose, so every `tzim`-decided skip
   arrives as one generic `skipped_by_tzim` with the note kept verbatim. A finer distinction is a future upstream interface
-  (`tzim#86`), not something we infer (charter §6-18). The statuses we *can* distinguish — `skipped_policy`,
+  (`tzim#85`), not something we infer (charter §6-18). The statuses we *can* distinguish — `skipped_policy`,
   `skipped_unstable`, `hardlink_skip` — are decided by our own layer before any process starts.
 - **That the installed build has a given format.** Capabilities are build-dependent and there is no machine-readable
   list (study G-1). We delegate the default set to the binary (no `--formats`), record the version and the binary hash, and

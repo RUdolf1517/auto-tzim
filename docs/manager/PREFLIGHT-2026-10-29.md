@@ -13,7 +13,7 @@ Evidence is labelled per the [legend](README.md#evidence-legend).
 | P3 | Separate repository exists, URL/owner known | **met** | — |
 | P4 | `SPEC.md` copied as a fixed-version document | **met**, plus `MANAGER-SPEC.md` v0.2 and a conflict resolution page | — |
 | P5 | Initial scope limited to MVP / v0.1 | **met** — nine issues, non-goals stated in each | — |
-| P6 | No changes in `tzim`; missing machine interfaces become an issue plus a fail-closed adapter | **met** — charter §16 P-01 accepts the restricted adapter; upstream request filed as `RUdolf1517/tzim#86` | — |
+| P6 | No changes in `tzim`; missing machine interfaces become an issue plus a fail-closed adapter | **met** — charter §16 P-01 accepts the restricted adapter; upstream request exists as `RUdolf1517/tzim#85` (my `#86` duplicates it) | — |
 
 The deliverable the charter asks for is complete: nine issues, one consolidated assignment, one pre-registered acceptance
 matrix. The assignment is **filed but not started**, because P2 is a fact about another repository and cannot be
@@ -31,7 +31,7 @@ plan for the MVP — which is what this repository now contains.
 What was created under that authorisation: issues [#1](https://github.com/RUdolf1517/auto-tzim/issues/1) …
 [#9](https://github.com/RUdolf1517/auto-tzim/issues/9) (AT-01…AT-09), the assignment
 [#10](https://github.com/RUdolf1517/auto-tzim/issues/10), and one upstream request
-[RUdolf1517/tzim#86](https://github.com/RUdolf1517/tzim/issues/86). No branch protection, no tags, no releases, no
+[RUdolf1517/tzim#85](https://github.com/RUdolf1517/tzim/issues/85). No branch protection, no tags, no releases, no
 repository settings: those remain the owner's.
 
 ## P2 — the previous `tzim` set is finished · **not met**
@@ -81,8 +81,9 @@ issues say, not the older technical specification's planner.
 - Charter §16 P-01 accepts the missing capability/reason API as a **limitation**, not a blocker: the default set is
   delegated without `--formats`, `transforms` stays empty, nothing is parsed from prose, `skipped_by_tzim` stays generic,
   and an unknown contract is `incompatible_tzim` (exit `3`).
-- The upstream request is filed as [RUdolf1517/tzim#86](https://github.com/RUdolf1517/tzim/issues/86) — a description of
-  a future `--capabilities --json` and a structured reason code, explicitly not a pull request and not a dependency.
+- The upstream request is [RUdolf1517/tzim#85](https://github.com/RUdolf1517/tzim/issues/85) — a description of a future
+  `--capabilities --json` and a structured reason code, explicitly not a pull request and not a dependency. (My own #86
+  duplicates it and should be closed; recorded in [ROADMAP-ISSUES.md](ROADMAP-ISSUES.md).)
 - No change to `tzim` code, tests, CI or settings was made or requested in this project.
 
 ## What the manager did not do

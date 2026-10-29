@@ -14,13 +14,15 @@
 | AT-08 | [#8](https://github.com/RUdolf1517/auto-tzim/issues/8) | Verification with fake and real `tzim` |
 | AT-09 | [#9](https://github.com/RUdolf1517/auto-tzim/issues/9) | Safety documentation and release readiness |
 | assignment | [#10](https://github.com/RUdolf1517/auto-tzim/issues/10) | Consolidated coder assignment — **prepared, start blocked** |
-| upstream | [RUdolf1517/tzim#86](https://github.com/RUdolf1517/tzim/issues/86) | Capabilities and structured skip/refusal reasons (request, not a dependency) |
+| upstream | [RUdolf1517/tzim#85](https://github.com/RUdolf1517/tzim/issues/85) | Capabilities and structured result reasons (request, not a dependency). **Canonical** — it existed before I filed my own #86, which is a duplicate |
 
 Known defects in the issue set, recorded rather than hidden — the integration used here may create issues and labels but
 every edit, comment and label-attach call returns HTTP 403 ("Resource not accessible by integration"):
 
-1. **#10's body refers to `RUdolf1517/tzim#85`; the upstream request is #86.** One manual edit fixes it; nothing else
-   depends on the number.
+1. **I filed a duplicate upstream issue.** `tzim#86` repeats `tzim#85`, which was created twelve minutes earlier and
+   says the same thing better. #85 is canonical; #86 should be closed as a duplicate. Nothing in #10 needs editing — its
+   reference to #85 was correct, and my earlier "correction" of it was the mistake. Root cause: I filed the upstream
+   request without re-listing the open issues first.
 2. **Labels were created but cannot be attached.** `v0.1` belongs on #1…#9, `assignment` and `manager` on #10, `upstream`
    on nothing here (it describes `tzim#86`).
 
@@ -105,9 +107,9 @@ post-run identity re-read.
 malformed JSON is `failed`, never `optimized`; a child that exits `0` after mutating a file is caught; concurrent run
 exits `8`; no row stays `running`; recovery never yields `optimized`; a second run makes zero invocations.
 
-**Tests.** Each status; exits `0/1/2/3/4`; death by signal; truncated JSON; wrong `type`; two summaries; no summary; huge
-stdout; 10 MiB stderr; stdin-blocking child; `SIGTERM`-ignoring child; mutating child; lock stolen; crash before and
-after commit; `SIGINT` during a run.
+**Tests.** Cases `R-01`…`R-15` and `L-01`…`L-06` of [FIXTURE-CORPUS.md](FIXTURE-CORPUS.md): each status; exits
+`0/1/2/3/4`; death by signal; truncated JSON; wrong `type`; two summaries; no summary; huge stdout; 10 MiB stderr;
+stdin-blocking child; `SIGTERM`-ignoring child; mutating child; lock held; crash before and after commit; `SIGINT`.
 
 ### AT-06 · CLI and the exit-code contract
 

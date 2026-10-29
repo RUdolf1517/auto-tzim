@@ -97,9 +97,8 @@ Merge/Release performed by coder: no
   If GitHub is unreachable in CI the job fails rather than silently skipping.
 - `tzim` has no machine-readable capability list and no structured refusal reason: the MVP delegates the default set
   (no `--formats`), keeps `skipped_by_tzim` generic, and records version + binary hash. The upstream request
-  [RUdolf1517/tzim#86](https://github.com/RUdolf1517/tzim/issues/86) describes the future API and is **not** a
-  dependency. (Issue #10's body cites `#85` for this; the correct number is **#86** — correction recorded here because
-  the integration that created #10 can neither edit nor comment on issues.)
+  [RUdolf1517/tzim#85](https://github.com/RUdolf1517/tzim/issues/85) describes the future API and is **not** a
+  dependency. (#86 is a duplicate of it, filed by me by mistake; it should be closed.)
 - `tzim` issue #83 (interactive confirmation) is incompatible with this MVP until its non-TTY behaviour is documented;
   the adapter pins a prompt-free range.
 - Apply-time temporary files inside the target root are `tzim`'s behaviour

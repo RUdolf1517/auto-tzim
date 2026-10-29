@@ -10,7 +10,8 @@ Pre-registration rules:
 1. Each row changes only by a commit written **before** the result that motivated it is seen, with the reason in the
    commit message. An expectation edited after a failing run is a finding, not a fix.
 2. A row is never satisfied by a green badge, a screenshot, or "it works locally".
-3. Fixtures are fixed in advance. An unfavourable fixture is not removed.
+3. Fixtures are fixed in advance and listed by ID in [FIXTURE-CORPUS.md](FIXTURE-CORPUS.md) (frozen 2026-10-29, before
+   any code). An unfavourable fixture is not removed, and an expected outcome is not edited after a result is known.
 4. Anything not run is reported as not-run, never as passed.
 
 ---
@@ -67,7 +68,14 @@ blocker per charter §10.
 The manager marks each claim **independently verified / source-inspected / tool-executed / coder-reported** in the
 review document. A claim that stays `coder-reported` is a finding, not a pass.
 
-## 4. Stop rules
+## 4. How the rows are checked
+
+Each row above is verified with the commands in [EVIDENCE-PROTOCOL.md](EVIDENCE-PROTOCOL.md): SHA binding first, then CI
+runs (never `skipped`), then row reconciliation by `jq`, then byte evidence, then the read-only-plan proof, then the
+executed exit-code matrix, then six negative controls the reviewer performs personally. A row that cannot be checked that
+way is a finding against AT-08, not a pass.
+
+## 5. Stop rules
 
 - Any Critical finding (charter §9) stops the review and the merge recommendation, regardless of the remaining rows —
   including a single write into a target root during scan/dry-run.

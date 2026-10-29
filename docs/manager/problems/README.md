@@ -7,7 +7,7 @@ with a resolution header on each page.
 
 | Note | Subject | Resolution (charter v0.2) | Decisions |
 | --- | --- | --- | --- |
-| [P-01](P-01-machine-interface.md) | `tzim` exposes no machine-readable capability list and no structured skip/refusal reason | restricted adapter; default set delegated; generic `skipped_by_tzim`; upstream request `tzim#86` | D-01, D-02, D-05, D-22 |
+| [P-01](P-01-machine-interface.md) | `tzim` exposes no machine-readable capability list and no structured skip/refusal reason | restricted adapter; default set delegated; generic `skipped_by_tzim`; upstream request `tzim#85` | D-01, D-02, D-05, D-22 |
 | [P-02](P-02-dry-run-is-not-write-free.md) | A `tzim` dry run writes and deletes a real candidate in the destination directory | scan/dry-run is a local read-only planner; `tzim --dry-run` forbidden in the MVP; apply bound to a plan | D-04, D-20, D-23 |
 | [P-03](P-03-exit-codes.md) | `SPEC.md` §8.2 has no exit code for a run refused before processing, and the two vocabularies collide on `4` | own contract with `6`/`7`/`8`, `4` unused, signals, fixed order and precedence | D-03, D-18, D-19 |
 

@@ -25,7 +25,7 @@ Verbatim, per question:
 
 | Q | Resolution |
 | --- | --- |
-| Q2 (machine interface) | accepted as a limitation, not a blocker: restricted adapter, `tzim --version` only, default set delegated without `--formats`, `transforms` empty, generic `skipped_by_tzim`, unknown contract ⇒ `incompatible_tzim`. One upstream issue filed (→ `tzim#86`). Decisions D-01, D-02, D-05 |
+| Q2 (machine interface) | accepted as a limitation, not a blocker: restricted adapter, `tzim --version` only, default set delegated without `--formats`, `transforms` empty, generic `skipped_by_tzim`, unknown contract ⇒ `incompatible_tzim`. One upstream issue exists (→ `tzim#85`, canonical; my #86 duplicates it and should be closed). Decisions D-01, D-02, D-05 |
 | Q3 (what `run --dry-run` does) | scan and dry-run are one thing: a **local read-only candidate planner**. `tzim --dry-run` is forbidden in the MVP, no target path is passed, nothing is written in the target root; plan reports candidates, not savings. Apply needs a plan id/hash. Decisions D-04, D-20, D-23 |
 | Q4 (exit codes) | `6` preflight/policy refusal, `7` internal, `8` lock, `4` unused, `130/143` signals, precedence `130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0`, fixed preflight order, no raw `tzim` passthrough. Decisions D-18, D-19 |
 
@@ -64,7 +64,7 @@ repository.
 ## Q2 — How to close the missing machine interface · **decided in charter v0.2 (§16 P-01)**
 
 **Outcome:** option **A**, with the adapter restricted further than this question proposed — the upstream issues were
-filed as one (`tzim#86`), no machine-readable capability is assumed, and the default set is delegated rather than
+filed as one (`tzim#85`; my `#86` duplicates it), no machine-readable capability is assumed, and the default set is delegated rather than
 displayed. The options below are kept as the record of what was weighed.
 
 `tzim` has no machine-readable capability list and no structured skip reason ([study G-1, G-2](TZIM-STUDY-2026-10-29.md)).

@@ -56,7 +56,7 @@ A limitations list is part of the product. Each item below is a deliberate bound
 - No machine-readable capability list: we record version and binary hash, delegate the default format set to the binary,
   and never display a set we cannot observe (study G-1, charter §6-18).
 - Refusal reasons are prose: every `tzim`-decided skip arrives as one generic `skipped_by_tzim` with the note preserved
-  verbatim and never interpreted (study G-2). The upstream request `RUdolf1517/tzim#86` describes the interface that would
+  verbatim and never interpreted (study G-2). The upstream request `RUdolf1517/tzim#85` describes the interface that would
   change this; nothing here waits for it.
 - The `fits-tile` transformation cannot be tested against release binaries, so its opt-in is forbidden in the MVP (D-05, charter §6-11).
 

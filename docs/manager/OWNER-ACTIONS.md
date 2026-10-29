@@ -19,26 +19,29 @@ reference inside #10 is already corrected in the repository copy of the assignme
 
 ---
 
-## 1. Fix the one wrong reference in issue #10
+## 1. Close my duplicate upstream issue
 
-**Why:** the body says the upstream request is `RUdolf1517/tzim#85`; the issue I actually filed is **#86**. #85 is a
-different, existing issue in `tzim`. The repository copy
-([ASSIGNMENT-AT-MVP-DRAFT.md](ASSIGNMENT-AT-MVP-DRAFT.md), [ROADMAP-ISSUES.md](ROADMAP-ISSUES.md)) already carries the
-correct number; only the GitHub body is wrong.
+**Why:** I filed `RUdolf1517/tzim#86` for a capabilities/structured-reasons API **without re-listing the open issues
+first**. `RUdolf1517/tzim#85` already covered exactly that request, was created twelve minutes earlier, and is the better
+text. #85 is canonical; my #86 is noise in someone else's tracker.
+
+Nothing in `auto-tzim` depends on the number: #10 cites **#85**, which was correct all along — my earlier "correction" of
+that reference was the mistake, and it has been reverted in the repository copy of the assignment.
 
 ```sh
-# what it does: reads the current body, replaces #85 with #86 in the one line that
-# refers to the upstream request, writes it back. Idempotent — running it twice is harmless.
-gh issue view 10 --repo RUdolf1517/auto-tzim --json body -q .body \
-  | sed 's|RUdolf1517/tzim#85|RUdolf1517/tzim#86|' > /tmp/i10.md \
-  && gh issue edit 10 --repo RUdolf1517/auto-tzim --body-file /tmp/i10.md
+gh issue close 86 --repo RUdolf1517/tzim --reason "duplicate" \
+  --comment "Duplicate of #85, which says the same thing better. Filed by the auto-tzim project by mistake without checking the open list first. Nothing here depends on this issue: auto-tzim#10 references #85. Sorry for the noise."
 ```
+
+If you would rather keep the extra detail from #86 (the concrete JSON sketches), the alternative is to paste those two
+code blocks into #85 as a comment and then close #86 the same way.
 
 Verify:
 
 ```sh
-gh issue view 10 --repo RUdolf1517/auto-tzim --json body -q .body | grep -c 'tzim#86'   # expect 1
-gh issue view 10 --repo RUdolf1517/auto-tzim --json body -q .body | grep -c 'tzim#85'   # expect 0
+gh issue view 86 --repo RUdolf1517/tzim --json state --jq .state      # expect "CLOSED"
+gh issue view 85 --repo RUdolf1517/tzim --json state --jq .state      # expect "OPEN"
+gh issue view 10 --repo RUdolf1517/auto-tzim --json body -q .body | grep -c 'tzim#85'   # expect 1, no edit needed
 ```
 
 ## 2. Attach the labels that already exist
@@ -192,7 +195,7 @@ workflow lands, or the rule will block every pull request.
 
 | Action | Needed for | Blocking? |
 | --- | --- | --- |
-| 1. Fix #85 → #86 in #10 | accuracy of the record | no |
+| 1. Close `tzim#86` as a duplicate of `tzim#85` | not leaving noise in another project's tracker | no |
 | 2. Attach labels | grouping the issue list | no |
 | 3. Repository description | consistency with `tzim` | no |
 | 4. Merge the docs commit in `tzim` | canonical spec home (Q9) | no — a checksummed copy is here |

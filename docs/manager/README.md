@@ -21,8 +21,9 @@ Date of this board: **2026-10-29** (updated after the owner's charter v0.2).
 | Product code in this repository | none, by design |
 | Decisions awaiting owner | D-07 (update source), D-09 (hash cap), D-15 (dependency pin) — manager defaults in force |
 | Release readiness | not applicable; nothing is releasable and nothing claims to be |
-| Owner actions needed | [OWNER-ACTIONS.md](OWNER-ACTIONS.md) — six copy-paste `gh` commands (fix #10's `#85`→`#86`, attach labels, repo description, spec home, B-01, branch protection). Only B-01 blocks the MVP |
-| Known GitHub-permission limits | (1) #10's body cites `tzim#85`; the correct number is **#86**. (2) The labels `v0.1`, `manager`, `assignment`, `upstream` were created but cannot be attached to issues. The integration here may create issues and labels, but every edit, comment and label-attach call returns HTTP 403 "Resource not accessible by integration". Both corrections are recorded in the repository ([ROADMAP-ISSUES.md](ROADMAP-ISSUES.md)) and each needs one manual action: edit one line in #10, attach `v0.1` to #1…#9 and `assignment`+`manager` to #10 |
+| Owner actions needed | [OWNER-ACTIONS.md](OWNER-ACTIONS.md) — five copy-paste `gh` commands (close my duplicate `tzim#86`, attach labels, repo description, spec home, branch protection) plus the one decision that gates the start, B-01. Only B-01 blocks the MVP |
+| Known defect I introduced | I filed `tzim#86` without re-listing the open issues; **`tzim#85` already covered the same request** (created 19:59Z, twelve minutes earlier, and better argued). #85 is canonical; #86 must be closed as a duplicate — one command in [OWNER-ACTIONS.md](OWNER-ACTIONS.md) §1. #10's reference to #85 was right all along |
+| Known GitHub-permission limits | The integration may create issues and labels, but every edit, comment and label-attach call returns HTTP 403 "Resource not accessible by integration", so the labels `v0.1` (on #1…#9), `assignment` and `manager` (on #10) are created and unattached — one command block in [OWNER-ACTIONS.md](OWNER-ACTIONS.md) §2 |
 
 ## Documents
 
@@ -35,6 +36,8 @@ Date of this board: **2026-10-29** (updated after the owner's charter v0.2).
 | [RISK-REGISTER.md](RISK-REGISTER.md) | Risks, levels, the control that closes each, and the evidence that proves it |
 | [ROADMAP-ISSUES.md](ROADMAP-ISSUES.md) | AT-01…AT-09 with acceptance criteria and required evidence; later stages sketched only |
 | [GATES.md](GATES.md) | Pre-registered MVP acceptance matrix: specification clause → behavioural evidence |
+| [FIXTURE-CORPUS.md](FIXTURE-CORPUS.md) | Frozen corpus: every case by ID, expected outcome, the gate row it proves |
+| [EVIDENCE-PROTOCOL.md](EVIDENCE-PROTOCOL.md) | How a handoff is verified: commands, reconciliations, the six controls I run myself |
 | [problems/](problems/README.md) | The three problem notes P-01…P-03, now **decided** — kept as the analysis behind D-02, D-04 and D-18/D-19 |
 | [ASSIGNMENT-AT-MVP-DRAFT.md](ASSIGNMENT-AT-MVP-DRAFT.md) | Charter §11 assignment for the MVP — **prepared, filed as #10, not started** |
 | [OWNER-ACTIONS.md](OWNER-ACTIONS.md) | The `gh` commands the owner has to run, why each is needed, and how to verify it |

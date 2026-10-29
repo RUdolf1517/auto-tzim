@@ -25,6 +25,22 @@ Nothing has been released. There is no version of `auto-tzim` that can be instal
 - Product documentation updated for the new contract: scan is a local read-only planner, `tzim --dry-run` is forbidden,
   `skipped_by_tzim` replaces `skipped_refused`, and the exit codes are `0/1/2/3/5/6/7/8/130/143` with `4` unused.
 
+### Added — pre-registration completed
+
+- [FIXTURE-CORPUS.md](docs/manager/FIXTURE-CORPUS.md): the corpus frozen before implementation — ~110 cases by ID
+  (`N-*` names, `K-*` kinds, `S-*` stability, `P-*` policy, `A-*` adapter, `R-*` runner, `L-*` locks, `X-*` exit codes,
+  `W-*`/`D-*` network and docs) with the expected outcome of each and the gate row it proves.
+- [EVIDENCE-PROTOCOL.md](docs/manager/EVIDENCE-PROTOCOL.md): how a handoff is verified — SHA binding, CI runs, artifact
+  checksums, row reconciliation with `jq`, byte evidence, the read-only-plan proof, the executed exit-code matrix, six
+  negative controls the reviewer performs personally, and the four claim marks.
+
+### Fixed — a duplicate upstream issue of my own making
+
+- `tzim#86` (filed by this project) duplicates `tzim#85`, which already described the same capabilities /
+  structured-reasons request and was created twelve minutes earlier. #85 is canonical; #86 should be closed. The
+  reference in assignment #10 to `#85` was correct and my earlier "correction" of it was the error. Root cause: the
+  upstream issue was filed without re-listing the open issues first.
+
 ### Added — documentation set
 
 - Specification copies (`SPEC.md` v0.1, `MANAGER-SPEC.md`) with provenance and checksums

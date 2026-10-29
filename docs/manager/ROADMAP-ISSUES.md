@@ -24,7 +24,8 @@ every edit, comment and label-attach call returns HTTP 403 ("Resource not access
 2. **Labels were created but cannot be attached.** `v0.1` belongs on #1…#9, `assignment` and `manager` on #10, `upstream`
    on nothing here (it describes `tzim#86`).
 
-Both are one-click actions for the owner and are listed on the [status board](README.md).
+Both are one-click actions for the owner, with copy-paste commands and verification steps in
+[OWNER-ACTIONS.md](OWNER-ACTIONS.md).
 
 Stage boundaries are load-bearing: nothing from v0.2+ may be merged into the MVP pull request, even "while we are here".
 

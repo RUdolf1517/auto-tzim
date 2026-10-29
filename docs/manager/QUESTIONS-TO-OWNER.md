@@ -181,7 +181,7 @@ merge, close issues or publish releases without explicit delegation (charter §2
 | Q6 (update source) | manager default in force (D-07): one GitHub releases API request; owner may override at no cost |
 | Q7 (hash cap) | manager default in force (D-09); `null` above 64 MiB, recorded explicitly |
 | Q8 (test matrix) | manager default in force: `ubuntu-latest` + `macos-latest`, Python 3.12 and 3.13 |
-| Q9 (canonical spec home) | open, owner action: the docs-only commit `efc31756` is still only on a branch of `tzim` |
+| Q9 (canonical spec home) | open, owner action: the docs-only commit `efc31756` is still only on a branch of `tzim` — command in [OWNER-ACTIONS.md](OWNER-ACTIONS.md) §4 |
 | Q10 (who merges, who is the coder) | default in force: one coder, one MVP pull request, owner merges |
 
 The next decision point is not a question but a precondition: B-01 must be cleared before #10 may be started.

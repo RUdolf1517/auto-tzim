@@ -44,30 +44,68 @@ gh issue view 10 --repo RUdolf1517/auto-tzim --json body -q .body | grep -c 'tzi
 ## 2. Attach the labels that already exist
 
 **Why:** the labels `v0.1`, `manager`, `assignment`, `upstream` were created in the repository; attaching them failed
-with the same 403. Without them the issue list has no stage grouping, which matters once #11 does not exist yet and
-everything is in one flat list.
+with the same 403. Without them the issue list has no stage grouping.
+
+`gh issue edit` accepts **one** issue number (`{<number> | <url>}`), so there is no comma list and no variadic form. Run
+one line per issue — no `for` loop, no `$n`, no inline comments. This block is syntactically valid in bash and zsh
+(checked with `bash -n`):
 
 ```sh
-# AT-01 … AT-09 are the MVP stage
-for n in 1 2 3 4 5 6 7 8 9; do
-  gh issue edit "$n" --repo RUdolf1517/auto-tzim --add-label v0.1
-done
-
-# the consolidated assignment is both a manager record and an assignment
-gh issue edit 10 --repo RUdolf1517/auto-tzim --add-label assignment --add-label manager
-
-# the upstream request lives in tzim, not here; `upstream` stays unused in this repository
-gh issue edit 86 --repo RUdolf1517/tzim --add-label enhancement
+gh issue edit 1 --repo RUdolf1517/auto-tzim --add-label "v0.1"
+gh issue edit 2 --repo RUdolf1517/auto-tzim --add-label "v0.1"
+gh issue edit 3 --repo RUdolf1517/auto-tzim --add-label "v0.1"
+gh issue edit 4 --repo RUdolf1517/auto-tzim --add-label "v0.1"
+gh issue edit 5 --repo RUdolf1517/auto-tzim --add-label "v0.1"
+gh issue edit 6 --repo RUdolf1517/auto-tzim --add-label "v0.1"
+gh issue edit 7 --repo RUdolf1517/auto-tzim --add-label "v0.1"
+gh issue edit 8 --repo RUdolf1517/auto-tzim --add-label "v0.1"
+gh issue edit 9 --repo RUdolf1517/auto-tzim --add-label "v0.1"
 ```
+
+```sh
+gh issue edit 10 --repo RUdolf1517/auto-tzim --add-label "assignment" --add-label "manager"
+```
+
+```sh
+gh issue edit 86 --repo RUdolf1517/tzim --add-label "enhancement"
+```
+
+Other shells (the same effect, chosen by what your terminal actually runs):
+
+```fish
+# fish
+for n in 1 2 3 4 5 6 7 8 9
+    gh issue edit $n --repo RUdolf1517/auto-tzim --add-label "v0.1"
+end
+```
+
+```powershell
+# PowerShell
+1..9 | ForEach-Object { gh issue edit $_ --repo RUdolf1517/auto-tzim --add-label "v0.1" }
+```
+
+No `gh` at all — the REST endpoint directly (needs a token with `repo` scope in `GH_TOKEN`):
+
+```sh
+for n in 1 2 3 4 5 6 7 8 9; do
+  curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" \
+    -H "Accept: application/vnd.github+json" \
+    https://api.github.com/repos/RUdolf1517/auto-tzim/issues/$n/labels \
+    -d '{"labels":["v0.1"]}' >/dev/null && echo "issue $n: ok" || echo "issue $n: failed"
+done
+```
+
+Or by hand in the browser, which needs no tooling at all: open each issue, **Labels → v0.1**. Nine clicks, and for #10
+click `assignment` and `manager`.
 
 Verify:
 
 ```sh
-gh issue list --repo RUdolf1517/auto-tzim --limit 20 --json number,labels \
-  --jq '.[] | "#\(.number) [\([.labels[].name] | join(","))]"'
+gh issue list --repo RUdolf1517/auto-tzim --label v0.1 --state all
 ```
 
-Expected: `#1…#9` carry `v0.1`; `#10` carries `assignment,manager`.
+Expected: #1 … #9. (`gh issue list --json number,labels --jq …` works too, but the plain `--label` filter is shorter and
+does not depend on `jq`.)
 
 ## 3. Repository description (optional, one line)
 
@@ -163,3 +201,33 @@ workflow lands, or the rule will block every pull request.
 
 If any command fails with 403 as well, the token lacks issue/pull-request write scope: that is a GitHub connection
 setting for this conversation, not something to work around in the repository.
+
+---
+
+## 7. If the command does not run at all
+
+These are the failures that look like "the command is wrong" but are not, in the order they are worth checking.
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `gh: command not found` | GitHub CLI is not installed in that terminal (a different machine from this session) | install `gh`, or use the browser (see §2) or the `curl` variant |
+| `syntax error near unexpected token 'do'`, or `end` expected | the terminal runs **fish**; `for … do … done` is bash/zsh syntax | use the `fish` block in §2 |
+| `The token in ... is invalid` / `gh auth login` prompt | `gh` is installed but not authenticated | `gh auth login` once; `gh auth status` to confirm |
+| `unknown flag: --add-label` | `gh` older than 2.0 | `gh --version`; upgrade, or use `curl` |
+| `accepts 1 arg(s), received 0` / `received 9` | the loop lost its variable (bad paste) or someone passed several numbers, which `gh issue edit` does not accept | run the one-line-per-issue block |
+| `GraphQL: Resource not accessible by integration (addLabelsToLabelable)` | authenticated, but the token is an App/GitHub-Actions token with no issue write access | use a personal token with `repo` scope, or the browser |
+| the whole block is pasted as one line and fails | the paste joined lines without `;` | paste one command at a time |
+| labels attach, but nothing shows in `gh issue list` | `--state open` is the default and the filter needs `--label` | `gh issue list --repo RUdolf1517/auto-tzim --label v0.1 --state all` |
+
+Diagnostics to paste into an issue if none of the above fits:
+
+```sh
+gh --version
+gh auth status
+echo "$SHELL"
+gh issue edit 1 --repo RUdolf1517/auto-tzim --add-label "v0.1" 2>&1 | head -5
+```
+
+The last line is the whole test: in this session it returns
+`Resource not accessible by integration` (a permission error, which means the syntax is fine); in a shell where it
+prints nothing, the label was attached.

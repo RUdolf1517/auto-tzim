@@ -8,8 +8,7 @@
 
 `auto-tzim update-check` answers one question: is there a newer `tzim` than the one this installation uses? It:
 
-- makes one documented request (proposal D-07, unapproved — see [P-01](manager/problems/P-01-machine-interface.md)
-  §7 and [privacy](privacy.md) §1);
+- makes one documented request (D-07 — a manager default the owner may override; see [privacy](privacy.md) §1);
 - compares semantic versions, and reports the state as one of `up_to_date`, `update_available`, `incompatible_major`,
   `error`;
 - shows the current version from `tzim --version` and the binary identity from `doctor`, so the user can see *which*
@@ -66,4 +65,4 @@ reasoned about.
 Read the release notes, install the new version through the channel they used originally, then run
 `auto-tzim doctor` — it will report the new binary's hash and version, and the adapter will either accept it or refuse
 with exit `3`. Nothing else changes: history is keyed on the binary hash, so files decided by the old binary are
-re-examined by the new one (proposal D-06).
+re-examined by the new one (D-06).

@@ -3,24 +3,25 @@
 Role: project manager, reviewer and release gatekeeper for `auto-tzim`. Not a coder; no product code, tests,
 generators or CI implementation are written here (see [MANAGER-SPEC.md §2](../../MANAGER-SPEC.md)).
 
-Date of this board: **2026-10-29**.
+Date of this board: **2026-10-29** (updated after the owner's charter v0.2).
 
 ## Where the project stands
 
 | Item | State |
 | --- | --- |
 | Repository | `RUdolf1517/auto-tzim`, public, MIT, initial commit `dc184df` |
-| Specification copies | done — [`SPEC.md`](../../SPEC.md) v0.1 and [`MANAGER-SPEC.md`](../../MANAGER-SPEC.md), provenance recorded |
-| Owner decision (2026-10-29) | **Q1 = wait; documentation only.** Q2–Q4 = "describe the problem", no decision — see [answers](QUESTIONS-TO-OWNER.md#0-answers-received-2026-10-29) |
-| Documentation set | **complete for the MVP contract** — 16 product documents under `docs/`, 10 manager records under `docs/manager/` |
-| Launch preconditions (charter §3) | P1 answered "wait"; **P2 still not met** (the `tzim` set is unfinished) — see [pre-flight](PREFLIGHT-2026-10-29.md) |
-| GitHub issues for AT-01…AT-09 | **not created** — implementation is not authorised |
-| Coder assignment | **not issued** — draft only, see [assignment draft](ASSIGNMENT-AT-MVP-DRAFT.md) |
+| Specification copies | `SPEC.md` v0.1 (from `tzim`), `MANAGER-SPEC.md` **v0.2** (owner, 2026-10-29) — [provenance](../spec/PROVENANCE.md), [conflicts resolved](../spec/CONFLICTS.md) |
+| Charter v0.2 findings | P-01/P-02/P-03 **decided by the owner** (charter §16); recorded as D-01…D-05, D-18, D-19 |
+| GitHub issues AT-01…AT-09 | **created** — [#1](https://github.com/RUdolf1517/auto-tzim/issues/1) … [#9](https://github.com/RUdolf1517/auto-tzim/issues/9) |
+| Consolidated assignment | **prepared and filed** as [#10](https://github.com/RUdolf1517/auto-tzim/issues/10); start blocked by B-01 (charter §3.2) |
+| Upstream request | [RUdolf1517/tzim#86](https://github.com/RUdolf1517/tzim/issues/86) — capabilities + structured reasons; not a dependency |
+| Acceptance matrix | [GATES.md](GATES.md) — 13 acceptance rows, 19 invariants, pre-registered |
+| Risk register | [RISK-REGISTER.md](RISK-REGISTER.md) — 26 rows, four of them promoted to charter requirements in v0.2 |
+| Product documentation | 16 documents under `docs/`, all marked "specification, no implementation" |
 | Product code in this repository | none, by design |
-| Decisions awaiting owner | D-01, D-03, D-04, D-05, D-07, D-09, D-15, D-16, D-17 (see [decisions](DECISIONS.md)) |
-| Problems described, not decided | [P-01](problems/P-01-machine-interface.md) · [P-02](problems/P-02-dry-run-is-not-write-free.md) · [P-03](problems/P-03-exit-codes.md) |
-| Unresolved Critical/High risks | [risk register](RISK-REGISTER.md) — controls specified, none implemented |
+| Decisions awaiting owner | D-07 (update source), D-09 (hash cap), D-15 (dependency pin) — manager defaults in force |
 | Release readiness | not applicable; nothing is releasable and nothing claims to be |
+| Known defect | #10's body cites `tzim#85`; the correct number is **#86**. The integration can create issues but not edit or comment (403), so the correction is recorded in [ROADMAP-ISSUES.md](ROADMAP-ISSUES.md) and needs one manual edit |
 
 ## Documents
 
@@ -33,8 +34,8 @@ Date of this board: **2026-10-29**.
 | [RISK-REGISTER.md](RISK-REGISTER.md) | Risks, levels, the control that closes each, and the evidence that proves it |
 | [ROADMAP-ISSUES.md](ROADMAP-ISSUES.md) | AT-01…AT-09 with acceptance criteria and required evidence; later stages sketched only |
 | [GATES.md](GATES.md) | Pre-registered MVP acceptance matrix: specification clause → behavioural evidence |
-| [problems/](problems/README.md) | Three problems described in full, because the owner asked for the description rather than a decision |
-| [ASSIGNMENT-AT-MVP-DRAFT.md](ASSIGNMENT-AT-MVP-DRAFT.md) | Charter §11 assignment for the MVP, **draft, not issued** |
+| [problems/](problems/README.md) | The three problem notes P-01…P-03, now **decided** — kept as the analysis behind D-02, D-04 and D-18/D-19 |
+| [ASSIGNMENT-AT-MVP-DRAFT.md](ASSIGNMENT-AT-MVP-DRAFT.md) | Charter §11 assignment for the MVP — **prepared, filed as #10, not started** |
 
 Product documentation lives outside this directory, in `docs/`: [architecture](../architecture.md), [cli](../cli.md),
 [config](../config.md), [safety](../safety.md), [guarantees](../guarantees.md), [formats](../formats.md),

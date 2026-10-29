@@ -13,10 +13,11 @@ regardless of convenience.
 | Dependency | Why | Alternative considered | Refused because |
 | --- | --- | --- | --- |
 | `tomllib` (stdlib, 3.11+) | reads TOML | `toml`, `tomlkit` | stdlib is available and read-only is all we need for reading |
-| `tomli-w` (proposal D-15, unapproved) | writes TOML; `tomllib` cannot | hand-rolled writer | A hand-written TOML serialiser is a correctness risk in the one file that defines what may be touched; `tomli-w` is small, pure Python, no dependencies, no install hook. Alternative: write JSON — refused, because the specification fixes TOML |
+| `tomli-w` (D-15, manager default) | writes TOML; `tomllib` cannot | hand-rolled writer | A hand-written TOML serialiser is a correctness risk in the one file that defines what may be touched; `tomli-w` is small, pure Python, no dependencies, no install hook. Alternative: write JSON — refused, because the specification fixes TOML |
 | `sqlite3` (stdlib) | state and history | JSON files | transactions, a real schema, and crash recovery are the point of the state layer |
 | `urllib.request` (stdlib) | the single `update-check` request | `requests`, `httpx` | the request is one GET with a timeout; a dependency for it is not justified |
 | `subprocess`, `signal`, `os`, `stat`, `fnmatch`, `hashlib`, `json`, `logging` (stdlib) | everything else | — | — |
+| ~~`pty`~~ | — | — | **refused**: no PTY is ever allocated (charter §6-12, D-21) |
 
 No codec, no image library, no archive library, no `shell=True` wrapper: those belong to `tzim`.
 

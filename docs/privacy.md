@@ -11,7 +11,7 @@ it sends, to whom, and when.
 
 | Command | Request | When | Data sent |
 | --- | --- | --- | --- |
-| `update-check` | `GET https://api.github.com/repos/RUdolf1517/tzim/releases/latest` | only when the user runs the command (proposal D-07, unapproved) | An HTTP request: the host, the path, standard headers from the HTTP client, and the client's IP address. No paths, no file names, no configuration, no identifiers beyond what any HTTP request carries |
+| `update-check` | `GET https://api.github.com/repos/RUdolf1517/tzim/releases/latest` | only when the user runs the command (D-07, manager default) | An HTTP request: the host, the path, standard headers from the HTTP client, and the client's IP address. No paths, no file names, no configuration, no identifiers beyond what any HTTP request carries |
 
 Nothing else. `run`, `scan`, `status`, `history`, `logs`, `folder *`, `doctor` and `config validate` open no socket.
 `doctor` reports the `tzim` binary's SHA-256 **locally**. A scheduled check does not exist in v0.1; when it does

@@ -1,5 +1,12 @@
 # `tzim` study — what we may rely on, and what we may not
 
+> **Status: historical analysis, kept unchanged.** The gaps below were decided on 2026-10-29 by charter v0.2 §16 and are
+> recorded as decisions D-01, D-02, D-04, D-05, D-18 and D-19. Two consequences for reading this page: the MVP product
+> **never invokes `tzim --dry-run`** (so the "exact numbers" framing in §3 B-1 applies only to what `tzim` does, not to
+> what `auto-tzim` asks it to do), and the normalized status `skipped_refused` named here was replaced by the generic
+> `skipped_by_tzim`. The T1–T10 table in §4 is executed by the **test harness** against a pinned binary; it observes
+> `tzim`'s semantics and is not a call the product is allowed to make.
+
 Date: **2026-10-29**. Subject: `RUdolf1517/tzim` at `main` = `d4e45974b32fc2bb696eee346892846fe3e0a5d1`, release
 `v0.14.0` (published 2026-10-27T15:26:04Z). Purpose: decide, before any `auto-tzim` code exists, which parts of
 `tzim` are a contract and which are documentation we must not lean on.
@@ -197,12 +204,14 @@ we pass to `tzim` are recorded verbatim in the run manifest.
 `--max-pixels` 100 000 000, `--max-uncompressed` 8 GiB, a derived `--memory-budget`, `--jobs min(cores,4)`).
 `auto-tzim` v0.1 spawns one file per process, so `tzim`'s own parallelism is the only parallelism. We do not
 invent tighter hidden defaults; whatever the profile sets is passed, and the effective argv and the resulting
-limits are stored with the run (proposal D-11).
+limits are stored with the run (D-11).
 
 ## 4. Exact checks for the real binary (input to AT-08)
 
 These are the behavioural assertions the coder must implement in CI against a **pinned** release artifact whose
-SHA-256 is verified from the release's `SHA256SUMS`. They are stated as expectations now, before any result is
+SHA-256 is verified from the release's `SHA256SUMS`. They are run by the test harness only: the product itself is never
+allowed to invoke `tzim` on a target path outside an apply (charter §6-2), so T2/T5/T7 exist to assert what `tzim` does
+and to keep the adapter's expectations honest, not to define a scan. They are stated as expectations now, before any result is
 seen, so that a mismatch is an adapter-incompatibility finding rather than a test that gets adjusted afterwards.
 
 | # | Command | Expected |

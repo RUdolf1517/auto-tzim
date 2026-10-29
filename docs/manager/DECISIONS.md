@@ -1,200 +1,255 @@
 # Decision log
 
-A decision is a requirement only in the state **adopted**. **Proposed** entries are the manager's recommended
-default, written before any implementation exists so that the choice is not made by whoever writes the code
-first. Entries marked **owner** change the product contract (`SPEC.md`) or a safety posture and cannot be adopted
-by the manager (charter §2.2).
+States: **adopted** (binding on the implementation, from the owner's charter v0.2 of 2026-10-29 or from a manager
+decision the owner has not overridden), **proposed** (a default written down so that the first coder does not have to
+invent it; the owner may change it without cost), **superseded**.
 
-**On 2026-10-29 the owner answered Q1 with "wait"**: implementation is not authorised and no issue was created. So
-"adopted" below means "binding on the first implementation, when it is authorised", not "in force today". D-01…D-05,
-D-07, D-09, D-15, D-16 and D-17 stay **proposed**; the three owner-level questions Q2–Q4 were answered with "describe
-the problem", so their notes ([P-01](problems/P-01-machine-interface.md), [P-02](problems/P-02-dry-run-is-not-write-free.md),
-[P-03](problems/P-03-exit-codes.md)) carry the analysis and nothing was decided.
-
-| ID | Decision | State | Affects |
-| --- | --- | --- | --- |
-| D-01 | Version-keyed adapter for `tzim 0.14.x` + `--version` + a dry-run JSON probe; no human-output parsing | proposed (owner notice) | AT-04, AT-08 |
-| D-02 | One mapping table from `tzim` statuses and exit codes to our statuses and exit codes | proposed | AT-04, AT-05, AT-06 |
-| D-03 | Pre-flight refusals get a new exit code `6` | **owner** | AT-06, SPEC §8.2 |
-| D-04 | `scan` = plan only; `run --once --dry-run` = plan **and** `tzim -n --json` | proposed (owner notice) | AT-03, AT-04, AT-06 |
-| D-05 | `transforms` allowlist is empty in v0.1; any value is a validation error | **owner** | AT-02, AT-04 |
-| D-06 | Invalidation key is file identity + binary identity + adapter id + policy hash | adopted | AT-05 |
-| D-07 | `update-check` = one documented GitHub API request, explicit command only | **owner** | AT-07, privacy |
-| D-08 | A managed root may not contain `AUTO_TZIM_HOME` | adopted | AT-02, AT-03 |
-| D-09 | File contents are hashed only within a documented size cap; the omission is recorded | proposed | AT-05 |
-| D-10 | Per-file timeout default 900 s, `SIGTERM` then `SIGKILL` after 10 s; configurable downwards | adopted | AT-05 |
-| D-11 | We never tighten `tzim`'s limits silently; the effective argv and limits are recorded | adopted | AT-04, AT-05 |
-| D-12 | `tzim` is given files, never directories, and never `-r` | adopted | AT-04, AT-05 |
-| D-13 | Integration tests pin a release artifact by SHA-256; "latest" is never used | adopted | AT-08, CI |
-| D-14 | Stability tests inject the clock; no test sleeps for `min_file_age_seconds` | adopted | AT-03, AT-08 |
-| D-15 | Runtime dependencies are pinned with hashes; the only write dependency is `tomli-w` | proposed | AT-01, AT-02 |
-| D-16 | Our own `--json` envelope: typed NDJSON, `schema: 1`, one `result` line or file rows plus a summary | proposed (owner notice) | AT-06 |
-| D-17 | Log format and retention: local JSONL, 30 days, size cap, no environment dump | proposed (privacy) | AT-05, AT-09 |
+| ID | Decision | State | Source | Affects |
+| --- | --- | --- | --- | --- |
+| D-01 | Restricted adapter: `tzim --version` only, no prose parsing, fail-closed on an unknown contract | adopted | charter §6-18, §16 P-01 | AT-04 |
+| D-02 | Status vocabulary and the one mapping table from `tzim` results to ours | adopted | charter §16 P-01 | AT-04, AT-05 |
+| D-03 | Exit `6` for a preflight/policy refusal | adopted | charter §16 P-03 | AT-06 |
+| D-04 | Scan/dry-run is a local read-only candidate planner; `tzim --dry-run` is forbidden | adopted | charter §6-2, §16 P-02 | AT-03, AT-04, AT-06 |
+| D-05 | `transforms` must be empty in the MVP | adopted | charter §6-11, §16 P-01 | AT-02, AT-04 |
+| D-06 | Invalidation key: identity + binary hash + adapter id + policy hash | adopted | manager | AT-05 |
+| D-07 | `update-check` = one documented GitHub releases request, explicit command only | proposed (manager default) | manager | AT-07 |
+| D-08 | A root may not contain `AUTO_TZIM_HOME` | adopted | manager | AT-02, AT-03 |
+| D-09 | Hashes only for rewritten files, capped at 64 MiB, omission recorded | proposed (manager default) | manager | AT-05 |
+| D-10 | Per-file timeout 900 s, `TERM` then `KILL` after 10 s | adopted | manager | AT-05 |
+| D-11 | No hidden tightening: pass only what the profile sets, record the effective argv | adopted | manager | AT-04 |
+| D-12 | `tzim` gets files, never directories, never `-r` | adopted | manager | AT-04, AT-05 |
+| D-13 | Integration tests pin a release artifact by SHA-256; never `latest` | adopted | manager | AT-08 |
+| D-14 | Stability tests inject the clock | adopted | manager | AT-03, AT-08 |
+| D-15 | Dependencies pinned with hashes; `tomli-w` is the only write dependency | proposed (manager default) | manager | AT-01, AT-02 |
+| D-16 | Our own JSON envelope: typed NDJSON, `schema: 1` | adopted | manager | AT-06 |
+| D-17 | Local JSONL logs, 30 days, size cap, no environment dump | adopted | manager | AT-05, AT-09 |
+| D-18 | Exit `7` internal, `8` lock, `4` unused, `130`/`143` signals; no raw `tzim` passthrough | adopted | charter §16 P-03 | AT-06 |
+| D-19 | Precedence `130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0` and a fixed preflight order | adopted | charter §16 P-03 | AT-06 |
+| D-20 | Apply requires a plan ID and plan hash produced by a scan of the same tree | adopted | charter §6-2, §8.4 | AT-03, AT-05, AT-06 |
+| D-21 | No PTY is ever allocated; `stdin=DEVNULL`; no `pty` import | adopted | charter §6-12 | AT-05 |
+| D-22 | One upstream issue for a capabilities/structured-reasons API, outside this repo's PRs | adopted | charter §16 P-01 | none here |
+| D-23 | A candidate plan is not a promise of eligibility or gain | adopted | charter §8.4 | AT-03, AT-04, AT-09 |
 
 ---
 
-## D-01 · Version-keyed adapter, with a probe instead of prose
+## D-01 · Restricted adapter
 
-`tzim` exposes `--version` (`tzim <semver>`) and nothing machine-readable about its compiled formats
-([study G-1](TZIM-STUDY-2026-10-29.md#g-1--no-machine-readable-capabilityformat-list)). `auto-tzim` therefore
-ships an adapter table keyed by `(semver range, JSON schema)`, containing the exact argv it may build, the status
-enum it may receive and the exit-code mapping. Unknown versions, an unreported `schema`, or a failed probe are
-`incompatible_tzim` (exit `3`), never a best guess. `doctor` may additionally run `tzim -n --json` on a bundled
-1×1 PNG inside a private temporary directory; that probe proves "the png handler works and emits schema 1" as a
-fact, without reading a single line of prose.
+The adapter knows `tzim` by **one** call: `tzim --version`, whose output is `tzim <semver>` on stdout, exit `0`. From
+that it decides whether this binary is in the supported range. Nothing else is read from the binary at scan time.
 
-*Overturned by:* an upstream `--capabilities --json`. That would replace the probe, not the version pinning.
-*Evidence required:* an adapter test for at least one unsupported version, one malformed `--version` output and
-one probe failure, each producing `incompatible_tzim` and exit `3`.
+Consequences, accepted deliberately:
 
-## D-02 · One mapping table
+- the default-enabled format set is **not** displayed or reconstructed; `formats = []` means "do not pass `--formats`
+  and let `tzim` decide" (D-11), so the set is whatever the binary has, which is exactly the delegation §6-9 asks for;
+- `--info`, `--list-formats`, `--check-deps` output is never parsed, and neither is the per-file `note`
+  (charter invariant 18);
+- an unknown version, an unparseable `--version`, a missing binary, or a JSON contract the adapter does not know
+  produces `incompatible_tzim` and exit `3` **before** any file is planned;
+- the binary identity (path, realpath, size, SHA-256, version) is recorded per run, so a changed binary is visible
+  (D-06).
 
-`tzim`'s six statuses and six exit codes are mapped in exactly one reviewed table
-([study §1, §3 B-3, B-5](TZIM-STUDY-2026-10-29.md)). Rules:
+*Test obligation:* a source-level assertion that no module reads `--info`/`--list-formats` output, plus behavioural
+tests for unknown version, garbage version, schema mismatch and a refused probe.
 
-| `tzim` result | Our status | Run effect |
+## D-02 · Status vocabulary and the single mapping table
+
+Normalized statuses, and who can produce each:
+
+| Status | Produced by | Meaning |
 | --- | --- | --- |
-| exit `0`, `optimized` | `optimized` | continue |
-| exit `0`, `would_optimize` (dry run) | `planned` → `would_optimize` recorded in history as dry-run only | continue |
-| exit `0`, `already_optimal` | `already_optimal` | continue, no retry while identity unchanged |
-| exit `0`, `unsupported` | `skipped_unsupported` | continue, no retry while identity unchanged |
-| exit `0`, `skipped` | `skipped_refused`, raw `note` preserved | continue, no retry while identity unchanged |
-| exit `1`, `failed` | `failed` + `error.kind` as reported | continue, **no automatic retry** |
-| exit `2` (usage) | `failed` (`internal`) and a run-level abort | our bug; the run stops, exit `1` |
-| exit `3` (fatal) | `failed` (`io`/`internal`) and a run-level abort | exit `1` |
-| exit `4` (verification) | `failed` (`verify`), remaining plan `interrupted`, abort | exit `1` + critical diagnostic |
-| exit `130`/`143` | `interrupted` for the file in flight, remaining `interrupted` | exit `1` |
-| `tzim` missing, unreadable, wrong version, probe failure | no file status; run does not start | exit `3` |
-| malformed/partial JSON, stdout not matching schema | `failed` (`internal`), abort after the schema guard | exit `1` |
+| `planned` | us | in the candidate plan, not yet decided |
+| `optimized` | `tzim` | the file was rewritten and verified by `tzim` |
+| `already_optimal` | `tzim` | nothing to gain; bytes unchanged |
+| `skipped_unsupported` | `tzim` | the content is not a supported format or construct |
+| `skipped_by_tzim` | `tzim` | **generic**: `tzim` returned `skipped`, whatever the reason. The raw `note` is stored verbatim and never interpreted |
+| `skipped_policy` | us | our policy excluded it (format not allowed, hidden file, mount boundary, path outside policy) |
+| `skipped_unstable` | us | identity changed, file too young, or vanished between stages |
+| `hardlink_skip` | us | `st_nlink > 1` |
+| `failed` | both | `tzim` reported a failure, or our timeout/parse guard fired; `error.kind` distinguishes |
+| `interrupted` | us | the run stopped before this file finished, or a crash orphaned it |
+| `incompatible_tzim` | us | the binary is absent, unreadable or outside the adapter's contract |
 
-Note the collision that must not be conflated: `tzim`'s exit `4` is a verification failure, while `auto-tzim`'s
-exit `4` is "another run holds the lock". Both are documented, and the table above is the only place that maps
-one to the other.
+Note the change from earlier drafts: there is no `skipped_refused`. A refusal by `tzim` and a limit skip by `tzim` are
+indistinguishable from outside (P-01 §5), so pretending to separate them would be inventing a capability (charter
+invariant 18). One honest generic bucket plus the verbatim note is the correct answer.
 
-*Evidence required:* a fake `tzim` that can produce every row of this table, including exit `4` and a signal
-exit, plus a test that the run-level abort marks the remaining plan `interrupted` and not `optimized`.
+Mapping from `tzim` results to run effects — the only place the two vocabularies meet:
 
-## D-03 · Pre-flight refusals need an exit code — **owner**
+| `tzim` result | Our status | Run effect | Our exit |
+| --- | --- | --- | --- |
+| `0`, `optimized` | `optimized` | continue | `0` |
+| `0`, `already_optimal` | `already_optimal` | continue, cache | `0` |
+| `0`, `unsupported` | `skipped_unsupported` | continue, cache | `0` |
+| `0`, `skipped` | `skipped_by_tzim` + raw note | continue, cache | `0` |
+| `1`, `failed` | `failed` + `kind`/`message` | continue, **no automatic retry** | `1` |
+| `2` | `failed` (`internal`) + run abort | stop | `1` |
+| `3` | `failed` (`io`/`internal`) + run abort | stop | `1` |
+| `4` (verification failure) | `failed` (`verify`), rest `interrupted`, critical diagnostic | stop | `1` |
+| `130`/`143`/`137` | `interrupted` | stop | `130`/`143` |
+| not run: incompatible binary | no file status | stop before planning | `3` |
+| malformed/partial JSON | `failed` (`internal`) | stop | `1` |
 
-Three documented refusals happen before any file is touched: `run --once` on a folder whose first run has not
-been previewed (§8.1), a run while `pause` is active, and a run below `min_free_bytes`. `SPEC.md` §8.2 has no code
-for them: `1` means "some file failed" (false), `2` means usage/config error (arguable for the first-run gate,
-wrong for low disk), `3` is an incompatible `tzim`, `4` is the lock, `5` is update. Reporting success `0` would be
-dishonest, and a script cannot tell "nothing to do" from "I refused to start".
+The raw `tzim` exit code and status are stored in history; they are **never** our exit code (charter invariant 19).
 
-Proposal: add exit code **`6` — refused before processing; nothing was read for processing and nothing was
-changed** (first-run gate, pause, low disk, disabled folder). This is a `SPEC.md` change, so it needs the owner.
+## D-03 · Exit `6` — refused before processing
 
-*Until answered:* the coder must not invent a code, and AT-06 stays blocked on this one row only.
+`6` means: the run was refused before any file was read for processing and before anything changed. It covers the
+first-run gate (no matching plan), `pause`, `min_free_bytes`, a disabled folder, and a policy refusal of the whole run.
+It is not an error and not a success: a script must be able to tell it from both.
 
-## D-04 · Two different dry runs
+## D-04 · Scan is a local read-only candidate planner
 
-- `scan` builds **our** plan: discovery, stability, policy, argv preview. No `tzim` process.
-- `run --once --dry-run` builds the plan and then invokes `tzim -n --json` per planned file, recording what
-  `tzim` says it would do (`would_optimize` / `already_optimal`) — the numbers are exact, because `tzim`'s dry
-  run does the real work ([study B-1](TZIM-STUDY-2026-10-29.md#3-behaviour-that-changes-our-design)).
+`auto-tzim scan` and `auto-tzim run --dry-run`:
 
-Both satisfy the first-run gate of §8.1, and both are recorded as dry runs: history rows are marked `dry_run` and
-`optimized` is never written for them. Documentation must state that a `tzim` dry run creates and removes a
-temporary candidate in the target directory (needs write permission and free space) — our invariant 2 is about
-bytes of user files, and pretending otherwise would be a false promise.
+- run discovery, stability, policy and the adapter's `--version` check **only**;
+- never invoke `tzim` with a target path, never pass `--dry-run`, never `--formats`, never a directory;
+- never create, rename or delete anything inside a target root; they do not need write access there, and `mkstemp`-style
+  calls outside `AUTO_TZIM_HOME` are forbidden;
+- report a **candidate** list: path, size, identity, the policy decision, and the argv that a future apply would use.
+  No predicted savings, no eligibility claim, no "would optimize" status (`planned` only) — the numbers are unknown
+  until `tzim` actually runs (D-23).
 
-## D-05 · Empty `transforms` allowlist in v0.1 — **owner**
+The alternative — invoking `tzim` for exact numbers — was rejected by the owner because `tzim --dry-run` writes a real
+candidate into the destination directory ([P-02](problems/P-02-dry-run-is-not-write-free.md)).
 
-Invariant 11 requires a separate explicit opt-in for confirmation-required transformations, and §6.3 introduces a
-`transforms` field. But the only candidate today (`fits-tile`) is not in the released binaries
-([study G-3](TZIM-STUDY-2026-10-29.md#g-3--build-dependent-features-are-invisible-and-the-released-binaries-ship-without-fits)),
-so enabling it would be a promise we cannot verify end to end. Proposal: the field exists, the allowlist is empty,
-and any non-empty value fails validation with the reason. This keeps the schema stable for v0.2 without shipping an
-unverifiable transformation.
+## D-05 · Empty `transforms`
 
-## D-06 · What invalidates a "nothing to do" record
+`transforms` exists in the schema so that the opt-in has a home before it is usable (invariant 11), and it must be
+`[]`. Any value is a validation error naming the reason and the missing preconditions: a machine-readable contract, an
+installed build that has the handler, and a real-binary test. `formats` is not consent to a structural transformation.
 
-A cached `already_optimal` / `skipped_unsupported` / `skipped_refused` is reused only while **all** of these are
-identical: `(st_dev, st_ino)`, size, `mtime_ns`, `tzim` binary SHA-256, adapter id, and a canonical hash of the
-policy fields that produced the argv. Version alone is not enough — two builds of the same version differ (the FITS
-and `jpeg-v1` features prove it), and a changed policy changes eligibility. Any difference re-plans the file.
+## D-06 · Invalidation key
 
-## D-07 · One request, one command, documented — **owner**
+A cached decision (`already_optimal`, `skipped_unsupported`, `skipped_by_tzim`, `skipped_policy`) is reused only while
+all of these are unchanged: `(st_dev, st_ino)`, size, `mtime_ns`, the `tzim` binary SHA-256, the adapter id, and a
+canonical hash of the policy fields that produced the argv. A version string is not enough: two builds of one version
+differ (FITS, `jpeg-v1`).
 
-`auto-tzim update-check` (and only it) performs `GET https://api.github.com/repos/RUdolf1517/tzim/releases/latest`
-with `Accept: application/vnd.github+json`, no credentials, a 10 s timeout, and a 24 h cache in our state
-directory. `run`/`scan` never touch the network; a scheduled check is not part of v0.1. The privacy section must
-say: this is the only network request in the product, it discloses the caller's IP address to GitHub, and no path
-or filename is ever part of it. Rate-limit and error responses are reported as an update-check failure (exit `5`),
-never as "you are up to date". An incompatible major is displayed as incompatible and never acted on.
+## D-07 · One request, one command · *proposed*
 
-*Alternative if the owner prefers no API dependency:* point the check at the releases HTML page and parse it —
-strictly worse (fragile, still a request, still undocumented for machines). The API is the documented interface.
+`update-check` performs `GET https://api.github.com/repos/RUdolf1517/tzim/releases/latest` with no credentials, a 10 s
+timeout, and a 24 h cache. `scan`/`run` never touch the network. Rate limits and errors are exit `5`, never "up to
+date". A major version outside `allowed_major_versions` is reported as incompatible and never acted on. Documented in
+[privacy](../privacy.md). If the owner prefers another official source, it is one function and one documentation page.
 
-## D-08 · `AUTO_TZIM_HOME` may not sit inside a managed root
+## D-08 · `AUTO_TZIM_HOME` is never inside a managed root
 
-Otherwise a run could "optimize" its own SQLite database and logs, and a rotation could delete a file that a plan
-still references. Validation rejects such a root with a reason; `AUTO_TZIM_HOME` is also excluded from discovery
-as a second line of defence. (Plus `include_hidden = false` by default, which already hides `.config`.)
+Otherwise a run could plan its own database, and retention could delete a file a plan references. Validation rejects
+such a root; discovery excludes the path as a second line of defence.
 
-## D-09 · Hash policy
+## D-09 · Hash policy · *proposed*
 
-Hashing every file before and after doubles I/O for no safety benefit: `tzim` verifies, and our identity check
-already uses `(dev, ino, size, mtime_ns)`. Proposal: SHA-256 is computed for the *before* and *after* bytes of
-files that were actually rewritten, up to a documented cap (proposed 64 MiB), and recorded as `null` — explicitly,
-not silently — above it. `SPEC.md` §7.4 says "if computed", so this stays inside the contract.
+SHA-256 is computed for the before/after bytes of files that were actually rewritten, up to 64 MiB; above the cap the
+column is `null`, explicitly. `SPEC.md` §7.4 says "if computed", so this stays inside the contract.
 
 ## D-10 · Timeouts
 
-Per-file wall-clock timeout default **900 s** (`--zopfli` is 10–100× slower; a 2 GiB TIFF can legitimately take
-minutes), configurable per folder down to 1 s and up to 6 h. On expiry: `SIGTERM`, wait 10 s, `SIGKILL`; the file
-is `failed` (`internal`, reason `timeout`) and is not retried automatically. The timeout value and the signal path
-are recorded in the run manifest.
+Per file: 900 s default, 1 s–6 h configurable. On expiry `SIGTERM`, wait 10 s, `SIGKILL`; the file is
+`failed` (`internal`, `timeout`) and is not retried automatically. Value and signal path recorded in the run row.
 
-## D-11 · No hidden tightening
+## D-11 · No hidden tightening, and no invented default set
 
-Whatever limits a profile sets are passed through; what it does not set stays `tzim`'s default. The effective argv
-plus the resolved limits are stored with the run so a user can reproduce a single file by hand. Inventing tighter
-defaults inside `auto-tzim` would create a second, invisible policy layer — and skips that look like refusals.
+Only what the profile sets is passed. `formats = []` means "omit `--formats`" (D-01), not "pass the list we believe is
+default". Anything we do not set stays `tzim`'s default, and the effective argv plus the resolved limits are stored so a
+user can reproduce one file by hand.
 
 ## D-12 · Files, not directories
 
-`tzim` is always invoked as `tzim … <one file>`, never `-r`, never a directory. Our approved plan is the only
-input; two independent traversals with two independent eligibility rules is how a path outside the root gets
-touched.
+`tzim` is invoked as `tzim … <one file>`. Never `-r`, never a directory. Our approved plan is the only input, so
+`tzim`'s own traversal can never see a path our policy did not approve.
 
 ## D-13 · Pinning
 
-Integration tests download a named release artifact (for example
-`tzim-x86_64-unknown-linux-musl.tar.gz` of `v0.14.0`), verify it against the release's `SHA256SUMS`, and use that
-binary. No `latest`, no floating tag, no build from source in the MVP job (a source build would test a different
-artifact from the one users have). When a new release appears, the adapter entry and the pin move together in one
-reviewed change.
+CI downloads a named release artifact of a named version, checks it against the release `SHA256SUMS`, and tests that
+binary. No `latest`, no floating tag, no source build in the MVP job.
 
-## D-14 · The clock is injected
+## D-14 · Injected clock
 
-`min_file_age_seconds` must not make the test suite sleep. Discovery and stability take a time source and a
-`stat` source through an explicit seam; unit tests drive both. The integration test that proves the real path
-uses a 1-second age with a real sleep of at most 2 seconds, on one fixture, and is marked as such.
+`min_file_age_seconds` is tested through an injected clock and an injected `stat`. One integration test uses a real
+1-second age and is labelled.
 
-## D-15 · Dependencies
+## D-15 · Dependencies · *proposed*
 
-`tomllib` reads TOML (stdlib, 3.11+); writing needs a third-party library, proposed `tomli-w` (pure Python, no
-dependencies) — pinning it is a supply-chain decision, so it is listed here rather than assumed. Test-only
-dependencies (`pytest`, `pytest-timeout` if used) are pinned in a separate file. Every pin carries a hash and a
-`lockfile`-style CI job, following the pattern `tzim` already uses.
+`tomllib` (stdlib) reads TOML; `tomli-w` (pure Python, no dependencies) writes it; `sqlite3` and `urllib.request` come
+from the standard library; no HTTP client library, no image or archive library, no `shell=True`. Test-only dependencies
+are pinned separately. Every pin carries a hash and a CI job fails on an unpinned dependency.
 
 ## D-16 · Our own JSON envelope
 
-`SPEC.md` §8.1 requires every command to support `--json`; it does not fix field names. Leaving that to the coder
-would create a de-facto contract nobody reviewed. The text of the proposal is [docs/cli.md](../cli.md) §3: typed
-NDJSON, one `{"type":"result", …}` for single-answer commands, one `{"type":"file", …}` per file plus a
-`{"type":"run", …}` / `{"type":"plan", …}` summary for `scan`/`run`, `"schema": 1` everywhere, `null` meaning "not
-computed" rather than "unknown but fine", and diagnostics never on stdout.
-
-The coder implements it as written, or brings a decision. A field added in code without this page changing is a
-review finding.
+Typed NDJSON on stdout, `"schema": 1` everywhere: one `{"type":"result", …}` for single-answer commands, one
+`{"type":"plan", …}` after `scan`, one `{"type":"run", …}` after `run`, one `{"type":"file", …}` per file. `null` means
+"not computed", never "probably fine". Diagnostics never on stdout. Field sketches are in [cli](../cli.md) §3; a field
+added in code without that page changing is a review finding.
 
 ## D-17 · Logs
 
-Local structured JSONL under `AUTO_TZIM_HOME`, one object per event, fields fixed by [docs/state.md](../state.md):
-timestamp, level, event, run id, folder id, relative path (never a file's contents), `tzim` binary identity, and the
-normalized status. Retention: 30 days and a size cap, both configurable; a human view is rendered by `logs`. No
-environment variables are ever logged, no absolute path outside the root appears, and nothing is uploaded
-([privacy](../privacy.md)). A field that would identify a person beyond a path is refused in review.
+Local JSONL under `AUTO_TZIM_HOME`: timestamp, level, event, run id, folder id, relative path, binary identity, status.
+No environment variables, no absolute path outside the root, nothing uploaded. Retention 30 days and a size cap.
+
+## D-18 · The exit-code contract
+
+| Code | Meaning |
+| --- | --- |
+| `0` | the command did what it says; documented skips allowed |
+| `1` | at least one file `failed` |
+| `2` | usage or configuration error; nothing processed |
+| `3` | `tzim` absent, unreadable, or outside the adapter contract (`incompatible_tzim`) |
+| `4` | **unused by `auto-tzim`** — reserved for nothing, kept out of every path so that a `tzim` verification failure can never be mistaken for our lock (the lock is `8`) |
+| `5` | `update-check` failure |
+| `6` | refused before processing: first-run gate, `pause`, `min_free_bytes`, disabled folder, whole-run policy refusal |
+| `7` | internal error: corrupt state, unexpected exception, malformed child output that our guard cannot attribute to a file |
+| `8` | another run holds the lock, or the lock cannot be taken |
+| `130` / `143` | interrupted by `SIGINT` / `SIGTERM` |
+
+The raw `tzim` exit code is stored in history and never becomes ours (invariant 19).
+
+## D-19 · Precedence and the preflight order
+
+Precedence, highest first:
+
+```text
+130/143  >  7  >  2  >  8  >  3  >  6  >  5  >  1  >  0
+```
+
+Reading it: a signal beats everything; an internal error beats a usage error (because it means our state is suspect); a
+usage/config error beats a lock problem (nothing to lock for); a lock beats an incompatible binary (we cannot even look);
+an incompatible binary beats a preflight refusal (the run cannot happen at all); a preflight refusal beats an update
+failure; an update failure beats "a file failed"; and a file failure beats success.
+
+The **fixed preflight order** a run must follow, each step able to return before the next:
+
+1. parse arguments → `2`;
+2. load config → `2`;
+3. take the lock → `8`;
+4. read the binary identity and the version → `3`;
+5. pause flag → `6`;
+6. folder enabled → `6`;
+7. matching plan (first-run gate, plan hash) → `6`;
+8. free space → `6`;
+9. discovery, stability, policy, then per-file execution.
+
+Putting the lock before the binary check is deliberate: two runs must not both pass a check and then queue up.
+
+## D-20 · Plan binding
+
+`scan` writes a plan record: `plan_id`, a SHA-256 over the ordered `(relative path, size, mtime_ns, dev, ino, policy
+hash, binary hash)` tuples, the folder id, and the timestamp. `run --once` accepts `--plan ID`; without a plan that is
+`complete`, belongs to the same folder, and has the same plan hash as the tree it is about to process, it exits `6` and
+does nothing. A plan that changed even by one file is not "close enough": it is re-scanned.
+
+## D-21 · No PTY, no prompts
+
+No `pty` module import, no `openpty`, `stdin=DEVNULL` for every child, no TTY assumption anywhere in the runner, a
+per-file timeout as the last line of defence. A child that blocks on stdin is killed and recorded `failed`.
+
+## D-22 · Upstream issue for capabilities and reasons
+
+One issue in `tzim` describes the future machine interface (a `--capabilities --json` with `version`, `schema`,
+`formats`, `features`; and a structured reason code beside `note`). It is filed from this project and referenced here;
+it is **not** part of any `tzim` pull request, and this project does not wait for it.
+
+## D-23 · A candidate plan is not a promise
+
+Scan output is a statement about which files our policy would hand over, not about whether `tzim` will change them or
+by how much. Documentation must not call it eligibility, savings, or "would optimize"; the status of a planned file is
+`planned`, and the outcome exists only after an apply.

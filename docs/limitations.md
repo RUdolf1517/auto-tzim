@@ -33,12 +33,18 @@ A limitations list is part of the product. Each item below is a deliberate bound
 
 ## 4. Behaviour that surprises people
 
-- **A dry run writes.** `tzim`'s dry run builds and deletes a real candidate in the destination directory: the folder
-  must be writable, and free space is needed. After a hard kill, an orphaned `.tzim-*.tmp` may remain; we report it
-  and never delete it ([P-02](manager/problems/P-02-dry-run-is-not-write-free.md)).
+- **A scan writes nothing; an apply does.** `auto-tzim scan` (and `run --dry-run`, which is the same operation) never
+  runs file-processing `tzim` and never needs write access to the folder. An **apply** lets `tzim` write a candidate
+  `.tzim-<pid>-<ns>-<attempt>.tmp` in the destination directory and rename it; after a hard kill an orphan can remain, we
+  report it and never delete it (R-13).
+- **A scan knows no numbers.** The plan lists candidates, not predicted savings, and is not a promise that `tzim` will
+  change anything (D-23).
 - **One file at a time.** `jobs = 1` in v0.1; parallelism inside a file is `tzim`'s own.
 - **No prompts, ever.** A command that needs a decision requires a flag; in a scheduler or a pipe nothing will ask.
-- **A refusal is not an error.** `skipped_refused` and `skipped_unsupported` exit `0`, because nothing went wrong.
+- **A refusal is not an error, and it is not typed.** `skipped_by_tzim` and `skipped_unsupported` exit `0`, because
+  nothing went wrong; the reason survives as `tzim`'s own note, not as a status we invented.
+- **Exit codes are ours.** `6` means "refused before processing" (no plan yet, paused, low disk), `8` means another run
+  holds the lock, `7` means an internal error, and `4` is never produced.
 - **`failed` is not retried automatically.** A second run does not try again until the file, the binary or the policy
   changes; `history` shows why.
 - **The first run of a new folder does nothing but preview.**
@@ -47,11 +53,12 @@ A limitations list is part of the product. Each item below is a deliberate bound
 
 ## 5. Honest gaps we inherited from `tzim`
 
-- No machine-readable capability list: we record version and binary hash instead of a real capability statement, and a
-  format that exists in a custom build is invisible to us until it is used (study G-1).
-- Refusal reasons are prose: our normalized status comes from our own policy layer, and the raw note is preserved but
-  not interpreted (study G-2).
-- The `fits-tile` transformation cannot be tested against release binaries, so its opt-in is disabled (proposal D-05).
+- No machine-readable capability list: we record version and binary hash, delegate the default format set to the binary,
+  and never display a set we cannot observe (study G-1, charter §6-18).
+- Refusal reasons are prose: every `tzim`-decided skip arrives as one generic `skipped_by_tzim` with the note preserved
+  verbatim and never interpreted (study G-2). The upstream request `RUdolf1517/tzim#86` describes the interface that would
+  change this; nothing here waits for it.
+- The `fits-tile` transformation cannot be tested against release binaries, so its opt-in is forbidden in the MVP (D-05, charter §6-11).
 
 ## 6. What v0.1 does not have
 

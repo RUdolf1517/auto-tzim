@@ -13,7 +13,7 @@
    changed, no prompt, no retry, no second run.
 3. **Negative controls.** Every assertion that something did not happen comes with a companion case proving the
    assertion can fail (a file that *should* be processed, a change that *should* be detected).
-4. **No sleeping.** `min_file_age_seconds` is driven through an injected clock (proposal D-14). One integration test
+4. **No sleeping.** `min_file_age_seconds` is driven through an injected clock (D-14). One integration test
    uses a real second of age, and it is marked.
 5. **Determinism.** No test depends on enumeration order, locale, or the machine's speed. Timeouts in tests are
    generous and asserted, not raced.
@@ -23,9 +23,9 @@
 | Layer | What it covers | Speed | Runs where |
 | --- | --- | --- | --- |
 | Unit | config validation, root rules, glob matching, argv construction, status mapping, version comparison, retention maths | milliseconds | every push, every platform |
-| Fake `tzim` | every documented status and exit code, malformed/partial JSON, hang, stdin read, version mismatch, file mutation behind our back, temporary-file failure, arbitrary file names | fast, deterministic | every push, every platform |
+| Fake `tzim` | every documented status and exit code, malformed/partial JSON, hang, stdin read, **PTY/TTY expectations**, version mismatch, file mutation behind our back, temporary-file failure, arbitrary file names | fast, deterministic | every push, every platform |
 | Real `tzim`, pinned | the contract we actually depend on: T1–T10 of the [study](manager/TZIM-STUDY-2026-10-29.md#4-exact-checks-for-the-real-binary-input-to-at-08), plus one optimisable PNG and one refused file | seconds | every push, every platform, artifact verified by SHA-256 |
-| End-to-end CLI | every command, human and `--json`, exit codes, refusal paths, crash recovery | seconds | every push, every platform |
+| End-to-end CLI | every command, human and `--json`, the whole exit-code matrix including `6`/`7`/`8`/`130`/`143` and the precedence pairs, refusal paths, plan binding, crash recovery | seconds | every push, every platform |
 | Failure injection | kill between steps, full disk (simulated), read-only destination, lock contention, corrupt database, corrupt config | seconds | every push |
 
 ## 3. The fake `tzim`
@@ -36,11 +36,13 @@ by an environment variable or a config file. It must be able to:
 - emit each status, with and without a note, with and without an error object;
 - exit `0`, `1`, `2`, `3`, `4`, and die by signal;
 - print malformed JSON, a truncated line, two summaries, no summary, an unknown `type`, an unknown optional field;
-- hang forever, ignore `SIGTERM`, read `stdin` and block;
+- hang forever, ignore `SIGTERM`, read `stdin` and block, or assert `isatty()` on stdin/stdout/stderr and fail if any
+  of them is a terminal (this is what proves no PTY is allocated);
 - mutate the file it was given while reporting success (this is the case that proves our post-run identity check is
   real);
 - fail to create its temporary file;
-- record the `argv` it received and whether a shell was involved.
+- record the `argv` it received and whether a shell was involved, and increment an **invocation counter** that
+  distinguishes `--version` calls from path arguments — the counter is what proves a scan never runs file processing.
 
 The fake exists to test **our** reaction, never to model `tzim`'s correctness; the real binary tests the contract.
 
@@ -61,6 +63,8 @@ assertions. Every fixture that is committed carries its SHA-256 in the test that
 
 For every skip, refusal, unsupported file, failure and dry run:
 
+0. (scan and dry-run) the invocation counter shows one `--version` and zero path invocations, and the target root's
+   recursive listing and checksums are identical;
 1. the bytes are identical before and after (`SHA-256`);
 2. the `mtime` is unchanged (unless the platform cannot express it — then it is asserted as "unchanged or explained");
 3. no `.tzim-*.tmp` file remains that we created (we never create one);
@@ -87,7 +91,14 @@ For every skip, refusal, unsupported file, failure and dry run:
 | T-STATE-01 | crash recovery marks `interrupted`, never `optimized` | planned |
 | T-STATE-02 | concurrent run exits `4` and processes nothing | planned |
 | T-STATE-03 | second run spawns zero processes | planned |
-| T-CLI-01 | every command × exit code, human and `--json` | planned |
+| T-CLI-01 | every command × exit code, human and `--json`, `4` never produced | planned |
+| T-CLI-02 | precedence pairs: `130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0` | planned |
+| T-CLI-03 | preflight order: pause, disabled folder, no plan, low disk ⇒ `6`; held lock ⇒ `8`; bad config ⇒ `2` | planned |
+| T-PLAN-01 | plan hash binding: fabricated id, stale hash, other folder ⇒ `6`; matching plan ⇒ `0` | planned |
+| T-PLAN-02 | scan leaves the target root byte-identical and works without write access; apply is the positive control | planned |
+| T-RUN-06 | no PTY: child sees `isatty() == False` on all three streams; no `pty` import in the tree | planned |
+| T-CFG-04 | `transforms` non-empty is rejected; `formats = []` passes no `--formats` | planned |
+| T-ADP-01 | unknown/garbage version, missing binary, unknown schema ⇒ `3`; no prose parsing (source check) | planned |
 | T-UPD-01 | mocked 200/403/429/500/malformed; no socket outside `update-check` | planned |
 | T-DOC-01 | documented defaults equal schema defaults | planned |
 

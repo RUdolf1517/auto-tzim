@@ -1,193 +1,175 @@
 # Roadmap and issue breakdown
 
-Internal IDs are used until the issues exist in GitHub; after creation each ID is replaced by its real number, and
-no number is ever guessed. **No issue exists today**: on 2026-10-29 the owner answered Q1 with "wait, documentation
-only", so this file is the source of the IDs rather than a mirror of GitHub. Stage boundaries are load-bearing:
-nothing from v0.2+ may be merged into the MVP pull request, even "while we are here".
+**Issues exist.** Created 2026-10-29 after the owner's charter v0.2 resolved P-01…P-03:
 
-Scope of this stage: **MVP / v0.1**, derived from `SPEC.md` §17. Acceptance is defined clause by clause in
-[GATES.md](GATES.md).
+| ID | GitHub issue | Title |
+| --- | --- | --- |
+| AT-01 | [#1](https://github.com/RUdolf1517/auto-tzim/issues/1) | Repository and package bootstrap |
+| AT-02 | [#2](https://github.com/RUdolf1517/auto-tzim/issues/2) | Config and atomic storage |
+| AT-03 | [#3](https://github.com/RUdolf1517/auto-tzim/issues/3) | Safe discovery, stability and the read-only candidate plan |
+| AT-04 | [#4](https://github.com/RUdolf1517/auto-tzim/issues/4) | Restricted `tzim` adapter, policy and planner |
+| AT-05 | [#5](https://github.com/RUdolf1517/auto-tzim/issues/5) | JSON runner, state, history and cancellation |
+| AT-06 | [#6](https://github.com/RUdolf1517/auto-tzim/issues/6) | CLI and the exit-code contract |
+| AT-07 | [#7](https://github.com/RUdolf1517/auto-tzim/issues/7) | Update-check (notify only) |
+| AT-08 | [#8](https://github.com/RUdolf1517/auto-tzim/issues/8) | Verification with fake and real `tzim` |
+| AT-09 | [#9](https://github.com/RUdolf1517/auto-tzim/issues/9) | Safety documentation and release readiness |
+| assignment | [#10](https://github.com/RUdolf1517/auto-tzim/issues/10) | Consolidated coder assignment — **prepared, start blocked** |
+| upstream | [RUdolf1517/tzim#86](https://github.com/RUdolf1517/tzim/issues/86) | Capabilities and structured skip/refusal reasons (request, not a dependency) |
+
+Known defect in the issue set, recorded rather than hidden: **#10's body refers to `RUdolf1517/tzim#85`, which is wrong —
+the upstream request is #86.** The GitHub integration used here can create issues but not edit them or comment (HTTP 403,
+"Resource not accessible by integration"), so the correction is this line and cannot be applied to #10 itself. One manual
+edit by the owner fixes it; nothing else depends on the number.
+
+Stage boundaries are load-bearing: nothing from v0.2+ may be merged into the MVP pull request, even "while we are here".
 
 ---
 
-## Stage 1 — MVP / v0.1
+## Stage 1 — MVP / v0.1 (assigned as one set, #1…#10)
 
 ### AT-01 · Repository and package bootstrap
 
-**Scope.** A Python package `auto_tzim` with the `core/` and `cli/` layout of `SPEC.md` §4.2 (the `tui/` and `qt/`
-directories are *not* created), an entry point named `auto-tzim`, `pyproject.toml` with pinned build metadata,
-`README` linkage to the specification, `CHANGELOG.md` starting at `0.1.0` unreleased, CI with `ubuntu-latest` and
-`macos-latest` on Python 3.12 and 3.13, and a `lockfile` job (D-15).
+**Scope.** A Python package `auto_tzim` with `core/` and `cli/` only (the `tui/` and `qt/` directories are *not*
+created), an entry point `auto-tzim`, `pyproject.toml`, CI on `ubuntu-latest` and `macos-latest` for Python 3.12 and
+3.13, and a `lockfile` job that fails on an unpinned dependency.
 
-**Acceptance.** A clean checkout installs, `auto-tzim --help` and `auto-tzim --version` run on both platforms, and
-the CI jobs are green at a recorded head SHA. No behaviour beyond help/version exists yet.
+**Acceptance.** Clean checkout installs; `--help` and `--version` run on both platforms with exit `0`; an unknown
+command exits `2`; CI green at a recorded head SHA; no behaviour beyond help/version exists yet.
 
-**Required tests.** Import smoke test; `--help` exit `0`; unknown command exit `2`.
+**Tests.** Import smoke; `--help` exit `0`; unknown command exit `2`; unpinned dependency fails CI.
 
-**Evidence.** CI run IDs on both platforms, package metadata dump, checksums of the built wheel/sdist if any.
+**Out of scope.** Config, discovery, planner, runner, state, scheduler, TUI, Qt, network.
 
-**Out of scope.** Any config, discovery, runner or scheduler code.
+### AT-02 · Config and atomic storage
 
-### AT-02 · Configuration and atomic storage
+**Scope.** TOML schema `1`; strict validation (unknown fields, empty/relative roots, NUL, control characters, duplicate
+ids and roots); canonicalisation; forbidden-root, `AUTO_TZIM_HOME` containment (D-08) and cloud-sync checks; permissions
+`0600`/`0700`; atomic write with `fsync` of file and directory; corrupt config never overwritten; `config validate` and
+`folder add|list|show|edit|enable|disable|remove`.
 
-**Scope.** TOML schema `schema = 1` with `[installation]` and `[[folder]]` blocks per §5.2; strict validation that
-rejects unknown fields, empty/relative roots, NUL and out-of-range values; canonicalisation; forbidden-root and
-cloud-sync checks; `AUTO_TZIM_HOME` handling and permissions `0600`/`0700`; atomic write (temporary file in the same
-directory, `flush` + `fsync`, `rename`, directory `fsync`); a corrupt config is never overwritten; `folder add`,
-`list`, `show`, `edit`, `enable`, `disable`, `remove` semantics without any file processing; `config validate`.
+**Acceptance.** Unknown field ⇒ error naming the field, exit `2`; a rejected edit leaves the file byte-identical;
+removal deletes no user file; `AUTO_TZIM_HOME` relocates everything; `transforms` non-empty is rejected (D-05);
+`follow_symlinks = true`, `allow_hard_links = true`, `jobs > 1` and `[folder.schedule]` are rejected with the stage that
+will own them.
 
-**Acceptance.** Unknown field → validation error naming the field, exit `2`; a malformed file is left byte-identical
-after a failed command; removal of a folder changes no user file; `AUTO_TZIM_HOME` fully relocates config/state/logs.
+**Tests.** Malformed TOML; unknown field; wrong type; duplicate id/root; roots `""`, `"."`, `"/"`, `$HOME`, a file, a
+symlink, inside/containing `AUTO_TZIM_HOME`; atomic write interrupted at write/fsync/rename; corrupt file intact;
+permissions under `umask 000`; read-only directory fails without a partial file.
 
-**Required tests + negative controls.** Unknown field, wrong type, duplicate folder id, root `= ""`, root `= "."`,
-root `= "/"`, root `= $HOME`, root inside `AUTO_TZIM_HOME` and vice versa (D-08), a root that is a symlink, a root
-that is a file; atomic write interrupted at each of {write, fsync, rename} with an injected fault; corrupt file;
-permissions asserted under `umask 000`; write on a read-only directory fails without partial output.
+### AT-03 · Safe discovery, stability and the read-only candidate plan
 
-**Evidence.** Config fixtures with expected error strings, fault-injection logs, `ls -l` of created paths.
+**Scope.** `lstat` walk over one approved root; sorted relative POSIX paths; depth limit; hidden files, mount
+boundaries, `exclude_globs`; regular files only; identity `(st_dev, st_ino, size, mtime_ns)`; `st_nlink > 1` ⇒
+`hardlink_skip`; age ⇒ `skipped_unstable`; `.tzim-*.tmp` never planned; canonical containment re-check; the candidate
+plan of D-04 with plan id and plan hash (D-20).
 
-### AT-03 · Safe discovery, stability, and the dry-run plan
+**Acceptance.** Two scans are byte-identical; no entry outside the root; scan invokes no `tzim` with a path, passes no
+`--dry-run`, writes nothing in the target root, and works with the target root non-writable; a file modified or deleted
+between stages never reaches the runner; apply without a matching plan exits `6`; every planned row is `planned` and no
+output claims eligibility or savings (D-23).
 
-**Scope.** `lstat`-based walk over one approved root, deterministic order (sorted relative POSIX paths), depth
-limit, `include_hidden`, `cross_filesystems`, `exclude_globs`, extension allowlist, `min_file_age_seconds`,
-identity capture `(st_dev, st_ino, size, mtime_ns)`, `st_nlink > 1` → `hardlink_skip`, symlinks and special files
-skipped with a reason, `.tzim-*.tmp` never planned (R-14), canonical containment re-check before every spawn, and a
-plan object with the exact argv per file. `scan` renders that plan in human and `--json` form.
+**Tests.** Hostile names (spaces, newline, `;`, `$(...)`, backticks, quotes, leading `-`, `--help`, emoji, CJK,
+combining, non-UTF-8); symlink to file/dir/outside/broken, FIFO, socket, device, hard-linked pair, hidden file, orphan
+`.tzim-*.tmp`; modified/deleted between stages; two runs with forced different enumeration order; depth beyond limit; 10
+000 entries; plan hash mismatch after one file is touched.
 
-**Acceptance.** Same tree → byte-identical plan twice (order and content); no plan entry outside the root; a file
-modified after discovery never reaches the runner; no `tzim` process is started by `scan`.
+### AT-04 · Restricted `tzim` adapter, policy and planner
 
-**Required tests + negative controls.** A tree containing: spaces, Unicode (including a non-UTF-8 name on Unix),
-leading `-`, newline, shell metacharacters; symlink to file, to dir, out of the root, and a loop; FIFO, socket,
-device; hard-linked pair; hidden files; a mount boundary (skipped as environment-dependent when unavailable); file
-modified between discovery and pre-run; file deleted between discovery and pre-run; a directory whose entries are
-created in a different order on two runs (plan must still match).
+**Scope.** `tzim --version` only; supported range; `incompatible_tzim` ⇒ exit `3`; one mapping table with the generic
+`skipped_by_tzim` (D-02); `formats = []` ⇒ omit `--formats` (D-11); `transforms` empty; argv with files only, no `-r`,
+no directories, `--` separator (D-12); binary identity recorded.
 
-**Evidence.** Plan JSON for the hostile-name corpus, per-file rows, the enumeration-order test log.
+**Acceptance.** Deterministic argv per profile with no user-controlled token besides the path; unknown version,
+garbage version, missing binary or unknown `schema` ⇒ `3` before planning; no code path spawns `tzim` with `--info`,
+`--list-formats`, `--check-deps` or `--dry-run`; `skipped` ⇒ one generic status with the verbatim note; a filename that
+looks like a flag cannot become one.
 
-### AT-04 · Capabilities, policy, planner
+**Tests.** Versions `0.13.9`, `0.14.0`, `0.15.0`, `1.0.0`, garbage, empty output, non-zero exit; files named
+`--zopfli`, `-r`, `--json`, `--`, `-`; `formats = ["png"]` and `[]`; a test double that parses `--list-formats` must fail
+the source check.
 
-**Scope.** The version-keyed adapter (D-01) including `--version` parsing, schema guard, the optional PNG probe, and
-`incompatible_tzim` behaviour; the status/exit mapping table (D-02) as a single module; format/transform policy with
-`formats = []` meaning *recorded* `tzim` defaults and an empty `transforms` allowlist (D-05); argv construction with
-no shell, no `-r`, files only (D-12); the dry-run planner of D-04.
+### AT-05 · JSON runner, state, history and cancellation
 
-**Acceptance.** For every supported profile the argv is deterministic and contains no user-controlled token other
-than the file path; a filename that looks like a flag cannot become one (`--` separator asserted); an unsupported
-`tzim` version produces exit `3` before any file is planned; `transforms = ["fits-tile"]` is rejected with a reason.
+**Scope.** Per-file subprocess (`shell=False`, `stdin=DEVNULL`, captured output with a size cap, minimal env, **no
+PTY**, D-21); NDJSON schema guard; timeout `TERM`→`KILL`; signal handling that starts no new files; SQLite state with
+transactions, global/folder/file guards; stale-run recovery to `interrupted`; history; invalidation key (D-06);
+post-run identity re-read.
 
-**Required tests + negative controls.** Fake `tzim` reporting versions `{0.13.9, 0.14.0, 0.15.0, 1.0.0, garbage}`
-→ expected adapter outcomes; probe failure; a file literally named `--zopfli`, `-r`, `--json`; a profile with
-`formats = ["fits"]` against a build without FITS (must be a documented policy skip, not a crash).
+**Acceptance.** No shell, no `pty` import, child sees `isatty() == False`; hung child killed and recorded `failed`;
+malformed JSON is `failed`, never `optimized`; a child that exits `0` after mutating a file is caught; concurrent run
+exits `8`; no row stays `running`; recovery never yields `optimized`; a second run makes zero invocations.
 
-**Evidence.** Golden argv files per profile, adapter decision table executed as a test, fake-`tzim` transcripts.
+**Tests.** Each status; exits `0/1/2/3/4`; death by signal; truncated JSON; wrong `type`; two summaries; no summary; huge
+stdout; 10 MiB stderr; stdin-blocking child; `SIGTERM`-ignoring child; mutating child; lock stolen; crash before and
+after commit; `SIGINT` during a run.
 
-### AT-05 · JSON runner, state, history, cancellation
+### AT-06 · CLI and the exit-code contract
 
-**Scope.** One subprocess per file (`argv`, `stdin=DEVNULL`, `stdout=PIPE`, `stderr=PIPE`, `env` minimal), NDJSON
-parse and validation, aggregation of exactly one file row + one summary row, timeout with `TERM`→`KILL` (D-10),
-`SIGINT`/`SIGTERM` handling that stops new spawns, SQLite state with transactions, a global lock and per-file guard,
-stale-run recovery to `interrupted`, history rows per §7.4, and the invalidation key (D-06).
+**Scope.** Every MVP command with `--json`; own codes `0/1/2/3/5/6/7/8/130/143` with `4` unused; fixed preflight order;
+precedence `130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0`; stdout/stderr separation; no prompts; first-run gate by plan id and
+hash.
 
-**Acceptance.** No shell; a `tzim` that hangs is killed and recorded as `failed` (`timeout`); a second concurrent run
-exits `4` without processing anything; after `SIGKILL` of our own process, the next start marks the stale run
-`interrupted` and never `optimized`; a malformed JSON line is `failed`, never `optimized`.
+**Acceptance.** Every code produced by a real invocation, including `6` for no-plan / `pause` / `min_free_bytes` and `8`
+for a held lock; `4` never produced; precedence pairs asserted; a raw `tzim` code never becomes `$?`; refusals return
+`6`, never `0/1/2`; `--json` stdout stays parseable with warnings on stderr.
 
-**Required tests + negative controls.** Fake `tzim` producing: each status; exit `1`/`2`/`3`/`4`; truncated JSON;
-JSON with a wrong `type`; two summary lines; no summary; huge stdout (stream-limited); 10 MiB of stderr; a binary
-that reads stdin and blocks; a binary that ignores `SIGTERM`; a binary that exits `0` while mutating the file
-(must be caught by our post-run identity check, not trusted); lock stolen by a second process; concurrent
-invocation; crash injection before/after commit.
+**Tests.** Command × code matrix; precedence matrix; unknown `--status` ⇒ `2`; corrupt state ⇒ `7`; corrupt config ⇒ `2`;
+apply while paused ⇒ `6`; fabricated plan id/hash ⇒ `6`; one file touched after scan ⇒ `6`; positive control: after a
+valid scan ⇒ `0`.
 
-**Evidence.** SQLite dumps per scenario, transcripts, timeout timings, the crash-recovery log sequence.
+### AT-07 · Update-check (notify only)
 
-### AT-06 · CLI
+**Scope.** One documented request; version comparison against `allowed_major_versions`; `notify`/`manual`; 24 h cache;
+exit `5` on failure; nothing downloaded or replaced.
 
-**Scope.** Every command of §8.1 with `--json`, exact exit codes of §8.2 (plus D-03 once answered), human output on
-stdout vs diagnostics on stderr, no prompts in non-TTY, `pause`/`resume`, `status`, `history`, `logs`, and the
-first-run gate of §8.1.
+**Acceptance.** No socket outside `update-check`; an error response never rendered as "up to date"; incompatible major
+reported and not acted on; the single request documented in the shipped privacy page.
 
-**Acceptance.** A table-driven test executes every command in human and `--json` mode and asserts exit code, stdout
-JSON validity, and that stdout contains no human diagnostics; `run --once` on a new folder without a preview refuses
-and changes nothing.
-
-**Required tests + negative controls.** Each exit code produced by a real invocation; `--json` with a warning on
-stderr (stdout must stay parseable); `run` while paused; `run` with a corrupted state DB; `history --status` with an
-unknown status (exit `2`); command invoked with a closed stdin.
-
-**Evidence.** Command matrix table with raw captures, exit-code matrix, a diff showing zero byte changes after the
-refusal cases.
-
-### AT-07 · Update check
-
-**Scope.** `update-check` only (D-07): one documented request, version comparison against `allowed_major_versions`,
-`notify`/`manual` policies, cache, exit `5` on failure, and a documented statement that it never downloads or
-replaces anything.
-
-**Acceptance.** No network activity in `run`/`scan` (asserted); an unavailable network is exit `5` with a clear
-message; an "up to date" answer is never produced from an error response; an incompatible major is reported as
-incompatible and nothing else happens.
-
-**Required tests + negative controls.** Mocked responses: 200 with a newer tag, 200 with an older tag, 403 rate
-limit, 429, 500, malformed JSON, HTML error page, a tag that is not semver. A test that runs `run --once` with the
-resolver disabled.
-
-**Evidence.** Mocked-response matrix, packet-level assertion that no socket is opened outside `update-check`, the
-privacy text as shipped.
+**Tests.** Mocked 200 (newer/older), 403, 429, 500, malformed JSON, HTML page, non-semver tag, timeout; socket-blocking
+fixture for every other command; filesystem diff of the binary path and `AUTO_TZIM_HOME`.
 
 ### AT-08 · Verification with fake and real `tzim`
 
-**Scope.** A fake `tzim` covering §14.2 (all statuses, malformed/partial output, nonzero exits, timeout, hang,
-stdin reads, version mismatch, unexpected file mutation, temporary-file failure, arbitrary filenames), a real-binary
-integration suite on a pinned release artifact (D-13) with the T1–T10 assertions of the
-[study §4](TZIM-STUDY-2026-10-29.md#4-exact-checks-for-the-real-binary-input-to-at-08), and byte-identity checks for
-every non-optimizing outcome.
+**Scope.** Fake suite (every status, exit code, malformed output, hang, stdin read, version mismatch, file mutation);
+real suite against a pinned release artifact verified against `SHA256SUMS`, with T1–T10 of the study; the invocation
+counter; before/after checksums for every non-candidate outcome; the traceability table filled in.
 
-**Acceptance.** Every T1–T10 assertion runs in CI on macOS and Linux against a checksum-verified artifact; a
-mismatch fails the job with the observed JSON attached; every skip/failure case has a pre/post checksum proving the
-bytes are identical; a second run of the same corpus makes no new `tzim` invocation.
-
-**Required tests + negative controls.** Positive control (an optimizable PNG must be optimized) and negative
-controls (a refused file, an unsupported file, an unstable file: none may change); a deliberately broken expectation
-to prove the suite can fail; a fixture renamed to a URL-encoded form to prove no path decoding happens.
-
-**Evidence.** Raw per-case rows, checksums before/after, the artifact's SHA-256 and the `SHA256SUMS` extract, CI run
-IDs at the final head.
+**Acceptance.** T1–T10 green on macOS and Linux against `tzim v0.14.0`; a mismatch fails with the observed JSON attached;
+every skip/refusal/failure has an equal-checksum proof; the counter shows one `--version` and zero path invocations for
+scan/dry-run, ≥1 path invocation for apply; a deliberately broken expectation fails the suite; `docs/testing.md` §6
+moves from `planned` to `exists`.
 
 ### AT-09 · Safety documentation and release readiness
 
-**Scope.** `README` (installation, first dry run, what is *not* promised), a configuration reference generated from
-the schema, a limitations document, a privacy document (the single request of D-07, local logs, retention), a
-recovery document (interrupted runs, stale state, orphaned temporary files), the update policy text, and the
-"undo is not provided" statement.
+**Scope.** README (installation, first read-only plan, what is not promised), config reference generated from the
+schema, limitations, privacy, recovery, update policy, `--help`, the statement that a candidate plan is not a guarantee
+of eligibility or gain.
 
-**Acceptance.** Every documented default matches the code (checked by a test that reflects the schema), every exit
-code in the docs is produced by a test, and the limitations list includes: dry run needs write access to the target
-directory, no undo, no Windows, untested platforms named, `fits-tile` unavailable in v0.1.
-
-**Evidence.** Documentation-to-behaviour table, the test that reflects the schema, a review record of every claim
-verified against the binary.
+**Acceptance.** Every documented default equals the schema default by reflection; every documented exit code appears in
+the AC-8 table; the limitations list is complete for the MVP (no undo, no Windows, untested platforms named, apply
+leaves temporary files, no `transforms`, capabilities only as version + binary hash, `skipped_by_tzim` is generic); no
+document claims `tzim --dry-run` behaviour or predicted savings.
 
 ---
 
 ## Stage 2 — v0.2 (not assigned)
 
-launchd user agent and systemd user timer, the same core, no second eligibility path, no catch-up storm, plus a TUI
-on the same core. Requires: the scheduler cannot prompt, `pause`/`disable` provably change OS state, and overlapping
-runs are impossible.
+launchd user agent and systemd user timer, the same core, no second eligibility path, no catch-up storm, then a TUI on
+the same core. Gates: no overlapping runs under a forced schedule, `pause`/`disable` provably change OS state, no prompt
+in any non-TTY path, UI contains no discovery/runner/updater code.
 
 ## Stage 3 — v0.3 (not assigned)
 
-Controlled `tzim` update through an explicitly configured official Homebrew tap/formula, blocked while a run is
-active, followed by version, capability and binary-hash re-checks and a read-only smoke test. A real in-place upgrade
-of a previously installed version in an isolated environment is the acceptance test; a formula review alone is not.
+Controlled update through an explicitly configured official Homebrew tap/formula: lock held for the whole operation,
+binary identity before and after, blocked while a run is active, and a real in-place upgrade test from the previously
+installed version. A formula review alone is not evidence.
 
 ## Stage 4 — v0.4 (not assigned)
 
-Qt GUI (PySide6) as a thin wrapper over the same core: no discovery, subprocess or updater code, dangerous changes
-behind a confirmation screen whose default is **No**.
+Qt GUI (PySide6) as a thin wrapper over the same core, dangerous changes behind a confirmation whose default is **No**,
+packaging and notarisation documented before a release.
 
 ## Explicitly out of every stage
 
-Own codecs or repackers; `--force` or bypassing a refusal; an undo promise; backup or cloud sync; self-update of
-`auto-tzim`; replacing the `tzim` binary during an active job; any change in the `tzim` repository.
+Own codecs or repackers; `--force`; an undo promise; backup or cloud sync; self-update of `auto-tzim`; replacing the
+`tzim` binary during an active job; any change in the `tzim` repository; `tzim --dry-run` in the MVP.

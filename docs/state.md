@@ -14,6 +14,7 @@ no cloud state, no cache keyed on the network, and no file inside the user's fol
 | `runs` | one row per `run --once` (and per refused run) | `id`, `started_at`, `finished_at`, `state` (`running`\|`completed`\|`aborted`\|`interrupted`), `dry_run`, `tzim_path`, `tzim_sha256`, `tzim_version`, `adapter`, `config_hash`, `exit_code` |
 | `files` | one row per file per run | `run_id`, `folder_id`, `relative_path`, `status`, `reason_code`, `before`, `after`, `saved`, `dev`, `ino`, `size_before`, `mtime_ns_before`, `size_after`, `mtime_ns_after`, `sha256_before`, `sha256_after`, `tzim_status`, `tzim_note`, `tzim_error_kind`, `tzim_error_message`, `duration_ms`, `argv_json` |
 | `eligibility` | the "do not re-examine" cache | `folder_id`, `relative_path`, `dev`, `ino`, `size`, `mtime_ns`, `tzim_sha256`, `adapter`, `policy_hash`, `status`, `reason_code`, `decided_at` |
+| `plans` | one row per `scan` / `run --dry-run` (D-20) | `plan_id`, `folder_id`, `created_at`, `rows`, `plan_hash`, `policy_hash`, `tzim_sha256`, `adapter`, `state` (`complete`\|`superseded`\|`used`) |
 | `locks` | active run and per-file guards | `run_id`, `pid`, `host`, `started_at`, `heartbeat_at` |
 | `meta` | schema version and installation facts | `key`, `value` |
 
@@ -21,9 +22,15 @@ Design rules:
 
 - `files` is append-only history: a row is never edited after its run finished. A re-run creates new rows.
 - `eligibility` is a cache, and it is invalidated by identity **or** by any of `tzim_sha256`, `adapter`, `policy_hash`
-  changing (proposal D-06). A cache entry never claims a file is "safe to skip" on the strength of an old binary.
+  changing (D-06). A cache entry never claims a file is "safe to skip" on the strength of an old binary.
 - `argv_json` is stored because it is the only way to explain a result later. It contains an absolute path, which is
   why logs and exports are treated as sensitive (§ [privacy](privacy.md)).
+- `plans.plan_hash` is a SHA-256 over the ordered tuples `(relative_path, size, mtime_ns, dev, ino, policy_hash,
+  tzim_sha256)`. An apply compares it with the tree it is about to process; any difference is exit `6`, never "close
+  enough" (D-20). A plan is `used` once an apply starts and `superseded` by a newer scan of the same folder.
+- The normalized status vocabulary is fixed by D-02: `planned`, `optimized`, `already_optimal`, `skipped_unsupported`,
+  `skipped_by_tzim`, `skipped_policy`, `skipped_unstable`, `hardlink_skip`, `failed`, `interrupted`, `incompatible_tzim`.
+  The raw `tzim` status, note and exit code live in their own columns, never in `status`.
 - Timestamps are stored in UTC, ISO 8601 with microseconds; `mtime_ns` is stored as an integer, never as a float.
 
 ## 2. Transactions and crash behaviour
@@ -77,7 +84,7 @@ completed leaves the original file untouched and reports what was attempted.
 
 ## 6. What the state does not contain
 
-- file contents, thumbnails, or hashes above the documented size cap (proposal D-09 records the omission explicitly
+- file contents, thumbnails, or hashes above the documented size cap (D-09 records the omission explicitly
   rather than pretending);
 - environment variables, shell history, or anything read from the network;
 - any path outside the configured roots;

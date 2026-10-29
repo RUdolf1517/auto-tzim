@@ -15,11 +15,13 @@ never routes a refused file anywhere else.
 ## What it will do (MVP / v0.1)
 
 - You add **one narrow folder at a time**, explicitly; nothing is scanned before that.
-- The **first run of a new folder is dry-run only**.
-- `scan` shows a deterministic plan; `run --once` invokes the installed `tzim` as a subprocess, one file per
-  process, with an argv array and no shell.
-- Every result is normalized into a documented status (`optimized`, `already_optimal`, `skipped_refused`,
-  `skipped_unstable`, `hardlink_skip`, `failed`, `interrupted`, …) and kept in local SQLite history.
+- `scan` produces a **deterministic, read-only candidate plan**: which files our policy would hand over, with the exact
+  argv. It does not invoke `tzim` on any of them and writes nothing in the folder.
+- The first apply of a folder requires a matching plan (id + hash); without it the command exits `6` and does nothing.
+- `run --once` then invokes the installed `tzim` as a subprocess, one file per process, argv array, no shell, no PTY.
+- Every result is normalized into a documented status (`optimized`, `already_optimal`, `skipped_unsupported`,
+  `skipped_by_tzim`, `skipped_policy`, `skipped_unstable`, `hardlink_skip`, `failed`, `interrupted`) and kept in local
+  SQLite history. A `tzim`-decided skip stays generic — its note is stored verbatim, never interpreted.
 - `update-check` only **notifies** about a newer `tzim`; nothing downloads or replaces a binary in v0.1.
 - Local-only logs, no telemetry, no network access except an explicitly invoked `update-check`.
 
@@ -28,8 +30,13 @@ deliberately not mixed into the MVP.
 
 ## Safety rules that are not negotiable
 
+The operative list is charter v0.2 §6 (nineteen invariants). The ones that shape everything else:
+
 1. No folder is processed until the user adds it by name.
-2. First run of a new folder is dry-run only.
+2. Before a folder's first apply there must be a **read-only candidate plan**: `auto-tzim` scan never runs
+   file-processing `tzim`, never passes `--dry-run`, and writes nothing inside the folder. Only `tzim --version` is
+   called. (`tzim`'s own dry run writes a temporary candidate into the destination directory — which is exactly why we
+   do not use it.)
 3. No root/sudo, no hidden background activity, no daemon.
 4. No shell: filenames are argv data.
 5. No symlink following; no special files.
@@ -38,16 +45,20 @@ deliberately not mixed into the MVP.
 8. `auto-tzim` never implements codecs and never installs its own candidate over an original.
 9. `tzim` owns eligibility, refusal, verification and installation.
 10. Unknown/unsupported/refused/failed files are never re-routed to another handler.
-11. Confirmation-required transformations need a separate, explicit opt-in.
-12. Scheduler/non-TTY/JSON modes never wait for a prompt.
+11. `transforms` must be empty in the MVP: confirmation-required transformations do not run.
+12. Scheduler/non-TTY/JSON modes never wait for a prompt and never allocate a PTY.
 13. `failed` is never retried in an automatic loop.
-14. `update-check` never downloads or replaces a binary in the MVP.
+14. `update-check` never downloads or replaces a binary.
 15. No telemetry and no undocumented network requests.
 16. No promise of undo: a successful optimization rewrites the file.
 17. The UI never duplicates core discovery/runner/updater logic.
+18. Default-enabled formats and refusal reasons are never reconstructed from human output, extensions or the free-text
+    `note`; an unknown contract is a fail-closed `incompatible_tzim`.
+19. Exit codes are ours — `6` for a refusal before processing, `7` internal, `8` lock, `4` never produced — with a fixed
+    preflight order and precedence, and no passthrough of a `tzim` exit code.
 
-The full list, with the manager's review gates behind each item, is in
-[MANAGER-SPEC.md §6](MANAGER-SPEC.md) and [docs/manager/GATES.md](docs/manager/GATES.md).
+The full list, with the review gate behind each item, is in [MANAGER-SPEC.md §6](MANAGER-SPEC.md),
+[docs/safety.md](docs/safety.md) and [docs/manager/GATES.md](docs/manager/GATES.md).
 
 ## Documentation
 
@@ -60,7 +71,8 @@ line saying so. None of them describes behaviour you can observe today.
 | --- | --- |
 | [SPEC.md](SPEC.md) | Technical specification, version 0.1 — the product contract |
 | [MANAGER-SPEC.md](MANAGER-SPEC.md) | Project-manager charter: scope, gates, evidence standard, severity rules |
-| [docs/spec/PROVENANCE.md](docs/spec/PROVENANCE.md) | Where the two copies came from, commit SHAs, checksums |
+| [docs/spec/PROVENANCE.md](docs/spec/PROVENANCE.md) | Where the two copies came from, versions, checksums |
+| [docs/spec/CONFLICTS.md](docs/spec/CONFLICTS.md) | The four places where the two specifications disagree, and which text wins |
 
 ### Product reference
 

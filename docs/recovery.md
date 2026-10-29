@@ -20,7 +20,9 @@ will re-plan every file from scratch, which is not dangerous but is slow and los
 
 ## 2. A stale lock
 
-What you will see: `run --once` exits `4` and names a pid and a start time.
+What you will see: `run --once` exits **`8`** and names a pid and a start time. (`4` is never produced by `auto-tzim`:
+it belongs to `tzim`, where it means a verification failure, and we keep it out of our own contract so the two can never
+be confused.)
 
 What to do: check whether that process exists (`ps -p <pid>`). If it does, a run is active — wait, or interrupt it. If
 it does not, the lock is stale: `auto-tzim` reports that state and offers no automatic takeover, because two runs on
@@ -62,7 +64,7 @@ database and is not affected by a config rewrite.
 
 ## 6. Corrupt state database
 
-What you will see: `doctor` reports the database as not OK, or a command exits `2`/`1` while opening it.
+What you will see: `doctor` reports the database as not OK, or a command exits `7` while opening it.
 
 What to do: copy the database aside first — it is the only record of past runs. `auto-tzim` will refuse to start
 rather than migrate or truncate silently. Recovery options are: restore from a backup, or start a fresh state
@@ -88,6 +90,16 @@ fail-closed rule, not a bug.
 What to do: upgrade `auto-tzim` to a version whose adapter covers the new `tzim`, or point `tzim_path` at the previous
 binary until that exists. Do not edit the adapter's version table by hand to "make it work": the table is the reviewed
 statement of what has been tested.
+
+## 8a. A run refused before it started (`6`)
+
+What you will see: exit **`6`** with a reason: no matching plan ("preview this folder first"), `pause` is active, free
+space is below `min_free_bytes`, or the folder is disabled.
+
+What it means: nothing was read for processing and nothing changed. Not an error and not a success — a scheduler must
+read it as "not now", never as "done".
+
+What to do: run `auto-tzim scan` and then apply; `resume` after a pause; free space; enable a disabled folder.
 
 ## 9. What recovery never does
 

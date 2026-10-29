@@ -1,69 +1,77 @@
 # Assignment — MVP / v0.1 (AT-01 … AT-09)
 
-**Status: DRAFT — not issued.** On 2026-10-29 the owner answered Q1 with "wait, documentation only", and asked for
-the Q2–Q4 problems to be described rather than decided ([answers](QUESTIONS-TO-OWNER.md#0-answers-received-2026-10-29)).
-So this text is a plan, not a contract: it becomes valid when the owner says "start" and Q4 is answered, after which
-the same text is posted as the body of the MVP tracking issue with an explicit start date. Until then no
-implementation is contracted, and work started against this draft would have no acceptance criteria.
+**Status: prepared, not started.** The text below is issued as
+[issue #10](https://github.com/RUdolf1517/auto-tzim/issues/10) and is the single consolidated assignment for the MVP
+(charter §5.1, §11). Starting implementation is blocked by charter §3.2 — the previously assigned `tzim` set is still
+unfinished ([pre-flight P2](PREFLIGHT-2026-10-29.md), blocker B-01 in the issue). Nothing in this document authorises a
+coder to begin before the owner comments "start" on #10.
 
-Format follows charter §11.
+Issues in scope: #1, #2, #3, #4, #5, #6, #7, #8, #9. One pull request, commits labelled by issue id.
 
 ---
 
-**Scope / issue IDs:** AT-01 … AT-09 ([ROADMAP-ISSUES.md](ROADMAP-ISSUES.md)). Everything in stage 1 of that file,
-nothing else.
+**Scope / issue IDs:** AT-01 (#1) bootstrap · AT-02 (#2) config · AT-03 (#3) discovery and read-only plan ·
+AT-04 (#4) restricted adapter, policy, planner · AT-05 (#5) runner, state, history · AT-06 (#6) CLI and exit codes ·
+AT-07 (#7) update-check · AT-08 (#8) verification with fake and real `tzim` · AT-09 (#9) documentation readiness.
 
-**Final goal of this iteration:** a working `auto-tzim` v0.1 that lets a user add one narrow folder, see a
-deterministic plan, run `tzim` on the approved files one process at a time, and read status, history and logs —
-with every safety invariant in this document demonstrated by a behavioural test on macOS and Linux at one final
-head SHA. Deliver the whole set; the review is consolidated, not per issue.
+**Final goal of this iteration:** a working `auto-tzim` v0.1 in which a user adds one narrow folder, gets a **read-only
+candidate plan** (no file-processing `tzim`, no write in the target root), then applies it with `tzim` invoked one file
+per process, and can read status, history and logs — with every invariant of charter §6 demonstrated by a behavioural
+test on macOS and Linux at one final head SHA, and the exit-code contract of D-18/D-19 proven by real invocations.
 
 **Required implementation:**
 
-1. `auto_tzim` package with `core/` and `cli/` (AT-01); no `tui/`, no `qt/`.
-2. TOML config schema `1` with strict validation, canonical roots, forbidden-root and cloud-sync checks,
-   `AUTO_TZIM_HOME`, permissions, atomic write, corrupt-config safety, and the `folder`/`config` commands (AT-02).
-3. Discovery and stability per `SPEC.md` §6, a deterministic plan, and `scan` in human and `--json` form (AT-03).
-4. Version-keyed `tzim` adapter (D-01), one status/exit mapping table (D-02), policy and argv construction with no
-   shell and no `-r` (D-12), and the two dry-run modes (D-04) (AT-04).
-5. Per-file JSON subprocess runner, timeout and signals (D-10), SQLite state with locking and stale-run recovery,
-   history per §7.4, invalidation key per D-06 (AT-05).
-6. The full CLI of §8.1, `--json` everywhere, the exit codes of §8.2 plus the owner's answer to Q4 (AT-06).
-7. `update-check`: one documented request, notify only, exit `5` on failure (D-07) (AT-07).
-8. Fake-`tzim` suite for §14.2 and real-binary suite for §14.3 with the T1–T10 assertions of
-   [the study §4](TZIM-STUDY-2026-10-29.md#4-exact-checks-for-the-real-binary-input-to-at-08) (AT-08).
-9. Documentation set of AT-09, including the honest limitations list.
+1. `auto_tzim` package with `core/` and `cli/` only; no `tui/`, no `qt/` (#1).
+2. TOML config v1 with strict validation, canonical roots, forbidden-root / `AUTO_TZIM_HOME` / cloud-sync checks,
+   permissions, atomic write, corrupt-config safety, `config validate` and the `folder` commands (#2).
+3. `lstat` discovery and stability per [`docs/safety.md`](../safety.md) §2, and the candidate plan of D-04 with a plan
+   id and a plan hash (D-20) (#3).
+4. Restricted adapter: `tzim --version` only, `incompatible_tzim` fail-closed, one status/exit mapping table with the
+   generic `skipped_by_tzim`, argv with files only, no `-r`, no `--formats` when `formats = []`, empty `transforms`
+   (#4).
+5. Per-file runner: `shell=False`, `stdin=DEVNULL`, no PTY, NDJSON schema guard, timeout `TERM`→`KILL`, signal handling,
+   SQLite state with global/folder/file guards, stale-run recovery, history, invalidation key (#5).
+6. The full MVP CLI with `--json`, the own exit codes `0/1/2/3/5/6/7/8/130/143` (`4` unused), the fixed preflight order
+   and the precedence `130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0` (#6).
+7. `update-check`: one documented request, notify only, exit `5` on failure (#7).
+8. Fake-`tzim` suite, pinned real-binary suite with the T1–T10 assertions, the invocation counter, before/after
+   checksums for every non-candidate outcome (#8).
+9. The documentation set of #9 made true against the binary (#9).
 
-**Explicit non-goals:** launchd/systemd units or any scheduler; TUI; Qt; automatic or Homebrew update; download or
-replacement of any binary; backup, sync or undo; own codecs or repackers; `--force`; Windows support; changes in
-the `tzim` repository; `--strip-metadata` and `--fits-tile` opt-ins (empty `transforms` allowlist, D-05);
-re-architecting the module layout in §4.2.
+**Explicit non-goals:** scheduler or OS units; TUI; Qt; automatic or Homebrew update; any download or replacement of a
+binary; backup/sync/undo; own codecs; `--force`; Windows; any change in the `tzim` repository; **any invocation of
+`tzim --dry-run`** (charter §6-2); `--strip-metadata` and `--fits-tile` (empty `transforms`); predicted savings or
+eligibility claims in the plan; parsing `--info` / `--list-formats` / `note`.
 
-**Safety invariants:** all seventeen of charter §6, plus the project-specific rules R-13, R-14, R-18, R-19 in the
-[risk register](RISK-REGISTER.md). A pull request that touches any of them is returned, not discussed.
+**Safety invariants:** all nineteen of charter §6 as the operative text, plus R-13, R-14, R-18, R-19 and R-22…R-26 of
+the [risk register](RISK-REGISTER.md). A pull request that weakens any of them is returned, not discussed.
 
-**Required tests and negative controls:** per issue in [ROADMAP-ISSUES.md](ROADMAP-ISSUES.md), and the matrix in
-[GATES.md](GATES.md). The non-negotiable ones: hostile filenames never interpreted (`$(…)`, newline, leading `-`,
-non-UTF-8); symlink out of the root aborts; a file changed mid-run ends `skipped_unstable`; a `tzim` exit `4` aborts
-the plan and marks the rest `interrupted`; a blocked `stdin` is killed by the timeout instead of hanging; a second
-concurrent run exits `4` with nothing processed; malformed JSON never becomes `optimized`; a `tzim` that exits `0`
-after mutating a file is caught by our identity check; `run`/`scan` open no socket; a second run makes no new
-`tzim` invocation; no test sleeps for `min_file_age_seconds` (D-14).
+**Required tests and negative controls:** as listed per issue and in [GATES.md](GATES.md). Non-negotiable ones:
 
-**Required raw artifacts:** CI run IDs per platform at the final head SHA with their logs; the command table with
-raw stdout/stderr and exit codes; per-file rows for the fixture corpus including skips and failures; before/after
-SHA-256 for every file in the corpus; the pinned `tzim` artifact's SHA-256 and the matching `SHA256SUMS` extract;
-SQLite dumps for the recovery scenarios; the fake-`tzim` invocation logs; `python --version`, `uname -a`, the
-`auto-tzim` commit, and the `tzim` binary identity per platform.
+- scan/dry-run makes zero path invocations of `tzim` and leaves the target root byte-identical, and succeeds when the
+  target root is not writable (positive control: apply does invoke and does change a file);
+- apply without a matching plan id/hash, while paused, or below `min_free_bytes` exits `6` with nothing processed;
+- every exit code produced by a real command; `4` never produced; a fake `tzim` returning `4` makes us exit `1`;
+- precedence pairs asserted with constructed conflicts;
+- hostile filenames never interpreted (`$(touch /tmp/pwned)` must not appear); a symlink out of the root aborts; a file
+  changed mid-run ends `skipped_unstable`; a blocked stdin is killed by the timeout; a second concurrent run exits `8`
+  with nothing processed; malformed JSON never becomes `optimized`; a child that exits `0` after mutating a file is
+  caught by our identity check; `run`/`scan` open no socket; a second run makes no new invocation; no test sleeps for
+  `min_file_age_seconds`.
 
-**Documentation to update:** `README.md` (installation, first dry run, what is not promised), a configuration
-reference generated from the schema, limitations, privacy (one request, local logs, retention), recovery, update
-policy, `CHANGELOG.md`, and the `--help` text. Documentation is part of acceptance, not a follow-up ticket.
+**Required raw artifacts:** CI run IDs per platform at the final head with logs; the command/exit-code matrix with raw
+stdout/stderr and `$?`; per-file rows for the fixture corpus including skips and failures; before/after SHA-256 for every
+corpus file; the invocation counter for every scan and apply case; the pinned artifact's SHA-256 and the matching
+`SHA256SUMS` line; SQLite dumps for the recovery scenarios; fake-`tzim` invocation logs; `python --version`,
+`uname -a`, the `auto-tzim` head SHA and the `tzim` identity per platform.
 
-**Commit/PR requirements:** one pull request for the MVP; commits labelled `AT-0N: …` so the issue map can be
-reconstructed; no merge commits mixing stages; `CHANGELOG.md` updated; the specification copies untouched; CI green
-at the head that is handed over; the PR description contains the handoff block below. The coder does not merge and
-does not close issues.
+**Documentation to update:** `README` (installation, first read-only plan, what is not promised), config reference
+generated from the schema, limitations, privacy, recovery, update policy, `--help`, and `CHANGELOG`. Documentation is
+part of acceptance.
+
+**Commit/PR requirements:** one pull request; commits labelled `AT-0N: …`; no merge commits mixing stages; the
+specification copies untouched; CI green at the head handed over; the PR description carries the handoff block below.
+The coder does not merge and does not close issues.
 
 **Final handoff format:** charter §12, verbatim:
 
@@ -84,14 +92,40 @@ Merge/Release performed by coder: no
 
 **Known external constraints:**
 
-- The MVP is accepted on macOS and Linux only; Windows is out of scope and must be named as untested.
-- `tzim`'s release archives do not contain the FITS handler, which is why `fits-tile` stays disabled (D-05).
-- The real-binary tests use a pinned release artifact verified against the release `SHA256SUMS`; "latest" is
-  forbidden (D-13). If GitHub is unreachable in CI, the job fails rather than silently skipping.
-- Two upstream gaps are known and accepted (no capability JSON, no reason code): the adapter is fail-closed and
-  the first run records the `tzim` version and binary hash, so a future change is detectable.
-- `tzim` issue #83 (interactive confirmation) is not compatible with this MVP until its non-TTY behaviour is
-  documented; the adapter pins a prompt-free version range.
+- Accepted on macOS and Linux only; Windows untested and must be named as such.
+- The real-binary suite pins `tzim v0.14.0` artifacts verified against the release `SHA256SUMS`; `latest` is forbidden.
+  If GitHub is unreachable in CI the job fails rather than silently skipping.
+- `tzim` has no machine-readable capability list and no structured refusal reason: the MVP delegates the default set
+  (no `--formats`), keeps `skipped_by_tzim` generic, and records version + binary hash. The upstream request
+  [RUdolf1517/tzim#86](https://github.com/RUdolf1517/tzim/issues/86) describes the future API and is **not** a
+  dependency. (Issue #10's body cites `#85` for this; the correct number is **#86** — correction recorded here because
+  the integration that created #10 can neither edit nor comment on issues.)
+- `tzim` issue #83 (interactive confirmation) is incompatible with this MVP until its non-TTY behaviour is documented;
+  the adapter pins a prompt-free range.
+- Apply-time temporary files inside the target root are `tzim`'s behaviour
+  (`.tzim-<pid>-<ns>-<attempt>.tmp`) and may survive a hard kill; documented, never deleted by us, never planned.
 
-**Manager's review order:** dependency order and safety first — AT-02 → AT-03 → AT-04 → AT-05 → AT-06 → AT-07 →
-AT-08 → AT-09 — with the invariant table of GATES.md checked against source, not against the coder's summary.
+**Review order:** dependency and safety first — #2 → #3 → #4 → #5 → #6 → #7 → #8 → #9 — against [GATES.md](GATES.md) and
+the source, not against the summary.
+
+---
+
+## Blocker B-01 (charter §10 format)
+
+```text
+Blocker ID: B-01
+Affected issue: #10 (start only; the content of #1…#9 is not blocked)
+Exact operation/input/URL: https://github.com/RUdolf1517/tzim/pull/84 and its two failing jobs
+  (run 40939520316 "measure the frozen 21-PDF set", run 40939520233 "re-run the published measurements")
+Exact tool/version/environment: tzim main d4e4597; PR #84 branch arena/99418c32-tzim; gh CLI in this session
+Observed error and evidence: `gh pr view 84` → state OPEN, MERGEABLE, updated 2026-10-29T19:26:30Z;
+  `gh pr checks 84` → both measurement jobs fail; `gh issue list --repo RUdolf1517/tzim` → #57, #59, #78, #79, #80,
+  #82, #83 open
+What was already tried: recorded in docs/manager/PREFLIGHT-2026-10-29.md P2; nothing further is possible from here
+Why it cannot be solved inside the repo: charter §3.2 forbids starting a new project as a reason to leave the previous
+  set unfinished; the failing jobs belong to the tzim repository and to that PR
+Single exact owner/external action required: merge or explicitly park PR #84 (and say which of #57/#59/#78–#83 are
+  deferred), then comment "start" on #10
+Independent work continuing meanwhile: the issue set, this assignment, the acceptance matrix and the documentation are
+  complete; implementation, tests and fixtures must not begin before that comment
+```

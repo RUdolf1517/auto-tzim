@@ -48,7 +48,7 @@ Every field is listed; nothing is implicit.
 | --- | --- | --- | --- |
 | `id` | string | generated | opaque, immutable, unique; not derived from the path (a renamed folder keeps its history) |
 | `name` | string | equal to the folder's basename at add time | free text, 1–120 characters, no control characters |
-| `root` | string | required | absolute, existing directory; canonicalised; must not be `/`, `$HOME` itself, or a system directory; must not contain `AUTO_TZIM_HOME` (proposal D-08) |
+| `root` | string | required | absolute, existing directory; canonicalised; must not be `/`, `$HOME` itself, or a system directory; must not contain `AUTO_TZIM_HOME` (D-08) |
 | `enabled` | bool | `true` | a disabled folder is not scanned and not run |
 | `recursive` | bool | `false` | `false` means the top level only |
 | `include_hidden` | bool | `false` | hidden files and directories; `.tzim-*.tmp` stays excluded even when this is `true` (R-14) |
@@ -56,13 +56,13 @@ Every field is listed; nothing is implicit.
 | `follow_symlinks` | bool | `false` | **immutable in v0.1**: any value other than `false` is rejected, because the walk is `lstat`-based by design |
 | `allow_hard_links` | bool | `false` | `false` means `st_nlink > 1` is `hardlink_skip`; `true` is reserved and rejected in v0.1 until a verified sibling-safety contract exists |
 | `allow_cloud_sync` | bool | `false` | `false` rejects a root matching a known sync root; the check is best-effort and documented as such |
-| `formats` | array of strings | `[]` | `[]` means "the default-enabled set of the installed `tzim`"; otherwise an allowlist over `png`, `gzip`, `zip`, `ico`, `jpeg`, `tiff`, `zlib` (and `fits` only where the build has it) |
-| `transforms` | array of strings | `[]` | **empty allowlist in v0.1** (proposal D-05): any value is rejected with a reason; `formats` is not consent to a structural transformation |
+| `formats` | array of strings | `[]` | `[]` means **omit `--formats`** and let the installed `tzim` decide (D-11); the default set is neither reconstructed nor displayed (charter §6-18). Otherwise an allowlist over `png`, `gzip`, `zip`, `ico`, `jpeg`, `tiff`, `zlib` |
+| `transforms` | array of strings | `[]` | **must be empty in the MVP** (charter §6-11, D-05): any value is a validation error with the reason. `formats` is not consent to a structural transformation |
 | `exclude_globs` | array of strings | `[".git/**", ".hg/**", ".svn/**"]` | matched against the POSIX relative path; `**` spans directories; no brace expansion, no negation |
 | `min_file_age_seconds` | integer | `60` | 0–86400; a file younger than this is `skipped_unstable` |
 | `jobs` | integer | `1` | v0.1 accepts only `1`; any other value is rejected with a message that parallel files are a later stage |
 | `min_free_bytes` | integer | `268435456` | checked before the run starts; below it the run refuses (exit code pending, see [P-03](manager/problems/P-03-exit-codes.md)) |
-| `timeout_seconds` | integer | `900` | per file, 1–21600 (proposal D-10) |
+| `timeout_seconds` | integer | `900` | per file, 1–21600 (D-10) |
 | `[folder.schedule]` | table | — | v0.2; **rejected in v0.1** with a message rather than silently ignored |
 | `[folder.schedule].enabled` | bool | `false` | manual-only default |
 | `[folder.schedule].interval_minutes` | integer | `60` | — |
@@ -77,7 +77,8 @@ Every field is listed; nothing is implicit.
 | a root containing `AUTO_TZIM_HOME`, or inside it | error `state_inside_root` | the program must not plan its own database or logs (D-08) |
 | a known cloud-sync root without `allow_cloud_sync = true` | error `cloud_sync_root` | conflicts with a sync client are silent data races |
 | a NUL byte, a control character, a duplicate `id`, a duplicate `root` | error | ambiguity is not a feature |
-| `follow_symlinks = true`, `allow_hard_links = true`, `jobs > 1`, `transforms = [...]`, `[folder.schedule]` | error `not_in_v01` | each names the reason and the stage that will look at it again |
+| `follow_symlinks = true`, `allow_hard_links = true`, `jobs > 1`, `[folder.schedule]` | error `not_in_v01` | each names the reason and the stage that will look at it again |
+| `transforms = [...]` | error `transforms_forbidden` | charter §6-11: confirmation-required transformations do not run in the MVP. The field exists so the opt-in has a home; it must be empty (D-05) |
 
 ## 6. A complete example
 
@@ -119,6 +120,6 @@ A folder added with `auto-tzim folder add ~/Pictures/project` produces the same 
 - Removing a folder removes its profile and its cached eligibility records. It never deletes, moves or modifies a
   user file, and it never rewrites history that already happened.
 - Disabling a folder keeps its history and its cache; enabling it again does not re-process files whose identity and
-  policy are unchanged (proposal D-06).
+  policy are unchanged (D-06).
 - The file may be edited by hand: the schema is the contract, and the program will not "helpfully" reorder or
   reformat it beyond the block it changed.

@@ -1,6 +1,10 @@
 # P-02 · A `tzim` dry run is not write-free
 
-Status: **analysis only** — no decision, no implementation authorised.
+Status: **decided** — charter v0.2 §16 P-02 (2026-10-29) removed the problem instead of documenting around it:
+`auto-tzim` scan/dry-run is a **local read-only candidate planner** that never invokes file-processing `tzim`, never
+passes `--dry-run`, never writes in the target root; only `tzim --version` is allowed. Apply requires a plan id/hash.
+Recorded as **D-04, D-20, D-23**. The analysis below still applies to *apply* runs, where `tzim` writes temporary
+candidates — that part is documented in `docs/limitations.md`.
 Sources: `tzim` `docs/cli.md` §6 and `docs/safety.md` §2, `src/replace.rs:28` (`source-inspected`); `SPEC.md` §6.2,
 §8.1, §15.2; charter invariant 2.
 

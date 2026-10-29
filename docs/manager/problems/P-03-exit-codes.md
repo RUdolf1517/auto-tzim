@@ -1,6 +1,9 @@
 # P-03 · Exit codes: one missing value and one collision
 
-Status: **analysis only** — no decision, no implementation authorised.
+Status: **decided** — charter v0.2 §16 P-03 (2026-10-29) fixed the contract: `6` preflight/policy refusal, `7`
+internal, `8` lock, `4` unused, `130/143` signals, precedence `130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0`, a fixed
+preflight order, and no passthrough of a raw `tzim` code. Recorded as **D-03, D-18, D-19**; the operative table is
+`docs/cli.md` §4. The analysis below remains the argument for why the older table was insufficient.
 Sources: `SPEC.md` §8.2, `tzim` `docs/cli.md` §5 and `docs/safety.md` §5 (`source-inspected`), charter §9.
 
 ---

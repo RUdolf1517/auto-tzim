@@ -4,9 +4,9 @@ Date: **2026-10-29**. Charter §16 asks the manager to study the charter, study 
 is a question only the owner can answer; each carries the manager's recommendation so that "yes to the
 recommendation" is a valid answer. Decisions referenced by ID live in [DECISIONS.md](DECISIONS.md).
 
-Two questions were blocking everything: **Q1** (authorisation) and **Q4** (one missing exit code). All four were
-answered on 2026-10-29; the answers are recorded in §0 and, where they changed the plan, in
-[DECISIONS.md](DECISIONS.md).
+All four questions were answered on 2026-10-29, and the charter **v0.2** turned Q2–Q4 into binding decisions
+([§0](#0-answers-received-2026-10-29)). Q5–Q10 are secondary and still open; each has a manager default in force, so none
+of them blocks the MVP.
 
 ---
 
@@ -21,19 +21,27 @@ Verbatim, per question:
 | Q3 | "опиши подробно проблему" — describe the problem in detail | [P-02](problems/P-02-dry-run-is-not-write-free.md): a `tzim` dry run writes a temporary candidate into the destination directory |
 | Q4 | "опиши подробно проблему" — describe the problem in detail | [P-03](problems/P-03-exit-codes.md): no exit code for a run refused before processing, and the collision on `4` |
 
+**Charter v0.2 (same day)** resolved Q2–Q4 in writing, which supersedes "describe only":
+
+| Q | Resolution |
+| --- | --- |
+| Q2 (machine interface) | accepted as a limitation, not a blocker: restricted adapter, `tzim --version` only, default set delegated without `--formats`, `transforms` empty, generic `skipped_by_tzim`, unknown contract ⇒ `incompatible_tzim`. One upstream issue filed (→ `tzim#86`). Decisions D-01, D-02, D-05 |
+| Q3 (what `run --dry-run` does) | scan and dry-run are one thing: a **local read-only candidate planner**. `tzim --dry-run` is forbidden in the MVP, no target path is passed, nothing is written in the target root; plan reports candidates, not savings. Apply needs a plan id/hash. Decisions D-04, D-20, D-23 |
+| Q4 (exit codes) | `6` preflight/policy refusal, `7` internal, `8` lock, `4` unused, `130/143` signals, precedence `130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0`, fixed preflight order, no raw `tzim` passthrough. Decisions D-18, D-19 |
+
 Consequences of Q1 = wait, recorded so they are not re-litigated later:
 
 - **No GitHub issues exist** for AT-01…AT-09; the internal IDs stay internal
   ([ROADMAP-ISSUES.md](ROADMAP-ISSUES.md) is the source).
 - **No implementation is authorised**; pre-flight P1 now reads "answered: wait", not "unverified", and P2 (the
   unfinished `tzim` set) stays open.
-- **No decision is adopted** on Q2–Q4; the three problem notes describe options and their costs, and stop there.
+- **Q2–Q4 are decided** by charter v0.2; the three problem notes stay as the analysis behind D-02, D-04 and D-18/D-19.
 - **Documentation is now complete** for the MVP contract: a reader can review what the program must do, what it
   refuses to do, and how it will be checked, without reading code — because there is none.
 
 ---
 
-## Q1 — Authorisation and the state of the previous `tzim` work · **blocking** · **answered: wait**
+## Q1 — Authorisation and the state of the previous `tzim` work · **met: charter v0.2 authorises the management work**
 
 Charter §3.1 requires explicit permission to start, and §3.2 requires that the coder has finished the previously
 assigned `tzim` set. The second condition is factually unmet: **PR #84 is open with two failing measurement checks**
@@ -53,7 +61,11 @@ Options:
 What it blocks: creating issues, issuing the assignment. What it does not block: everything already in this
 repository.
 
-## Q2 — How to close the missing machine interface · **shapes AT-04** · **answered: describe only**
+## Q2 — How to close the missing machine interface · **decided in charter v0.2 (§16 P-01)**
+
+**Outcome:** option **A**, with the adapter restricted further than this question proposed — the upstream issues were
+filed as one (`tzim#86`), no machine-readable capability is assumed, and the default set is delegated rather than
+displayed. The options below are kept as the record of what was weighed.
 
 `tzim` has no machine-readable capability list and no structured skip reason ([study G-1, G-2](TZIM-STUDY-2026-10-29.md)).
 The specification already answers what to do technically — a version-specific adapter with fail-closed behaviour,
@@ -70,7 +82,11 @@ Options:
 - **C:** adapter-only, no upstream issues. Cheapest now, but the gaps stay invisible to whoever maintains the
   pair of projects later.
 
-## Q3 — What exactly does `run --once --dry-run` do? · **shapes AT-03/AT-04/AT-06** · **answered: describe only**
+## Q3 — What exactly does `run --once --dry-run` do? · **decided in charter v0.2 (§16 P-02)**
+
+**Outcome:** none of the three options as written. The owner removed the choice by forbidding `tzim --dry-run` in the
+MVP: scan and dry-run became one **read-only candidate planner** that reports candidates and no numbers, and an apply
+requires a matching plan. Options A/B/C are kept below as the analysis that led there.
 
 `tzim`'s own dry run is not free: it builds and verifies a real candidate in the destination directory and then
 deletes it ([study B-1](TZIM-STUDY-2026-10-29.md)). So there are two honest meanings:
@@ -86,7 +102,10 @@ deletes it ([study B-1](TZIM-STUDY-2026-10-29.md)). So there are two honest mean
 Sub-question: does **either** variant satisfy the §8.1 first-run gate, or does the owner want the gate to require
 `scan` specifically? The manager recommends "either", recorded in history as a dry run.
 
-## Q4 — The missing exit code for a refused run · **blocking AT-06, changes SPEC §8.2** · **answered: describe only**
+## Q4 — The missing exit code for a refused run · **decided in charter v0.2 (§16 P-03)**
+
+**Outcome:** option **A** was adopted and extended — `6` for preflight refusals, plus `7`, `8`, `130`/`143`, `4` unused,
+a fixed preflight order and the precedence `130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0`. See D-03, D-18, D-19.
 
 The first-run gate, `pause`, and `min_free_bytes` all refuse a run before anything is touched, and §8.2 has no code
 for that: `0` would claim success, `1` claims a file failed, `2` claims a usage/config error, `3`/`4`/`5` mean other
@@ -152,18 +171,17 @@ merge, close issues or publish releases without explicit delegation (charter §2
 5. **A5** — the repository description, topics and any branch protection are set by the owner when asked once.
 6. **A6** — `tzim` stays untouched; its gaps become issues there, not patches here.
 
-## What happens after the answers
+## What happens after the answers (state on 2026-10-29)
 
-Q1 was answered "wait": nothing below is triggered yet. The mapping is kept so that the next turn of the wheel is
-mechanical.
-
-| Answer | Manager action |
+| Item | State |
 | --- | --- |
-| Q1 becomes "start" | Create AT-01…AT-09, post the assignment from [the draft](ASSIGNMENT-AT-MVP-DRAFT.md), mark D-04/D-05/D-07 as adopted or amended |
-| Q1 becomes "start a narrow slice" | Narrow the assignment to the chosen slice; the rest stays described but unassigned |
-| Q4 answered A | Exit code `6` enters the gates and the assignment; the specification change is recorded as adopted |
-| Q4 answered B or C | Record the choice, adjust the acceptance matrix, and note the cost in the risk register |
-| Q2, Q3, Q5–Q7 answered | Update DECISIONS.md, then issue the assignment with the resolved values |
+| Q1 | charter v0.2 authorises the management deliverable; **implementation still waits** on precondition §3.2 (B-01) |
+| Q2–Q4 | decided; recorded as D-01…D-05, D-18, D-19, D-20, D-23 |
+| Q5 (`transforms` empty) | decided for the MVP by charter §6-11 (D-05); the field returns when a machine-readable contract exists |
+| Q6 (update source) | manager default in force (D-07): one GitHub releases API request; owner may override at no cost |
+| Q7 (hash cap) | manager default in force (D-09); `null` above 64 MiB, recorded explicitly |
+| Q8 (test matrix) | manager default in force: `ubuntu-latest` + `macos-latest`, Python 3.12 and 3.13 |
+| Q9 (canonical spec home) | open, owner action: the docs-only commit `efc31756` is still only on a branch of `tzim` |
+| Q10 (who merges, who is the coder) | default in force: one coder, one MVP pull request, owner merges |
 
-Until then the three problem notes are the answer: they describe what each option costs, so that whoever decides does
-not have to rediscover it.
+The next decision point is not a question but a precondition: B-01 must be cleared before #10 may be started.

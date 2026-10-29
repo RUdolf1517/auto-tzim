@@ -8,7 +8,9 @@ timer, then let it touch the binary it depends on, and only then put a GUI in fr
 
 ## v0.1 — MVP
 
-Core, CLI, `run --once`, dry runs, config/state/history, `tzim` version check and an update **notification**. Acceptance
+Core, CLI, `run --once`, the **read-only candidate plan** and plan-bound apply, config/state/history, `tzim` version
+check and an update **notification**. `tzim --dry-run` is used nowhere: a scan is our own read-only planner, precisely
+because `tzim`'s dry run writes a temporary candidate into the destination directory. Acceptance
 is defined row by row in [manager/GATES.md](manager/GATES.md): deterministic plans, first-run gate, no shell, no
 prompts, no retry loop, crash recovery, documented exit codes, notify-only updates, and a limitations list that a user
 can act on.

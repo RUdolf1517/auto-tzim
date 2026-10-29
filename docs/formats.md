@@ -17,14 +17,17 @@ build-dependent.
 | Is this file *allowed* to be handed over? | `auto-tzim` | discovery + policy |
 | Which formats may be offered? | `auto-tzim` filters; `tzim` decides feasibility | `formats` allowlist |
 
-A file that `auto-tzim` allows and `tzim` refuses is not an error: it is `skipped_refused`, exit `0`, recorded with
-`tzim`'s own reason. Widening our allowlist never widens what `tzim` accepts.
+A file that `auto-tzim` allows and `tzim` refuses is not an error: it is `skipped_by_tzim`, exit `0`, with `tzim`'s own
+note stored verbatim. Widening our allowlist never widens what `tzim` accepts, and no refusal is ever re-classified from
+its wording.
 
 ## 2. `formats` semantics
 
-- `formats = []` (default) — "whatever the installed `tzim` treats as default-enabled". For the release binaries of
-  `tzim` `0.14.0` that is PNG/APNG, gzip, ZIP family, ICO/CUR, TIFF (classic strips), zlib, and JPEG only when named
-  explicitly. FITS is not compiled into release archives at all.
+- `formats = []` (default) — `--formats` is **not passed**; the binary decides what "default-enabled" means (D-11). The
+  set is deliberately not reconstructed or displayed: there is no machine-readable capability list, and a guess would be a
+  fabricated capability (charter §6-18). For reference only, the release binaries of `tzim` `0.14.0` are built with png,
+  gzip, zip, ico, jpeg, tiff, zlib and zopfli; `fits` and `jpeg-v1` are outside that default, and JPEG is attempted only
+  when named (`--formats jpeg`).
 - `formats = ["png"]` — only PNG; everything else is `skipped_policy`, decided by us before any process starts.
 - `formats = ["png", "jpeg"]` — PNG and JPEG; naming `jpeg` is the only way JPEG is ever attempted, exactly as in
   `tzim` (`--formats jpeg`).
@@ -40,8 +43,8 @@ Some `tzim` transformations change structure visibly — today the example is FI
 which turns an `IMAGE` HDU into a `BINTABLE` that readers indexing `NAXIS1` can see. Such a transformation is
 confirmation-required in our model: it needs its own opt-in field, separate from `formats`.
 
-In v0.1 the allowlist is **empty** (proposal D-05, unapproved): the field exists, validates, and rejects every value
-with a reason. Enabling one is a later change that needs (a) an installed build with the handler, (b) a real-binary
+In v0.1 the allowlist **must be empty** (charter §6-11, D-05): the field exists, validates, and rejects every value with
+a reason. Enabling one is a later change that needs (a) an installed build with the handler, (b) a real-binary
 integration test, and (c) an updated safety statement — none of which exists.
 
 | Transform | Requires | State in v0.1 |
@@ -70,7 +73,7 @@ integration test, and (c) an updated safety statement — none of which exists.
 the bytes untouched, and caches the decision against the file's identity and the binary hash so the file is not
 re-examined on every run. Changing the `tzim` binary (a new version, or a different build) invalidates the cache — the
 new binary may understand what the old one did not. This is why the invalidation key includes the binary SHA-256 and
-not only the version (proposal D-06).
+not only the version (D-06).
 
 ## 6. What we will never do with formats
 

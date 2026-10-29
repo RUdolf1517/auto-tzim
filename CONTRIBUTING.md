@@ -13,6 +13,8 @@
 ## 2. What this project will not accept
 
 - A codec, a file writer, a repacker, or any code that modifies a user file. `tzim` does that.
+- An invocation of `tzim` on a target path outside an apply — in particular `tzim --dry-run`, which is forbidden by
+  charter §6-2 because it writes a temporary candidate into the destination directory.
 - A fallback for a refused file, a `--force`, a "continue on error", or an automatic retry of `failed`.
 - A prompt, or a code path that reads `stdin`.
 - Telemetry, analytics, or a network call outside `update-check`.
@@ -25,8 +27,11 @@ and an issue, not as a patch.
 
 ## 3. How work is organised
 
-- Every change maps to an issue (`AT-01`…`AT-09` for the MVP); commits are labelled `AT-0N: …` so the mapping can be
-  reconstructed from history.
+- Every change maps to a GitHub issue — [#1](https://github.com/RUdolf1517/auto-tzim/issues/1)…[#9](https://github.com/RUdolf1517/auto-tzim/issues/9)
+  for the MVP, whose consolidated assignment is [#10](https://github.com/RUdolf1517/auto-tzim/issues/10). Commits are
+  labelled `AT-0N: …` so the mapping can be reconstructed from history.
+- **The MVP has not started.** Issue #10 states the blocker: charter §3.2 keeps a new project from becoming an excuse to
+  drop unfinished `tzim` work. Implementation begins after the owner's "start" comment there.
 - The MVP is one pull request. Later stages are separate pull requests; mixing a scheduler, a TUI or a GUI into the MVP
   is refused even when it is already written.
 - A pull request carries the handoff block from [`docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md`](docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md)
@@ -39,7 +44,7 @@ and an issue, not as a patch.
 - Behaviour first: what must **not** happen is the main subject (no process started, no byte changed, no retry, no
   second run).
 - Every assertion that something did not happen needs a negative control proving the assertion can fail.
-- No test sleeps for `min_file_age_seconds`; the clock is injected (proposal D-14). One integration test may use a real
+- No test sleeps for `min_file_age_seconds`; the clock is injected (D-14). One integration test may use a real
   second of age, and it is labelled.
 - A test that only proves a module imports or that compilation succeeded is not evidence for anything in
   [`docs/manager/GATES.md`](docs/manager/GATES.md).

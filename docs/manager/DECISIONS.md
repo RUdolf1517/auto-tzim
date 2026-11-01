@@ -372,6 +372,10 @@ The owner's instruction, 2026-11-01: *there will be two modes — automatic (no 
 | Writes before approval | **none** | none — processing happens on a staged copy |
 | Originals deleted | only after approval, file by file | file by file, as each replacement is verified |
 
+**In `auto` there is still a plan.** The owner confirmed the semantics on 2026-11-01: a plan of files is computed inside
+the run and optimized, originals are not kept. The plan is not skipped — it is the internal binding that lets us refuse a
+file that changed between the walk and the work (step 2a). What `auto` removes is the *question*, not the plan.
+
 **Mode selection:** `--mode auto|confirm` on the command line overrides `mode` in the config, which defaults to
 `confirm`. `auto` must be **asked for**: a tool that destroys by default and asks forgiveness in the README is not the
 product being built here.

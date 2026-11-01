@@ -1,5 +1,10 @@
 # Assignment — MVP / v0.1 (AT-01 … AT-09)
 
+> **Upstream contract moved (2026-11-01).** `tzim` v0.16.0 shipped `--capabilities`, a stable `reason_code` and
+> JSON result schema 2; v0.16.1 is the current release and its exit-code precedence is now documented and
+> enforced. Statements below written against `tzim` 0.14 that assume no capability document, an untyped
+> refusal or an older pin are stale: see the [2026-11-01 audit](../audits/2026-11-01-tzim-v0.16.1.md).
+
 **Status: prepared, not started.** The text below is issued as
 [issue #10](https://github.com/RUdolf1517/auto-tzim/issues/10) and is the single consolidated assignment for the MVP
 (charter §5.1, §11). Starting implementation is blocked by charter §3.2 — the previously assigned `tzim` set is still
@@ -93,7 +98,7 @@ Merge/Release performed by coder: no
 **Known external constraints:**
 
 - Accepted on macOS and Linux only; Windows untested and must be named as such.
-- The real-binary suite pins `tzim v0.14.0` artifacts verified against the release `SHA256SUMS`; `latest` is forbidden.
+- The real-binary suite pins `tzim v0.16.1` artifacts verified against the release `SHA256SUMS`; `latest` is forbidden.
   If GitHub is unreachable in CI the job fails rather than silently skipping.
 - `tzim` has no machine-readable capability list and no structured refusal reason: the MVP delegates the default set
   (no `--formats`), keeps `skipped_by_tzim` generic, and records version + binary hash. The upstream request

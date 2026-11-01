@@ -1,0 +1,9 @@
+# Who is asked to review a change. Same one-line model as RUdolf1517/tzim.
+#
+# DECLARATION ONLY: no branch rule requires a code-owner review today, and
+# turning one on would not add a reviewer — the only identity that can approve
+# a pull request here is the one that authors it, and GitHub forbids
+# self-approval at every permission level. See OWNERS.md and
+# docs/manager/OWNER-ACTIONS.md §6a (decision deferred, D-24).
+
+* @RUdolf1517

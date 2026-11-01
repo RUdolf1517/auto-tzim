@@ -1,5 +1,10 @@
 # Guarantees
 
+> **Upstream contract moved (2026-11-01).** `tzim` v0.16.0 shipped `--capabilities`, a stable `reason_code` and
+> JSON result schema 2; v0.16.1 is the current release and its exit-code precedence is now documented and
+> enforced. Statements below written against `tzim` 0.14 that assume no capability document, an untyped
+> refusal or an older pin are stale: see the [2026-11-01 audit](audits/2026-11-01-tzim-v0.16.1.md).
+
 > **Status: specification, no implementation.** These are the promises the first pull request will be reviewed
 > against; nothing below is currently observable because there is no program.
 > Related: [safety](safety.md) · [formats](formats.md) · [limitations](limitations.md)

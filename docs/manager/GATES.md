@@ -1,5 +1,10 @@
 # MVP acceptance matrix (pre-registered)
 
+> **Upstream contract moved (2026-11-01).** `tzim` v0.16.0 shipped `--capabilities`, a stable `reason_code` and
+> JSON result schema 2; v0.16.1 is the current release and its exit-code precedence is now documented and
+> enforced. Statements below written against `tzim` 0.14 that assume no capability document, an untyped
+> refusal or an older pin are stale: see the [2026-11-01 audit](../audits/2026-11-01-tzim-v0.16.1.md).
+
 Written **before** any implementation exists, so that the criteria cannot be shaped by the first results. Every row
 names the clause it enforces, the behavioural evidence required, and the negative control that proves the evidence can
 fail. Revised on 2026-10-29 for charter v0.2 (§6 invariants 18–19, §8.4, §16): the read-only candidate plan, the

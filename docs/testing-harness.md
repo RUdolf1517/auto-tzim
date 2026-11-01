@@ -33,7 +33,7 @@ directory are per-case. Behaviour is data, never code paths in the harness:
 
 ```json
 {
-  "version": "tzim 0.14.0",
+  "version": "tzim 0.16.1",
   "version_exit": 0,
   "scenario": "verification_failure_on_file_3",
   "steps": [
@@ -119,8 +119,8 @@ says otherwise — a skip is never silently a pass.
 it under `$ATS_CACHE` (default: the platform cache dir), and prints the resolved path plus its SHA-256:
 
 ```console
-$ python -m tests.harness.pinned --version 0.14.0 --target x86_64-unknown-linux-musl
-{"path":"/cache/tzim-0.14.0-musl/tzim","sha256":"…","version":"0.14.0","sums_line":"<the matching line from SHA256SUMS>"}
+$ python -m tests.harness.pinned --version 0.16.1 --target x86_64-unknown-linux-musl
+{"path":"/cache/tzim-0.16.1-musl/tzim","sha256":"…","version":"0.16.1","sums_line":"<the matching line from SHA256SUMS>"}
 ```
 
 Rules:

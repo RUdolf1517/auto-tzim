@@ -45,15 +45,25 @@ result schema, flag rejected, missing key), `A-12` (an unknown `reason_code` pas
 **there is no code and no result yet**, so nothing is being edited *after* a result is known. The reason is written in
 the commit and in the close-out.
 
-### Not observed — the two owner actions, measured rather than accepted
+### Measured, corrected twice — the two owner actions
 
-The owner reported §6a (drop the required review) and §6b (refresh issue #10) done on 2026-11-02. Measured rather than
-accepted: issue #10's `updatedAt` is still `2026-10-29T20:13:58Z` and its body is byte-identical to the stale 122-line
-copy (the file is 170); `main` is
-still `protected: true`, and pull request #16 still reports `BLOCKED` with no status checks configured, which leaves a
-required review as the only thing that can block it. Both are recorded in [OWNER-ACTIONS](docs/manager/OWNER-ACTIONS.md)
-as **not observed**, with the three commands that settle each — `CLEAN` on a checkless pull request, and a changed
-`updatedAt`, are the two signatures of success.
+The owner reported §6a (drop the required review) and §6b (refresh issue #10) done on 2026-11-02, and both were measured
+rather than accepted. What that produced was two of my own errors, recorded here in the order they were found:
+
+- **§6a is applied** — the `DELETE` answered `204`, and `review_decision` on pull request #16 fell to `null`, which is
+  what GitHub answers when no approval is required. But the pull request is *still* `blocked`, and my note had said a
+  blocked pull request with no configured checks "can only come from a required review". It cannot: the review rule was
+  gone and the state did not change. The repository has **zero workflows**, so a required status check — a context that
+  nothing will ever report — is the leading candidate, with required signed commits second. The fix is a protection dump
+  read by an admin token, not another inference from the merge badge.
+- **§6b has never actually run.** My command contained the path `docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md`, the chat
+  rendered it as a link, and the owner's paste carried the link instead: `open …: no such file or directory`, `$status 1`,
+  body still 122 lines. The documented command is now a fish glob (`docs/manager/ASSIGNMENT*.md`) or a body fetched
+  straight from the API, so no full filename has to survive a renderer. The earlier claim that the body "still says Python
+  package" was also wrong — it says `python --version`, once, in a list of toolchain facts.
+
+[OWNER-ACTIONS](docs/manager/OWNER-ACTIONS.md) §6a and §6b carry the corrected commands, the protection dump that settles
+the remaining blocker, and both corrections in place rather than applied over the record.
 
 ### Added — charter v0.2 and the MVP issue set (2026-10-29)
 

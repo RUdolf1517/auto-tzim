@@ -241,8 +241,46 @@ gh api repos/RUdolf1517/auto-tzim/branches/main --jq .protected            # sti
 gh api repos/RUdolf1517/auto-tzim/branches/main/protection --jq .required_pull_request_reviews   # expect null
 ```
 
-**Checked again on 2026-11-02, after you reported this done — the change is not visible from here, so it is recorded as
-not observed rather than as applied.** What this session can measure:
+**Applied 2026-11-02.** The owner ran the `DELETE` and it answered `HTTP/2.0 204 No Content` — the rule existed and is
+gone. Two of my own statements were wrong along the way and are corrected below rather than deleted, because the next
+person will make the same inferences.
+
+**Blocked anyway, and not by the rule I blamed.** After the `DELETE`, pull request #16 still reports
+`mergeable_state: blocked` — but with `review_decision: null`, zero check runs and **zero workflows in the repository**.
+`review_decision: null` is the correction: if an approval were still required, GitHub would answer `REVIEW_REQUIRED`.
+So the review rule really is gone, and a *different* protection rule is holding the merge. Two candidates fit every
+measurement taken here:
+
+| Candidate | Fit |
+| --- | --- |
+| **Required status checks** | a required context that no workflow produces can never report; the repository has no workflows at all, so every pull request would be permanently blocked. Tick-list item "Require status checks to pass" was `[x]` in the checklist above |
+| **Required signed commits** | agent commits are unsigned, so every pull request proposed from this session is blocked regardless of reviews. The checklist left it `[ ]`, but it is the other rule with exactly this signature |
+
+One command settles it, and it needs an admin token — the owner's, not this session's:
+
+```fish
+gh api repos/RUdolf1517/auto-tzim/branches/main/protection --jq '{
+  status_checks: .required_status_checks,
+  signatures: .required_signatures.enabled,
+  linear: .required_linear_history.enabled,
+  conversations: .required_conversation_resolution.enabled,
+  admins: .enforce_admins.enabled
+}'
+```
+
+Then remove only the rule that is actually in the way, and keep the rest of option 1 intact:
+
+```fish
+# if status_checks is not null and no workflow reports those contexts:
+gh api -X DELETE repos/RUdolf1517/auto-tzim/branches/main/protection/required_status_checks
+# if signatures.enabled is true:
+gh api -X PATCH repos/RUdolf1517/auto-tzim/branches/main/protection/required_signatures -F enabled=false
+```
+
+What is **not** the fix: `gh api -X DELETE repos/RUdolf1517/auto-tzim/branches/main/protection`. That removes
+force-push blocking and deletion restriction too, and those are the machine gates D-24 decided to keep.
+
+**What this session measured before the `DELETE`, kept as history:**
 
 | Check | Result on 2026-11-02 | Reading |
 | --- | --- | --- |
@@ -251,14 +289,10 @@ not observed rather than as applied.** What this session can measure:
 | `gh api repos/.../rules/branches/main` | `[]` | no *ruleset* applies; the classic protection rule is invisible to this token |
 | `gh pr view 16 --json mergeStateStatus` | `BLOCKED`, `reviewDecision: ""`, zero required checks configured | **inferred, not read:** with no status checks in the repository, a `BLOCKED` state can only come from a required review or from required conversation resolution — the approval rule looks like it is still on. `UNKNOWN` is *not* a signal: GitHub computes mergeability lazily and answers `UNKNOWN` until it has, so that answer has to be re-queried, not read as success |
 
-So either the `DELETE` did not take effect (a 404/403 in your terminal looks similar to success if the `gh` output was
-scrolled past), or it took effect and GitHub is still reporting the old merge state. The second is cheap to rule out:
-
-```sh
-gh api -X DELETE repos/RUdolf1517/auto-tzim/branches/main/protection/required_pull_request_reviews
-gh api repos/RUdolf1517/auto-tzim/branches/main/protection --jq '.required_pull_request_reviews'  # expect: null
-gh pr view 16 --repo RUdolf1517/auto-tzim --json mergeStateStatus                                 # expect: CLEAN, not BLOCKED
-```
+**Correction to the paragraph that used to sit here.** It said a `BLOCKED` pull request with no configured checks "can
+only come from a required review". The `204` disproves it: the review rule was removed and the pull request stayed
+blocked. The inference was mine, it was labelled as an inference, and it was still wrong — which is the reason the file
+now asks for the protection dump instead of reasoning from the merge badge.
 
 The third command is the one that settles it: `CLEAN` on a pull request with no checks means no approval is required.
 
@@ -289,9 +323,18 @@ issue would build the wrong thing.
 
 Issue writes return `403` for this session (re-tested on 2026-11-01), so this is yours:
 
-```sh
-gh issue edit 10 --repo RUdolf1517/auto-tzim \
-  --body-file docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md
+```fish
+# fish expands the glob; a partial name cannot be mangled by a chat client into a markdown link
+gh issue edit 10 --repo RUdolf1517/auto-tzim --body-file docs/manager/ASSIGNMENT*.md
+```
+
+Or, with no local clone at all — the body comes straight from the API:
+
+```fish
+gh api "repos/RUdolf1517/auto-tzim/contents/docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md?ref=arena/b556864b-auto-tzim" \
+  -H "Accept: application/vnd.github.raw" > /tmp/assignment.md
+wc -l /tmp/assignment.md
+gh issue edit 10 --repo RUdolf1517/auto-tzim --body-file /tmp/assignment.md
 ```
 
 Verify that the copy is real rather than hoped for:
@@ -313,6 +356,12 @@ gh issue view 10 --json updatedAt   → 2026-10-29T20:13:58Z   (unchanged since 
 body                                → 122 lines, byte-identical to the copy fetched before the report
 body vs the file                    → 122 against 170 lines; the file has 48 lines of changes the issue never got
 ```
+
+**Why the first attempt failed, and it was my fault.** On 2026-11-02 the owner's shell answered
+`open docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md: no such file or directory` with `$status 1`. The path in my message had
+been rendered as a markdown link (`[ASSIGNMENT-AT-MVP-DRAFT.md](http://ASSIGNMENT-AT-MVP-DRAFT.md)`), so the copy he
+pasted contained the link, not the path. The command was right and unrun: `wc -l` still returned 122. The blocks above
+now use a glob and an API fetch, neither of which depends on a full filename surviving a chat renderer.
 
 **Correction, same day.** The first version of this section said the body "still says Python package". That was wrong: the
 body mentions `python --version` once, inside a list of toolchain facts, and the phrase "Python package" appears nowhere in
@@ -357,7 +406,7 @@ workflow lands, or the rule will block every pull request.
 | 3. Repository description | **done** — description and topics are set | — |
 | 4. Merge the docs commit in `tzim` | open — `handoff/auto-tzim/` still does not exist on `tzim@main` (404) | no — a checksummed copy is here |
 | 5. Clear B-01 | **cleared** — PR #84 merged 2026-10-30, tracker idle | — |
-| 6a. `main` protection, option 1 | **decided**; you reported it done on 2026-11-02, **not observed** — `main` is still protected and pull request #16 still reports `BLOCKED` with no checks configured (403 here for the detail) | yes, before the first **code** PR |
+| 6a. `main` protection, option 1 | **decided and applied 2026-11-02** — the review rule is gone (`204`), `review_decision` is now `null`. A **different** protection rule still blocks: no workflows exist, so a required status check or required signatures is the remaining candidate — see the dump command in §6a | yes, before the first **code** PR |
 | 6b. Refresh issue #10 body | **open** — you reported it done on 2026-11-02, but `updatedAt` is still 2026-10-29 and the body is byte-identical to the old 122-line copy (the file is 170) | yes, before the coder starts |
 | 7. Retire `tzim#7` label `v0.1` → `v0.2` (AT-07 left the MVP) | open — optional, the assignment file already says so | no |
 

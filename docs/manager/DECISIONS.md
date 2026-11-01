@@ -328,7 +328,16 @@ case open instead of letting it inherit the documentation case.
 **Known cost, accepted:** until the decision lands, no pull request to `main` can carry an independent approval, because
 the only identity able to approve is the one that authored it.
 
-## D-25 · The start waits for the contract, not for the blocker
+## D-25 · The start waits for the contract, not for the blocker · *satisfied 2026-11-02*
+
+> **Gate open.** All six conditions below are closed: D-26 (`--capabilities`), D-27 (`reason_code`), the pin and fixture
+> (DR-03), D-30 (the accepted window), and the exit-code and `EPIPE` rows (DR-07, corpus `X-17`); the
+> [2026-11-01 audit](../audits/2026-11-01-tzim-v0.16.1.md) is closed with all ten findings mapped. What remains between
+> this repository and a first line of code is the owner's go-ahead and a coder, not a document.
+>
+> The evidence that the wait bought something is now measurable in the other direction: the "no capa document, no
+> `reason_code`" assumptions this decision froze were wrong about the current binary, and every one of them would have
+> shipped into the first implementation.
 
 **Decision:** the MVP start is gated on the severity-**A** findings of the
 [2026-11-01 audit](../audits/2026-11-01-tzim-v0.16.1.md) being closed, not on charter §3 alone. §3 is satisfied — PR #84

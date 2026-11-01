@@ -62,12 +62,20 @@ Verified from this session rather than accepted: `pulls/16` answers `mergeable_s
 AT-01 lands CI, required checks come back with the context the workflow actually reports — a check nobody reports protects
 nothing, which is exactly what this rule demonstrated.
 
-### Still open — the assignment issue, and two commands of mine that never ran
+### Closed — the assignment issue now matches the file
 
-Issue #10 is still the 122-line 2026-10-29 body; the file is 170. Two attempts to send it failed on my commands, not on
-the owner's shell: the first carried a path that the chat rendered into a markdown link, the second used a glob from `/`
-where there is no clone. [OWNER-ACTIONS](docs/manager/OWNER-ACTIONS.md) §6b now leads with a form that needs neither a
-clone nor a working directory — it fetches the body from the contents API and pipes it to `gh issue edit`.
+Issue #10 was refreshed on 2026-11-02: `updatedAt` moved off 2026-10-29 for the first time, the body is 171 lines against
+the file's 170, and the diff is one trailing blank line. `SQLite dumps` is gone, `--mode` and `--capabilities` are in, and
+the copy carries the banner saying which document wins.
+
+Two attempts to send it had failed first, both on my commands: a path that the chat rendered into a markdown link, and a
+glob run from `/` where there is no clone. Neither sent anything — the line count stayed at 122 — which is why
+[OWNER-ACTIONS](docs/manager/OWNER-ACTIONS.md) §6b now leads with a form that fetches the body from the API and needs
+neither a clone nor a working directory.
+
+[D-25](docs/manager/DECISIONS.md) is marked satisfied with that: every severity-A finding is closed, the audit is closed,
+and the assignment a coder reads is the current one. Nothing in this repository now blocks a first line of code except the
+owner's go-ahead.
 
 ### Added — charter v0.2 and the MVP issue set (2026-10-29)
 

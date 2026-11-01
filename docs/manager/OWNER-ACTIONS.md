@@ -349,38 +349,28 @@ gh issue view 10 --repo RUdolf1517/auto-tzim --json updatedAt --jq .updatedAt   
 The line count is the cheapest honest test: the file is 170 lines, the stale body is 122. A body that still has 122 lines
 was not replaced, whatever `gh` printed.
 
-**Checked again on 2026-11-02, after you reported this done — the issue is unchanged as far as this session can see:**
+**Done, 2026-11-02, and verified from this session.** The body was replaced at `21:33:58Z`; `updatedAt` moved off
+2026-10-29 for the first time, the body is 171 lines against the file's 170, and a diff of the two shows **one trailing
+blank line** and nothing else. Content checks: `mode auto` present, `capabilit` seven times, `SQLite dumps` gone,
+the "this file is the source of truth" banner present, `D-35` named twice.
 
-```text
-gh issue view 10 --json updatedAt   → 2026-10-29T20:13:58Z   (unchanged since the issue was filed)
-body                                → 122 lines, byte-identical to the copy fetched before the report
-body vs the file                    → 122 against 170 lines; the file has 48 lines of changes the issue never got
-```
+That closes the last blocker on the coder: the issue a coder reads and the file the manager maintains are now the same
+document.
 
-**Two failed attempts on 2026-11-02, both mine, both worth keeping.**
+**Two attempts failed first, both mine, both kept in the record.**
 
-1. `open docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md: no such file or directory`, `$status 1`. The path in my message had
-   been rendered as a markdown link (`[ASSIGNMENT-AT-MVP-DRAFT.md](http://ASSIGNMENT-AT-MVP-DRAFT.md)`); the paste
-   carried the link and not the path.
+1. `open docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md: no such file or directory`, `$status 1`. The path in my message had been
+   rendered as a markdown link (`[ASSIGNMENT-AT-MVP-DRAFT.md](http://ASSIGNMENT-AT-MVP-DRAFT.md)`); the paste carried the
+   link and not the path.
 2. `fish: No matches for wildcard 'docs/manager/ASSIGNMENT*.md'`, `$status 124`. The glob was right and the working
-   directory was `/` — there is no clone there. I had assumed a checkout without ever checking, twice.
+   directory was `/` — there is no clone there. I assumed a checkout without checking, twice.
 
-Neither attempt sent anything: `wc -l` still answered 122 both times. The command at the top of this section now depends
-on nothing local, which is the property the first two lacked.
+Neither attempt sent anything: `wc -l` answered 122 both times, which is why the line count is the test I now trust more
+than the command's own output. The command at the top of this section needs neither a clone nor a working directory.
 
-**Correction, same day.** The first version of this section said the body "still says Python package". That was wrong: the
-body mentions `python --version` once, inside a list of toolchain facts, and the phrase "Python package" appears nowhere in
-it. I had read a `grep -ci python` count of `1` as the phrase without checking the line. The finding is unchanged — the
-issue is stale, `updatedAt` proves it — but the description of *how* it is stale was wrong, and a wrong description in this
-file is how the next reader stops trusting the rest of it.
-
-`updatedAt` is the honest test here: GitHub rewrites it on every body edit, and it still carries the filing timestamp. So
-the `gh issue edit` either did not run, or ran against a different repository, or failed with a 403 in your own shell
-too — which would mean the *account* lacks issue write access, not just this session's integration. The command to
-re-run, and the two greps, are above; if `gh` prints `Resource not accessible by integration` on your side as well, the
-fix is in the GitHub app permissions, not in this repository. **The file stays the source of truth** even
-after this: the issue carries a copy, the repository carries the version, and when they disagree the file wins — that is
-stated at the top of the file itself.
+**A correction that belongs here too.** My first description of the stale body said it "still says Python package". It
+did not: it said `python --version` once, in a list of toolchain facts. I had read a `grep -ci python` count of `1` as the
+phrase without looking at the line. The finding was right and the description was wrong, which is its own small lesson.
 
 ## 6. Branch protection (optional, later)
 
@@ -412,7 +402,7 @@ workflow lands, or the rule will block every pull request.
 | 4. Merge the docs commit in `tzim` | open — `handoff/auto-tzim/` still does not exist on `tzim@main` (404) | no — a checksummed copy is here |
 | 5. Clear B-01 | **cleared** — PR #84 merged 2026-10-30, tracker idle | — |
 | 6a. `main` protection, option 1 | **done and verified 2026-11-02** — review rule deleted (`204`), then the real blocker: a required check named `test` that no workflow could report (the repository has none), also deleted. `pulls/16` is `clean`; `branches/main` reports `enforcement_level: "off"`. Follow-up: re-add checks with the **real** CI context when AT-01 lands | — |
-| 6b. Refresh issue #10 body | **open** — you reported it done on 2026-11-02, but `updatedAt` is still 2026-10-29 and the body is byte-identical to the old 122-line copy (the file is 170) | yes, before the coder starts |
+| 6b. Refresh issue #10 body | **done and verified 2026-11-02** — `updatedAt` 21:33:58Z, body 171 lines vs the file's 170, one trailing blank line of difference, `SQLite dumps` gone | — |
 | 7. Retire `tzim#7` label `v0.1` → `v0.2` (AT-07 left the MVP) | open — optional, the assignment file already says so | no |
 
 If any command fails with 403 as well, the token lacks issue/pull-request write scope: that is a GitHub connection

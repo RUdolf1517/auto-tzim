@@ -41,7 +41,7 @@ regardless of convenience.
 Consequences, all deliberate:
 
 - **Permissions:** `AUTO_TZIM_HOME` and its state directory are `0700` where the platform supports it; the config,
-  database and logs are `0600`.
+  state files and logs are `0600`.
 - **Logs are local files**, structured JSONL, rotated by size and age (30 days by default). They are never uploaded
   and never printed to stdout unless the user asks with `logs`/`--json`.
 - **Exports are the user's responsibility.** `history --json` prints absolute paths to the terminal; redirecting that

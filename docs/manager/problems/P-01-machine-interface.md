@@ -3,7 +3,10 @@
 Status: **decided** — charter v0.2 §16 P-01 (2026-10-29) accepted this as a limitation and chose the restricted adapter:
 `tzim --version` only, default set delegated without `--formats`, `transforms` empty, nothing inferred from prose or
 `note`, generic `skipped_by_tzim`, unknown contract ⇒ `incompatible_tzim`. Recorded as **D-01, D-02, D-05**. The upstream
-request this note sketched exists as [RUdolf1517/tzim#85](https://github.com/RUdolf1517/tzim/issues/85) (my own #86 duplicates it). The analysis
+request this note sketched exists as [RUdolf1517/tzim#85](https://github.com/RUdolf1517/tzim/issues/85) (my own #86 duplicates it), and
+**it has since been delivered**: #85 was implemented by PR #91 and shipped in `tzim` v0.16.0 — `--capabilities` and a stable
+`reason_code` per row. The MVP consumes both ([D-26](../DECISIONS.md), [D-27](../DECISIONS.md)); what remains of P-01 is the
+part upstream did not solve, the prose flags we still refuse to parse. The analysis
 below is kept unchanged, as the reasoning behind those decisions.
 Sources: `tzim` at `d4e45974b32fc2bb696eee346892846fe3e0a5d1` (`source-inspected`), `SPEC.md` §2.1, §6.3, §7.1, §7.3,
 §7.4, §11.1.
@@ -110,7 +113,7 @@ deliberately (a weak signature that decodes nothing is `unsupported`, a stream t
 
 ## 6. Consequence C — "can this build prompt?" is not answerable from outside
 
-`tzim` today has no prompt at all: `grep -rn stdin src/` returns nothing, so `stdin=DEVNULL` can never deadlock
+`tzim` today has no prompt at all: `grep -rn stdin src/` returns nothing, so a child left on `/dev/null` can never deadlock
 (`SPEC.md` §7.2). Issue #83 proposes interactive confirmation for opt-in format handling. There is no way for
 `auto-tzim` to ask a binary "do you ever read stdin?" — the only signal would be a version, and the only protection
 is a pinned version range. Charter invariant 12 (scheduler/non-TTY/JSON never waits for a prompt) is therefore

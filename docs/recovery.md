@@ -4,7 +4,7 @@
 > Related: [state](state.md) · [safety](safety.md) · [cli](cli.md)
 
 This page is for the moment after something went wrong. It is written as a procedure, because the wrong instinct —
-delete the database, force the lock, run it again — destroys the evidence that would explain what happened.
+delete the state files, force the lock, run it again — destroys the evidence that would explain what happened.
 
 ## 1. A run was interrupted (Ctrl-C, crash, power loss)
 
@@ -15,7 +15,7 @@ What to do: nothing urgent. Files that were already optimized keep their verifie
 atomically, and each row records before/after sizes and, within the documented cap, hashes. Run `status` and
 `history --limit 20` to see where it stopped, then start a new run when convenient.
 
-What **not** to do: delete the SQLite database "to clean up". It is the only record of what happened, and the next run
+What **not** to do: delete the state directory "to clean up". It is the only record of what happened, and the next run
 will re-plan every file from scratch, which is not dangerous but is slow and loses the explanation.
 
 ## 1a. A `.auto-tzim-old-…` file appeared next to your file
@@ -86,17 +86,29 @@ yourself. If it keeps happening, note the pid and the size: it usually means eit
 What you will see: every command exits `2` with the file and the parse error.
 
 What to do: open the file, fix the syntax. The program never rewrites a config it could not parse, so the file is
-exactly as you left it. If you cannot fix it, move it aside and re-add folders one at a time; history is in the
-database and is not affected by a config rewrite.
+exactly as you left it. If you cannot fix it, move it aside and re-add folders one at a time; history lives in
+`state/runs/` and is not touched by a config rewrite.
 
-## 6. Corrupt state database
+## 6. A corrupt state file
 
-What you will see: `doctor` reports the database as not OK, or a command exits `7` while opening it.
+There is no database to corrupt; there are JSONL files and small JSON files (D-35), so "corrupt" has exactly three shapes
+and each has an answer.
 
-What to do: copy the database aside first — it is the only record of past runs. `auto-tzim` will refuse to start
-rather than migrate or truncate silently. Recovery options are: restore from a backup, or start a fresh state
-directory and accept that history is lost while config and folders are unaffected. A user file is never at risk in
-either case: the state directory contains no user files.
+**A truncated last line in a `.jsonl` file.** This is the expected damage from a kill during a write. `history` reads the
+file, reports `tail_recovered: true` for that run, and continues. **Nothing to do** — the record was never completed, and
+inventing it would be worse than reporting its absence.
+
+**A malformed line in the middle of a `.jsonl` file.** That means the file was edited by hand or damaged on disk. `doctor`
+names the file, the line number and the run id; commands that only read other runs keep working, and a command that needs
+that run exits `7`. Nothing is rewritten. Copy the file aside, then either delete the bad line or move the run directory
+out of `state/runs/` and accept that run's loss — config, folders and other runs are unaffected.
+
+**A `run.json` that will not parse.** The run is unusable as a record, but the files it touched are still described in
+`files.jsonl` next to it. Rename the directory out of `state/runs/`; `status` will report the run as unknown rather than
+guess.
+
+**What never happens:** `auto-tzim` will not migrate, truncate or "repair" a state file it could not read. A user file is
+never at risk in any of these cases, because the state directory contains no user files and no path into a managed root.
 
 ## 7. Disk full during a run
 
@@ -133,4 +145,4 @@ What to do: run `auto-tzim scan` and then apply; `resume` after a pause; free sp
 - Never re-runs a `failed` file automatically.
 - Never marks an interrupted file as `optimized`.
 - Never deletes a user file, a temporary file it did not create, or a partial record.
-- Never overwrites a config or database it could not read.
+- Never overwrites a config or state file it could not read.

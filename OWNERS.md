@@ -47,7 +47,7 @@ Write access follows the role, not the convenience of whoever is editing:
 | `docs/manager/**` | manager | Plans, decisions, evidence, reviews |
 | `SECURITY.md`, `OWNERS.md`, `.github/CODEOWNERS`, `LICENSE` | owner (manager drafts), nobody else | Governance and reporting channels |
 | `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `THIRD-PARTY.md` | manager commits; owner may edit directly | Public face of the project |
-| `src/**`, `tests/**`, `.github/workflows/**`, packaging, `pyproject.toml` | coder only | Product code and the machinery that proves it |
+| `src/**`, `tests/**`, `.github/workflows/**`, `Cargo.toml`/`Cargo.lock`, `deny.toml`, packaging | coder only | Product code and the machinery that proves it |
 | `handoff/**`, `docs/audits/**` | whoever produced the record, then frozen | History, not documentation: it must not be edited to match a later outcome |
 
 A file listed as the coder's may still be *reviewed* by the manager — reviewing is reading and running, never rewriting.

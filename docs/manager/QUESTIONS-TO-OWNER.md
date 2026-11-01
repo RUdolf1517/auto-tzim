@@ -64,7 +64,7 @@ repository.
 ## Q2 — How to close the missing machine interface · **decided in charter v0.2 (§16 P-01)**
 
 **Outcome:** option **A**, with the adapter restricted further than this question proposed — the upstream issues were
-filed as one (`tzim#85`; my `#86` duplicates it), no machine-readable capability is assumed, and the default set is delegated rather than
+filed as one (`tzim#85`; my `#86` duplicates it), no machine-readable capability was assumed, and the default set was delegated rather than
 displayed. The options below are kept as the record of what was weighed.
 
 > **Superseded on 2026-11-01:** both gaps were closed upstream. `tzim` v0.16.0 shipped `--capabilities` and a stable
@@ -183,22 +183,28 @@ merge, close issues or publish releases without explicit delegation (charter §2
 | Q1 | charter v0.2 authorises the management deliverable; **implementation still waits** on precondition §3.2 (B-01) |
 | Q2–Q4 | decided; recorded as D-01…D-05, D-18, D-19, D-20, D-23 |
 | Q5 (`transforms` empty) | decided for the MVP by charter §6-11 (D-05); the field returns when a machine-readable contract exists |
-| Q6 (update source) | manager default in force (D-07): one GitHub releases API request; owner may override at no cost |
+| Q6 (update source) | superseded by D-28: `update-check` leaves v0.1 entirely and ships in v0.2 with one GitHub releases request |
 | Q7 (hash cap) | manager default in force (D-09); `null` above 64 MiB, recorded explicitly |
 | Q8 (test matrix) | manager default in force: `ubuntu-latest` + `macos-latest` on the pinned Rust toolchain (D-33) |
 | Q9 (canonical spec home) | open, owner action: the docs-only commit `efc31756` is still only on a branch of `tzim` — command in [OWNER-ACTIONS.md](OWNER-ACTIONS.md) §4 |
 | Q10 (who merges, who is the coder) | default in force: one coder, one MVP pull request, owner merges |
-| Q11 (consume `--capabilities`?) | **open** — decides DR-05: delegate blindly, or prove the default set before planning |
-| Q12 (surface `reason_code`?) | **open** — decides DR-02: one generic refusal bucket, or stable codes in our own JSON |
+| Q11 (consume `--capabilities`?) | **decided** 2026-11-01: consume it (D-26) — probe once, require both schema versions, keep omitting `--formats` |
+| Q12 (surface `reason_code`?) | **decided** 2026-11-01: surface it (D-27) — `reason` beside the verbatim `note`, never interpreted |
 | Q13 (accepted `tzim` version window) | **decided** 2026-11-01: `>=0.16.0, <0.17` on capabilities schema 1 / result schema 2 ([D-30](DECISIONS.md)) |
 
 The next decision point is no longer a precondition: **B-01 is cleared** (PR #84 merged 2026-10-30, upstream tracker
-idle, v0.16.1 released 2026-11-01). What stands between the charter and a start is the contract drift in the
-[2026-11-01 audit](../audits/2026-11-01-tzim-v0.16.1.md), and three of its actions are owner decisions — Q11, Q12, Q13.
+idle, v0.16.1 released 2026-11-01). All three contract questions are answered — Q11 → [D-26](DECISIONS.md), Q12 →
+[D-27](DECISIONS.md), Q13 → [D-30](DECISIONS.md) — and the [2026-11-01 audit](../audits/2026-11-01-tzim-v0.16.1.md)
+is closed against them. What remains before a start is two owner actions in [OWNER-ACTIONS](OWNER-ACTIONS.md) §6a and §6b,
+and the manager's own final read of [GATES](GATES.md).
 
 ---
 
 ## Q11 — Does the MVP consume `tzim --capabilities`?
+
+**Decided 2026-11-01: option A** — the MVP reads the document at start and in `doctor`, requires
+`capabilities_schema_version: 1` and `result_schema_version: 2`, and still passes no `--formats` ([D-26](DECISIONS.md)).
+The options below are kept as the record of what was weighed.
 
 The document now exists (v0.16.0+), so "we cannot know the default set" is no longer true — it is a choice.
 
@@ -213,6 +219,9 @@ The document now exists (v0.16.0+), so "we cannot know the default set" is no lo
 What it blocks: DR-05 and the wording of `formats.md`. What it does not block: anything else.
 
 ## Q12 — Do we surface `reason_code` in our own output?
+
+**Decided 2026-11-01: option A** — the code is passed through as `reason`, beside the verbatim `note`, and never
+interpreted ([D-27](DECISIONS.md)). The options below are kept as the record of what was weighed.
 
 `tzim` now attaches a stable code to every non-optimizing row. Today our design collapses all of them into
 `skipped_by_tzim` plus a verbatim note.

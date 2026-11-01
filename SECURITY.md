@@ -52,7 +52,7 @@ Reports about any documented MVP behaviour are welcome. The classes that matter 
   against a published checksum.
 - **Unexpected network activity.** Exactly one outbound request is documented (update check). Any other connection, any
   downgrade or redirection that turns it into something else, and any attempt to execute downloaded content is a defect.
-- **State and logs**: injection into the state database, log records that disclose file paths or content to someone who
+- **State and logs**: injection into a state file or a history row, log records that disclose file paths or content to someone who
   reads them, or a history that misrepresents what happened to a file.
 - **Resource exhaustion** that is disproportionate to the documented limits, and hangs that the per-file timeout does not
   end — including a child process that is waiting for a prompt that will never come.
@@ -107,7 +107,7 @@ recorded in [DECISIONS](docs/manager/DECISIONS.md).
 
 - [Safety](docs/safety.md) — the read-only scan, the copy and verify sequence, and every failure mode we can name.
 - [Guarantees](docs/guarantees.md) — what is promised about each file and what is explicitly not.
-- [Privacy](docs/privacy.md) — what leaves the machine, and the single update-check request.
+- [Privacy](docs/privacy.md) — what leaves the machine — in v0.1, nothing.
 - [Limitations](docs/limitations.md) — the things that look like bugs and are not.
 - [Dependencies](docs/dependencies.md) · [Third-party notices](THIRD-PARTY.md) — what is linked and what is invoked.
 - [Releases](docs/releases.md) — artifacts, checksums, and verification before execution.

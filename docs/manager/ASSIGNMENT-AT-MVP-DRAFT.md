@@ -1,5 +1,10 @@
 # Assignment — MVP / v0.1 (AT-01 … AT-09)
 
+> **This file is the source of truth for the assignment.** A copy is published as
+> [#10](https://github.com/RUdolf1517/auto-tzim/issues/10); when the two disagree, this file wins — it is versioned and
+> the issue is not. Reviewed against decisions D-01…D-36 and the pre-registered gates.
+
+
 > **Upstream contract moved (2026-11-01).** `tzim` v0.16.0 shipped `--capabilities`, a stable `reason_code` and
 > JSON result schema 2; v0.16.1 is the current release and its exit-code precedence is now documented and
 > enforced. Statements below written against `tzim` 0.14 that assume no capability document, an untyped
@@ -29,9 +34,13 @@ and the exit-code contract of D-18/D-19 proven by real invocations. No network, 
 
 **Required implementation:**
 
-1. Rust workspace (D-33) with `auto-tzim-core` and `auto-tzim-cli` only; no `tui`, no `qt` crate (#1).
+1. Rust workspace (D-33) with `auto-tzim-core` and the `auto-tzim` CLI crate only; no `tui`, no `qt` crate.
+   `Cargo.lock` committed, `rust-toolchain.toml` pinned, `deny.toml` present, and both crates publishable
+   (`cargo install auto-tzim` must work, D-36) (#1).
 2. TOML config v1 with strict validation, canonical roots, forbidden-root / `AUTO_TZIM_HOME` / cloud-sync checks,
-   permissions, atomic write, corrupt-config safety, `config validate` and the `folder` commands (#2).
+   permissions, atomic write, corrupt-config safety, `config validate` and the `folder` commands — and the **file-based
+   state layer** (D-35): run directories with append-only `files.jsonl`, atomic `run.json` replacement, exclusive-create
+   lock with a start-time discriminator, no C dependency anywhere (#2).
 3. `lstat` discovery and stability per [`docs/safety.md`](../safety.md) §2, and the candidate plan of D-04 with a plan
    id and a plan hash (D-20) (#3).
 4. Restricted adapter: `tzim --version` **and `tzim --capabilities`**, the accepted window `>=0.16.0, <0.17` with
@@ -40,15 +49,16 @@ and the exit-code contract of D-18/D-19 proven by real invocations. No network, 
    `formats = []`, empty `transforms` (#4, D-26/D-27/D-30).
 5. Staging and install (D-29), then the per-file runner: copy into `AUTO_TZIM_HOME/staging/<run_id>/`, `tzim` runs on
    the copy, verified result installed by a journaled swap (`rename`-away → `rename`-in → `fsync` → `unlink`), identity
-   re-checked immediately before each file, `SIGKILL` at any step leaves a restorable file. Then: `shell=False`,
-   `stdin=DEVNULL`, no PTY, NDJSON schema guard, timeout `TERM`→`KILL`, signal handling, SQLite state with
-   global/folder/file guards, stale-run recovery, history, invalidation key (#5, AC-14…AC-16).
+   re-checked immediately before each file, `SIGKILL` at any step leaves a restorable file. Then: `std::process::Command`
+   with argv only and no shell, stdin on `/dev/null`, no PTY, NDJSON schema guard, timeout `TERM`→`KILL`, signal
+   handling, the **file-based state layer** of D-35 (append-only JSONL, `atomic_write`, one exclusive lock) with
+   global/folder/file guards, stale-run recovery, history, invalidation key (#5, AC-14…AC-16, `state.md`).
 6. The full MVP CLI with `--json`, **`--mode auto|confirm`** and the single approval gate (fail-closed on no TTY,
    `--json`, EOF; a declined proposal is exit `0` with zero writes), the own exit codes `0/1/2/3/6/7/8/130/143` with `4`
    and `5` unused, the fixed preflight order and the precedence `130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0` (#6, AC-17).
-7. ~~`update-check`~~ — **not in this iteration** (D-28). Instead, the negative work it left behind: no `urllib`,
-   `socket` or `http` import anywhere; no `update-check` command; exit `5` reserved and never produced; AC-9 asserts that
-   no command opens a socket, with a planted import proving the check can fail (#7 stays open for v0.2).
+7. ~~`update-check`~~ — **not in this iteration** (D-28). Instead, the negative work it left behind: no
+   network crate and no `std::net` outside a test guard; no `update-check` command; exit `5` reserved and never produced; AC-9 asserts that
+   no command opens a socket, with a planted socket call proving the check can fail (#7 stays open for v0.2).
 8. Fake-`tzim` suite, pinned real-binary suite (v0.16.1 by checksum) with the T1–T10 assertions, the invocation counter
    (**two spawns per scan**, zero path invocations, and no path invocation naming a file inside the folder), before/after
    checksums for every non-candidate outcome, and `M-01`…`M-14` for the modes and the install journal (#8).
@@ -84,7 +94,7 @@ not discussed.
 **Required raw artifacts:** CI run IDs per platform at the final head with logs; the command/exit-code matrix with raw
 stdout/stderr and `$?`; per-file rows for the fixture corpus including skips and failures; before/after SHA-256 for every
 corpus file; the invocation counter for every scan and apply case; the pinned artifact's SHA-256 and the matching
-`SHA256SUMS` line; SQLite dumps for the recovery scenarios; fake-`tzim` invocation logs; `rustc --version` and the pinned
+`SHA256SUMS` line; the state files for each recovery scenario; fake-`tzim` invocation logs; `rustc --version` and the pinned
 toolchain,
 `uname -a`, the `auto-tzim` head SHA and the `tzim` identity per platform.
 
@@ -129,7 +139,7 @@ Merge/Release performed by coder: no
   not ask. Staged copies, a journaled swap, an original deleted only after its verified replacement is in place.
 - `tzim`'s FITS confirmation (#83) shipped with a documented non-TTY refusal: no prompt for non-TTY, `--json`,
   `--dry-run`, recursive or multi-file runs. Our adapter never enables `--fits-tile` (empty `transforms`), and every
-  child gets `stdin=DEVNULL`, so the case cannot arise — and `R-01` still proves that a child waiting on stdin is killed.
+  child gets `Stdio::null()` on stdin, so the case cannot arise — and `R-01` still proves that a child waiting on stdin is killed.
 - Apply-time temporary files appear **in our staging directory**, not in the target root: `tzim` runs on the copy. A hard
   kill can therefore leave `.tzim-<pid>-<ns>-<attempt>.tmp` or a staged copy inside `AUTO_TZIM_HOME/staging/<run_id>/`;
   the next start removes them and says so. Nothing of `tzim`'s ever lands in the user's folder.

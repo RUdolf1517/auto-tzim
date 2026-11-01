@@ -110,14 +110,16 @@ create anything.
 | A-07 | apply: JSON without `schema` | `failed` (`internal`), abort, exit `1` |
 | A-08 | apply: unknown `status` value | `failed` (`internal`), abort, exit `1` |
 | A-09 | apply: extra optional field `"strip_metadata":true` | ignored, run succeeds, field recorded as ignored |
-| A-10 | apply: `--info`/`--list-formats` **tripwire** — the fake exits `99` if invoked with either | never invoked in any test |
+| A-10 | apply: `--info`/`--list-formats` **tripwire** — the fake exits `99` if invoked with either | never invoked in any test. `--capabilities` is *not* a tripwire: since D-26 it is the supported way to ask, and `A-11` covers it |
+| A-11 | `--capabilities` at start: (a) a valid document, (b) `capabilities_schema_version: 2`, (c) `result_schema_version: 3`, (d) the flag rejected as unknown, (e) the document missing a required key | (a) planning proceeds and both schema versions are recorded; (b)–(e) `incompatible_tzim`, exit `3`, nothing planned, nothing staged |
+| A-12 | `--json` row with `reason_code: "format_disabled"`, one with `reason_code: "something_new"`, one with `reason_code: null` | all three accepted: the first two are stored verbatim in `reason`, the third stays `null`; none is mapped to a code of ours and none changes a status (D-27) |
 
 ## 6. Runner — process discipline (`R-*`, INV-12, INV-13, AC-5, AC-6)
 
 | ID | Fake binary behaviour | Expected |
 | --- | --- | --- |
-| R-01 | reads stdin and blocks | killed by the timeout, `failed` (`timeout`), total run time bounded |
-| R-02 | asserts `isatty()` on all three streams and exits `98` if any is a TTY | never exits `98` |
+| R-01 | prompts on stdin and blocks (the `tzim` FITS confirmation shape) while our child stdin is `/dev/null` | killed by the per-file timeout, `failed` (`timeout`), total run time bounded, nothing left running |
+| R-02 | asserts `is_terminal()` on all three streams and exits `98` if any is a TTY | never exits `98` |
 | R-03 | prints `argv` and the environment | argv is a list, no shell metacharacter interpretation, env is the minimal documented set |
 | R-04 | ignores `SIGTERM` | killed by `SIGKILL` after the grace period, `failed` |
 | R-05 | exits `0`, prints truncated JSON | `failed` (`internal`), never `optimized` |
@@ -139,9 +141,9 @@ create anything.
 | L-01 | second `run --once` while the first holds the lock | exit **`8`**, nothing processed, no second plan |
 | L-02 | stale lock (pid gone) | reported with pid and start time; re-run after confirming the process is gone succeeds |
 | L-03 | `SIGKILL` of our process mid-run, then a new start | previous run `interrupted`, no row `running`, no row `optimized` |
-| L-04 | corrupt SQLite file | exit **`7`**, no traceback dump, database left untouched |
+| L-04 | malformed line in the middle of a `files.jsonl` | exit **`7`**, the file and line named, nothing rewritten |
 | L-05 | corrupt config | exit `2`, config byte-identical afterwards |
-| L-06 | unwritable state directory | exit `7` with a reason, no partial database |
+| L-06 | unwritable state directory | exit `7` with a reason, no partial file |
 
 ## 8. CLI — the exit-code contract (`X-*`, AC-8, AC-11, AC-12)
 
@@ -159,10 +161,11 @@ create anything.
 | X-10 | `run --once` with a valid plan | `0` |
 | X-11 | usage error **while a lock is held** | `2` (precedence: `2` > `8`) |
 | X-12 | incompatible binary **and** paused | `3` (precedence: `3` > `6`) |
-| X-13 | corrupt state **and** bad flag | `7`? — **deliberate tie-breaker case**: expected `7` per precedence `7 > 2`; the reviewer checks the implementation documents this order explicitly |
+| X-13 | corrupt state **and** bad flag | `7` — the deliberate tie-breaker case: precedence says `7 > 2`, and the implementation must state that order in `--help` and in `cli.md` rather than leave it to chance |
 | X-14 | `SIGINT` during a run with one earlier `failed` file | `130`, JSON still contains the `failed` row |
 | X-15 | `scan` output parsed by a strict JSON validator, with a warning on stderr | every line parses, warning only on stderr |
 | X-16 | `4` produced by any command | **impossible** — asserted by grepping the whole matrix for `4` |
+| X-17 | stdout closed early (`EPIPE`) during a run that has already earned `1` | exit `1`, not `3` and not `0`: a write error never replaces a code the run already earned (DR-07) |
 
 ## 9. Network and documentation (`W-*`, `D-*`, AC-9, AC-10)
 

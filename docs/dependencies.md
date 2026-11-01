@@ -19,19 +19,21 @@ could arrive through the environment — which is the property this page is buil
 | `clap` (derive) | argv parsing, help text, `--` handling | no argument parser in `std`; hand-rolling one is how a flag like `--json` becomes a filename | a hand-written parser; a shell wrapper |
 | `serde` + `toml` | the documented TOML config, strict schema, unknown fields rejected | no TOML reader in `std` | a hand-written TOML parser — a correctness risk in the one file that decides what may be touched |
 | `serde_json` | the documented NDJSON output | no JSON in `std`; string-building JSON is how output becomes unparseable | manual `format!` construction |
-| `rusqlite` (`bundled`) | state and history, the schema this specification documents | no SQLite in `std` and none guaranteed on the host; `bundled` compiles the library into the binary | a system SQLite dependency (different versions on every host) |
 | `sha2` | binary identity, record hashes | no SHA-256 in `std` | shelling out to `shasum`/`sha256sum` — a shell dependency and a locale hazard |
 | `thiserror` | typed errors that map to exit codes | `std` gives no derive; without typed errors the exit-code contract becomes string matching | `anyhow` everywhere (an opaque error is not a code) |
 
-That is the entire runtime set: six crates, all of them boring, none of them capable of opening a socket. The `bundled`
-SQLite is the only C compilation, and it happens at build time on the release machine, never on the user's.
+That is the entire runtime set: **five** crates, all of them boring, none of them capable of opening a socket — and **not one
+line of C**. State and history are plain files written with `std` alone (D-35), so the build has no C toolchain in it at
+all, which is also what makes a static musl binary reproducible on a machine that has nothing installed.
 
 **Not a runtime dependency, deliberately invoked:** `tzim`. It is a separate MIT-licensed executable the user installs; we
 run it as a child process and never link, vendor or import it. That process boundary is the licence boundary.
 
 **Refused outright:** any async runtime (`tokio`, `async-std` — the runner is sequential, and a second execution model is a
 second set of failure modes to test); any HTTP crate (`reqwest`, `ureq`, `hyper`, `curl`) while v0.1 makes no request;
-any crate that shells out or executes downloaded content; any crate whose build script downloads something at build time.
+**any crate that compiles C** (`rusqlite`, `libsqlite3-sys`, `openssl`, `ring`'s C build, `zlib`) — a database engine was
+removed for this reason alone (D-35); any crate that shells out or executes downloaded content; any crate whose build
+script downloads something at build time.
 
 **How these refusals are enforced, not just stated:** `cargo deny` fails the build on a licence outside the allow-list, a
 duplicate crate, a banned crate name, or a source outside crates.io; `cargo tree` in CI asserts that no crate in the graph

@@ -27,8 +27,8 @@ them. Everything that decides what happens to a file lives in the config or in a
 There is no `--config PATH`: the location is fixed ([config](config.md) §1) and relocated only by `AUTO_TZIM_HOME`, so
 two invocations cannot disagree about which file they describe.
 
-**No command ever prompts, and no PTY is allocated.** `stdin` is never read; a child process gets `stdin=DEVNULL`
-(D-21). A command that needs a decision requires a flag. `--json`, a pipe and a scheduler behave exactly like a terminal,
+**No command ever prompts, and no PTY is allocated.** `stdin` is never read; a child process gets `/dev/null` on stdin
+(`Stdio::null()`) (D-21). A command that needs a decision requires a flag. `--json`, a pipe and a scheduler behave exactly like a terminal,
 minus the progress line.
 
 ## 2. Commands
@@ -36,7 +36,7 @@ minus the progress line.
 ### 2.1 `doctor`
 
 Prints what a bug report needs: configured `tzim` path, `realpath`, size, SHA-256, `tzim --version`, the adapter entry,
-the platform, the config location and schema, and the state database status. It runs **one** command against the binary —
+the platform, the config location and schema, and the state directory status (schema, runs readable, tail recovery). It runs **one** command against the binary —
 `tzim --version` — and never a file-processing invocation. Exit `0` consistent, `3` `tzim` missing/unreadable/outside the
 adapter contract, `2` invalid config, `7` unreadable state.
 
@@ -104,7 +104,7 @@ installed, every planned file reported `skipped_by_user`, one history row marked
 
 1. re-stat the file against the plan; a changed file is `skipped_changed` and keeps its bytes;
 2. copy it into `AUTO_TZIM_HOME/staging/<run_id>/` and `fsync`;
-3. invoke `tzim` on **the copy** — argv array, `stdin=DEVNULL`, no PTY, per-file timeout;
+3. invoke `tzim` on **the copy** — argv array, stdin on `/dev/null`, no PTY, per-file timeout;
 4. accept the result only on exit `0`, `status == optimized` and a smaller size; record the SHA-256;
 5. install: `rename(original → .auto-tzim-old-<run>-<n>)`, `rename(staged → original)`, `fsync(directory)`,
    `unlink(.auto-tzim-old-…)` — journaled before each step.
@@ -121,7 +121,7 @@ plan is pending (id, age, number of rows).
 
 Recorded outcomes, newest first, `--limit` default 50. A row shows the relative path, the normalized status, sizes when
 known, the `tzim` version and binary hash, and — for `skipped_by_tzim` and `failed` — the raw `tzim` status, `note` and
-`error` verbatim. An unknown `--status` value is exit `2`.
+`error` verbatim, plus the stable `reason` code in its own field (D-27). An unknown `--status` value is exit `2`.
 
 ### 2.9 `logs [--folder ID] [--limit N]`
 
@@ -132,10 +132,12 @@ The structured local log, rendered for humans; with `--json`, the raw JSONL obje
 `pause` sets the flag that makes `run --once` exit `6`. It does not abort an active run — stopping one means sending
 `SIGINT`, which the run records as `interrupted`.
 
-### 2.11 `update-check`
+### 2.11 `update-check` — not in v0.1
 
-One documented request ([update](update.md)); prints current and available versions or the incompatible-major state.
-Never downloads, never replaces anything. Exit `5` on failure.
+The command does not exist in this release (D-28): v0.1 makes no outbound request of any kind, and there is no network
+code in the binary to disable. Typing it is an unknown command, so it exits `2` — which is what AC-9 and corpus case
+`W-02` assert. It returns in v0.2 as one documented `GET` ([update](update.md)) that never downloads and never replaces
+anything; exit `5` stays reserved for it until then.
 
 ## 3. `--json` output
 
@@ -143,7 +145,7 @@ Typed NDJSON, one value per line, on stdout, nothing else, `"schema": 1` in ever
 
 | Command | Lines |
 | --- | --- |
-| `doctor`, `config validate`, `status`, `pause`, `resume`, `update-check`, `folder *` | one `{"type":"result", …}` |
+| `doctor`, `config validate`, `status`, `pause`, `resume`, `folder *` | one `{"type":"result", …}` |
 | `scan`, `run --dry-run` | one `{"type":"file", …}` per candidate, then one `{"type":"plan", …}` |
 | `run --once` (apply) | one `{"type":"file", …}` per processed file, then one `{"type":"run", …}` |
 | `history` | one `{"type":"history","rows":[…]}` |
@@ -163,7 +165,10 @@ Rules:
 
 - `null` means "not computed or not applicable", never "unknown but probably fine";
 - `failed` rows carry `tzim_error` with `{"kind","message"}` when `tzim` supplied one;
-- `skipped_by_tzim` rows carry `tzim_note` verbatim — it is data for a human, never a classification key;
+- `skipped_by_tzim` rows carry `tzim_note` verbatim — it is data for a human, never a classification key; the stable
+  `reason` (D-27) is copied from `tzim`'s `reason_code` and is never interpreted either, only displayed and counted;
+- `reason` is `null` when the row optimized, and an unknown code is passed through as an opaque string, never mapped to
+  one of ours;
 - diagnostics (warnings, whole-command refusals) go to stderr as human text, so `--json > out.ndjson` always parses;
 - `argv` is printed in the plan (it is what the user is being asked to approve) and stored in history for the apply.
 
@@ -226,4 +231,4 @@ Deliberate choices, recorded so they are not "fixed" later:
 - **No `--jobs` in v0.1**: it exists in the config for v0.2 and is rejected today.
 - **`-` is not stdin**: the program acts on files it must be able to re-read.
 - **No glob patterns on the command line**: `exclude_globs` in the config is the only pattern language.
-- **`run --dry-run` is an alias of `scan`**, not a `tzim` dry run — see [CONFLICTS §C-1](spec/CONFLICTS.md).
+- **`run --dry-run` is an alias of `scan`**, not a `tzim` dry run. The names collide because `tzim` has a `--dry-run` of its own, which does the work and deletes a temporary candidate; ours does no work at all — see [CONFLICTS §C-1](spec/CONFLICTS.md).

@@ -70,6 +70,7 @@ thing that still differs is *who owns the file*:
 | --- | --- | --- |
 | a release tarball, unpacked by the user | **we do**, by atomic replacement | we recorded its hash at install time, so its provenance is ours |
 | Homebrew formula in a tap | **we ask `brew`**, then verify | the package manager owns the Cellar; replacing files under it is how an installation becomes unrepairable |
+| `cargo install auto-tzim` | **we ask `cargo`**: `cargo install --force auto-tzim --version <v>` | cargo keeps its own bookkeeping in `.crates.toml`; replacing the binary behind its back would make `cargo install --list` lie. It recompiles, which costs a minute and is true (D-36) |
 | system package, a source checkout, an unknown path | **refused**, exit `6`, with the command to run by hand | provenance unknown — automatic replacement is not ours to perform |
 
 Provenance is recorded at install time and shown in `doctor`; it is never inferred from `PATH` when an update runs.

@@ -17,7 +17,7 @@
   charter §6-2 because it writes a temporary candidate into the destination directory.
 - A fallback for a refused file, a `--force`, a "continue on error", or an automatic retry of `failed`.
 - A prompt, or a code path that reads `stdin`.
-- Telemetry, analytics, or a network call outside `update-check`.
+- Telemetry, analytics, or any network call: v0.1 has none, and a crate that can open a socket is refused (D-35).
 - An undo/backup claim.
 - A dependency that runs install-time code or contacts the network.
 - A change that widens a default: a bigger root, symlink following, hard links, cloud sync, hidden files.

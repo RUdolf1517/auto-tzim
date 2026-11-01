@@ -14,9 +14,9 @@ path — or the right path at the wrong time — to a program that rewrites file
 | # | Invariant (charter §6, v0.2) | Enforced by | Test |
 | --- | --- | --- | --- |
 | 1 | Nothing processed before the user adds the folder | config gate; empty config ⇒ empty plan | INV-1 |
-| 2 | Before a folder's first apply there must be a **read-only candidate plan**; scan/dry-run runs no file-processing `tzim`, passes no `--dry-run`, writes nothing in the target root; only `tzim --version` is allowed | planner never spawns the runner; runner is reachable only from apply | AC-2, AC-11, AC-12 |
+| 2 | Before a folder's first apply there must be a **read-only candidate plan**; scan/dry-run runs no file-processing `tzim`, passes no `--dry-run`, writes nothing in the target root; only `tzim --version` and, for identity, `tzim --capabilities` are allowed (D-26) | planner never spawns the runner; runner is reachable only from apply | AC-2, AC-11, AC-12 |
 | 3 | No root/sudo, no hidden background activity | no privileged call; the process ends with the command | INV-3 |
-| 4 | No shell; filenames stay argv data | `shell=False`, argv arrays, `--` for leading dashes | INV-4 |
+| 4 | No shell; filenames stay argv data | one `Command::arg` per item, argv arrays only, `--` for leading dashes | INV-4 |
 | 5 | No symlink following, no special files | `lstat`, mode checks, canonical containment | INV-5 |
 | 6 | Hard-linked and unstable files skipped by default | `st_nlink > 1`; age and identity checks at three stages | INV-6 |
 | 7 | Never outside the canonical approved root | validation + containment re-check before every spawn | INV-7 |
@@ -24,10 +24,10 @@ path — or the right path at the wrong time — to a program that rewrites file
 | 9 | Eligibility, refusal, verification, installation stay in `tzim` | one mapping table; verdict recorded, never re-decided | INV-9 |
 | 10 | No re-routing of unknown/unsupported/refused/failed | one path, no fallback branch | INV-10 |
 | 11 | `transforms` must be empty in the MVP; confirmation-required transformations do not run | validation rejects any value (D-05) | INV-11 |
-| 12 | **No PTY, ever.** The only prompt in the product is the `confirm` approval gate: one line on stderr, one line on stdin, refused when stdin is not a terminal or `--json` is set. A child process is never given a terminal and never inherits our stdin | `stdin=DEVNULL` for every child, no `pty` import, timeout | INV-12 |
+| 12 | **No PTY, ever.** The only prompt in the product is the `confirm` approval gate: one line on stderr, one line on stdin, refused when stdin is not a terminal or `--json` is set. A child process is never given a terminal and never inherits our stdin | stdin on `/dev/null` (`Stdio::null()`) for every child, no pseudo-terminal, timeout | INV-12 |
 | 13 | `failed` never retried in an automatic loop | retry policy keyed on the invalidation key | INV-13 |
-| 14 | Update-check downloads and replaces nothing | no download code exists in v0.1 | INV-14 |
-| 15 | No telemetry, no undocumented requests | `updater` is the only network client | INV-15 |
+| 14 | Nothing downloads, and nothing replaces a binary | v0.1 has no updater and no network code at all (D-28); the v0.2 `update-check` only notifies | INV-14 |
+| 15 | No telemetry, no undocumented requests | no crate in `Cargo.lock` can open a socket; a source check keeps `std::net` out of the workspace | INV-15 |
 | 16 | No promise of undo. Nothing is destroyed before an approved proposal, and that sentence may never be read as an undo | documentation, the proposal text, `--help`; no backup code | INV-16 |
 | 17 | The UI never duplicates core logic | review gate for v0.2/v0.4 | INV-17 |
 | 18 | Default-enabled set and refusal reasons are never reconstructed from human output, extensions or the free-text `note`; an unknown contract is fail-closed `incompatible_tzim` | restricted adapter (D-01): `tzim --version` only; generic `skipped_by_tzim` (D-02) | AC-13 |
@@ -53,9 +53,10 @@ dry run during a preview and did not fix an exit code for refusals. Where the tw
 4. **Policy.** Format allowlist, `transforms` (must be empty), limits and opt-in gates. Excluded here ⇒ `skipped_policy`
    and no process.
 5. **Plan.** A record with an id and a hash over the ordered rows (D-20). Nothing runs without a matching plan.
-6. **Runner.** `argv`, `shell=False`, `stdin=DEVNULL`, no PTY, captured output with a size cap, per-file timeout,
+6. **Runner.** `Command::arg` per item, no shell, stdin on `/dev/null`, no PTY, captured output with a size cap, per-file timeout,
    `TERM` then `KILL`.
-7. **State.** One transaction per file with identity, argv, binary identity and the raw result. A crashed run is
+7. **State.** One `append_line` per file with identity, argv, binary identity and the raw result, plus the journal for
+   the swap (D-35). A crashed run is
    recovered as `interrupted`, never `optimized`.
 
 A file that fails any layer is finished: no lower layer is tried, no upper layer re-entered.
@@ -92,7 +93,7 @@ A file that fails any layer is finished: no lower layer is tried, no upper layer
 | No matching plan (first apply of the folder) | run does not start | `6` | no |
 | `pause` active | run does not start | `6` | no |
 | Free space below `min_free_bytes` | run does not start | `6` | no |
-| Corrupt state database | run does not start | `7` | no |
+| Corrupt state file (unparseable record, not a truncated tail) | run does not start | `7` | no |
 | `SIGINT`/`SIGTERM` during a run | in-flight and remaining files `interrupted` | `130`/`143` | earlier files keep verified changes |
 
 ## 5. What we refuse to add for convenience

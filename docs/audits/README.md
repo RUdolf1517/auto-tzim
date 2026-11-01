@@ -34,7 +34,7 @@ observable behaviour, a safety-invariant review of a candidate build.
 
 | File | Audits | Status |
 | --- | --- | --- |
-| [2026-11-01-tzim-v0.16.1.md](2026-11-01-tzim-v0.16.1.md) | every `tzim` contract fact this project relies on, against `tzim` v0.16.1 (`f605c2ea`) | open — the drift it found is not yet fixed |
+| [2026-11-01-tzim-v0.16.1.md](2026-11-01-tzim-v0.16.1.md) | every `tzim` contract fact this project relies on, against `tzim` v0.16.1 (`f605c2ea`) | **closed 2026-11-02** — all ten findings are mapped in its close-out; nothing was executed, so this closes actions, not behaviour |
 
 Earlier upstream review lives in [docs/manager/TZIM-STUDY-2026-10-29.md](../manager/TZIM-STUDY-2026-10-29.md). It is a
 manager record rather than an audit entry — it was written before this convention existed, and it is preserved as written

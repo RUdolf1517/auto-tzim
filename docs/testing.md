@@ -26,7 +26,7 @@
 | Fake `tzim` | every documented status and exit code, malformed/partial JSON, hang, stdin read, **PTY/TTY expectations**, version mismatch, file mutation behind our back, temporary-file failure, arbitrary file names | fast, deterministic | every push, every platform |
 | Real `tzim`, pinned | the contract we actually depend on: T1–T10 of the [study](manager/TZIM-STUDY-2026-10-29.md#4-exact-checks-for-the-real-binary-input-to-at-08), plus one optimisable PNG and one refused file | seconds | every push, every platform, artifact verified by SHA-256 |
 | End-to-end CLI | every command, human and `--json`, the whole exit-code matrix including `6`/`7`/`8`/`130`/`143` and the precedence pairs, refusal paths, plan binding, crash recovery | seconds | every push, every platform |
-| Failure injection | kill between steps, full disk (simulated), read-only destination, lock contention, corrupt database, corrupt config | seconds | every push |
+| Failure injection | kill between steps, full disk (simulated), read-only destination, lock contention, corrupt state file, truncated JSONL tail, corrupt config | seconds | every push |
 
 ## 3. The fake `tzim`
 
@@ -36,7 +36,7 @@ controlled behaviour table selected by an environment variable or a case id. It 
 - emit each status, with and without a note, with and without an error object;
 - exit `0`, `1`, `2`, `3`, `4`, and die by signal;
 - print malformed JSON, a truncated line, two summaries, no summary, an unknown `type`, an unknown optional field;
-- hang forever, ignore `SIGTERM`, read `stdin` and block, or assert `isatty()` on stdin/stdout/stderr and fail if any
+- hang forever, ignore `SIGTERM`, read `stdin` and block, or assert `is_terminal()` on stdin/stdout/stderr and fail if any
   of them is a terminal (this is what proves no PTY is allocated);
 - mutate the file it was given while reporting success (this is the case that proves our post-run identity check is
   real);
@@ -96,7 +96,7 @@ For every skip, refusal, unsupported file, failure and dry run:
 | T-CLI-03 | preflight order: pause, disabled folder, no plan, low disk ⇒ `6`; held lock ⇒ `8`; bad config ⇒ `2` | planned |
 | T-PLAN-01 | plan hash binding: fabricated id, stale hash, other folder ⇒ `6`; matching plan ⇒ `0` | planned |
 | T-PLAN-02 | scan leaves the target root byte-identical and works without write access; apply is the positive control | planned |
-| T-RUN-06 | no PTY: child sees `isatty() == False` on all three streams; no `pty` import in the tree | planned |
+| T-RUN-06 | no PTY: child sees `is_terminal() == false` on all three streams; no pseudo-terminal crate in `Cargo.lock` | planned |
 | T-CFG-04 | `transforms` non-empty is rejected; `formats = []` passes no `--formats` | planned |
 | T-ADP-01 | unknown/garbage version, missing binary, unknown schema ⇒ `3`; no prose parsing (source check) | planned |
 | T-UPD-01 | mocked 200/403/429/500/malformed; no socket outside `update-check` | planned |

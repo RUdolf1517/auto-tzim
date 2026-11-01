@@ -207,21 +207,22 @@ version would have created a rule that gates markdown exactly as hard as code. R
 reviewer with its own identity — the same login that authors the pull requests. With one identity, "required review" is
 not a gate; it is a dialog that can only ever end in `--admin`.
 
-**Status: deferred by the owner on 2026-10-29** — recorded as [D-24](DECISIONS.md), together with the interim rule
-that lets documentation-only pull requests merge with `--admin` while every code pull request waits for this decision.
-Nothing below has been applied; `main` protection is exactly as it was.
+**Status: DECIDED by the owner on 2026-11-01 — option 1, machine gates only.** Recorded as the resolution of
+[D-24](DECISIONS.md); the text below is kept because the analysis is why the option was chosen, not because it is still
+open. Nothing has been applied yet: `DELETE` on branch protection needs your credentials (the same `403` as every other
+write), so the command is at the end of this section.
 
-Three implementable options. The first is my recommendation.
+Three implementable options were on the table. The first was chosen.
 
-### Option 1 — machine gates only (recommended while there is one identity)
+### Option 1 — machine gates only (chosen)
 
-Require a pull request, require the CI checks once they exist, forbid force-pushes and deletions; drop the human approval
-requirement, because it cannot be satisfied by anyone. The human review does not disappear — it moves to
-[EVIDENCE-PROTOCOL](EVIDENCE-PROTOCOL.md) and [REVIEW-TEMPLATE](REVIEW-TEMPLATE.md), which are stricter than a green
-checkmark and produce a written verdict instead of a click.
+Require a pull request and the CI checks once they exist, forbid force-pushes and deletions, and **drop the human approval
+requirement**, because there is exactly one identity and it authors every pull request. The review does not disappear: it
+moves to [EVIDENCE-PROTOCOL](EVIDENCE-PROTOCOL.md) and [REVIEW-TEMPLATE](REVIEW-TEMPLATE.md), which produce a written
+verdict that a green checkmark cannot replace.
 
 ```sh
-# Drop the requirement nobody can satisfy (keeps force-push and deletion blocks if they were set):
+# Drop the requirement nobody can satisfy (force-push and deletion blocks stay as they are):
 gh api -X DELETE repos/RUdolf1517/auto-tzim/branches/main/protection/required_pull_request_reviews
 
 # Then, in Settings → Rules → New branch ruleset, target `refs/heads/main` with:
@@ -233,28 +234,153 @@ gh api -X DELETE repos/RUdolf1517/auto-tzim/branches/main/protection/required_pu
 # Bypass list: repository admins, so an outage does not lock the repository shut.
 ```
 
-### Option 2 — a second identity that can actually approve
-
-A machine account or GitHub App with read access, added as a collaborator and named as a required reviewer. Approval
-becomes real. Cost: a credential to hold, and if it approves automatically it is CI wearing a hat — no better than
-Option 1 and harder to audit.
+Verify:
 
 ```sh
-# after creating the account, with its token or from the UI:
-gh api -X PUT repos/RUdolf1517/auto-tzim/collaborators/NAME-OF-SECOND-IDENTITY -f permission=pull
-# then re-add required_pull_request_reviews with that identity in the reviewer set
+gh api repos/RUdolf1517/auto-tzim/branches/main --jq .protected            # still true
+gh api repos/RUdolf1517/auto-tzim/branches/main/protection --jq .required_pull_request_reviews   # expect null
 ```
 
-### Option 3 — status quo, with the bypass written down
+**Applied and verified, 2026-11-02.** Two rounds, because the first one removed the wrong-looking rule and the pull
+request stayed blocked.
 
-Keep the rule as it is and treat `--admin` as the documented path for any pull request the owner's own account opens.
-Cheapest, and honest as long as every bypass gets a [STATUS-LOG](STATUS-LOG.md) line (practice since #11). Risk: the
-bypass becomes a habit, and the first code pull request inherits it.
+**Round one — the review rule.** The owner ran the `DELETE`; it answered `HTTP/2.0 204 No Content`, so the rule existed
+and was removed. `review_decision` on #16 fell to `null`, which is what GitHub answers when no approval is required.
 
-**What is not optional in any option:** an `--admin` merge gets a STATUS-LOG entry naming the reason. That is the only
-control that survives all three.
+**Round two — the real blocker.** #16 stayed `blocked`. The owner then dumped the protection object with an admin token,
+and the answer was unambiguous:
 
-Whichever you pick, record it in [DECISIONS](DECISIONS.md) — the next merge should not have to rediscover this.
+```json
+{
+  "status_checks": { "contexts": ["test"], "strict": true },
+  "signatures": false, "linear": false, "conversations": false, "admins": false
+}
+```
+
+A required status check named **`test`**, and **zero workflows in the repository**. No job could ever report it, so every
+pull request against `main` was blocked permanently — the review rule was never the only thing in the way. The owner
+deleted `required_status_checks` too.
+
+**Verified independently afterwards, from this session:** `pulls/16` answers `mergeable_state: clean` on four
+consecutive queries, and `branches/main` now reports
+`required_status_checks: {contexts: [], enforcement_level: "off"}`. Protection itself is still `enabled: true`.
+
+**What this cost, and who paid.** Two of my statements were wrong on the way here and are corrected in place below:
+a blocked pull request with no configured checks was said to "only" mean a required review (the `204` disproved it), and
+the first command I gave for §6b carried a path that a chat renderer turned into a link, so it never ran.
+
+**The standing follow-up, and it is the one that matters for code:** when AT-01 (#1) lands a real CI workflow, the check
+must be added back **with the context the workflow actually reports** — never a placeholder. A required check that nothing
+provides does not protect the branch; it blocks every pull request until someone deletes it in frustration, which is
+exactly what happened here.
+
+**What this session could not read, stated plainly:** the protection summary available to a non-admin lists only status
+checks. Whether *force-push blocking* and *deletion restriction* survived is not visible from here; the same admin dump
+answers it:
+
+```fish
+gh api repos/RUdolf1517/auto-tzim/branches/main/protection --jq '{
+  pr: .required_pull_request_reviews, checks: .required_status_checks,
+  force_push: .allow_force_pushes.enabled, deletions: .allow_deletions.enabled,
+  admins: .enforce_admins.enabled
+}'
+```
+
+Expected for option 1: `force_push: false`, `deletions: false`, `checks: null`, `pr: null`.
+
+**How it got there, kept as history:** the first check said `BLOCKED` with no checks configured and I read it as "review
+required"; after the review rule was deleted the state did not change, which is the fact that should have been checked
+before the inference was written down. The lesson is in the file rather than in a chat: ask for the protection object,
+do not reason from the merge badge.
+
+**What changed, now that it is applied:** a pull request no longer shows `BLOCKED` waiting for an approval nobody can
+give, and `--admin` stops being the only way to merge. What does **not** change: the requirement that every acceptance row
+be demonstrated and re-run by the reviewer before a merge, and the rule that a documentation-only pull request from the
+owner's own account is still logged.
+
+### Option 2 — a second approving identity (not chosen)
+
+A machine account or GitHub App with read access, added as a collaborator and named as a required reviewer. Approval
+becomes real. Cost: a credential to hold, and if it approves automatically it is CI wearing a hat.
+
+### Option 3 — status quo with the bypass written down (not chosen)
+
+Keep the rule and treat `--admin` as the documented path for any pull request the owner's own account opens. Cheapest, and
+honest as long as every bypass gets a STATUS-LOG line. Risk: the bypass becomes a habit, and the first code pull request
+inherits it — which is exactly why it was rejected on 2026-11-01, before the first code pull request existed.
+
+## 6b. Refresh the assignment issue body (chosen option Б, 2026-11-01)
+
+**Why:** issue [#10](https://github.com/RUdolf1517/auto-tzim/issues/10) still describes the product as it was on 2026-10-29:
+no `--mode`, no `--capabilities` (it says "`tzim` has no machine-readable capability list"), no `reason`, `skipped_by_tzim`
+kept generic, `SQLite dumps` listed as a required raw artifact, `python --version` in the toolchain list, and
+`RUdolf1517/tzim#86` named as the future API. The file
+[ASSIGNMENT-AT-MVP-DRAFT.md](ASSIGNMENT-AT-MVP-DRAFT.md) is current; the issue is a stale copy, and a coder who reads the
+issue would build the wrong thing.
+
+Issue writes return `403` for this session (re-tested on 2026-11-01), so this is yours. **This version needs no clone
+and no working directory** — it fetches the body from the API, which is the only form that survived contact with reality
+(two earlier attempts died on a path, once because the chat turned the filename into a link and once because the shell was
+sitting in `/`):
+
+```fish
+gh api "repos/RUdolf1517/auto-tzim/contents/docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md?ref=arena/b556864b-auto-tzim" \
+  -H "Accept: application/vnd.github.raw" > /tmp/assignment.md
+wc -l /tmp/assignment.md        # expect 170
+gh issue edit 10 --repo RUdolf1517/auto-tzim --body-file /tmp/assignment.md
+echo "статус: $status"          # fish; bash/zsh: echo "status=$?"
+```
+
+From inside a clone of the repository, the same thing with a glob (a partial filename cannot be mangled into a link):
+
+```fish
+gh issue edit 10 --repo RUdolf1517/auto-tzim --body-file docs/manager/ASSIGNMENT*.md
+```
+
+Verify that the copy is real rather than hoped for:
+
+```sh
+gh issue view 10 --repo RUdolf1517/auto-tzim --json body --jq '.body' | wc -l          # expect ~170, not 122
+gh issue view 10 --repo RUdolf1517/auto-tzim --json body --jq '.body' | grep -c "mode auto"   # expect 1 or more
+gh issue view 10 --repo RUdolf1517/auto-tzim --json body --jq '.body' | grep -c "SQLite dumps"  # expect 0
+gh issue view 10 --repo RUdolf1517/auto-tzim --json updatedAt --jq .updatedAt             # expect today
+```
+
+The line count is the cheapest honest test: the file is 170 lines, the stale body is 122. A body that still has 122 lines
+was not replaced, whatever `gh` printed.
+
+**Checked again on 2026-11-02, after you reported this done — the issue is unchanged as far as this session can see:**
+
+```text
+gh issue view 10 --json updatedAt   → 2026-10-29T20:13:58Z   (unchanged since the issue was filed)
+body                                → 122 lines, byte-identical to the copy fetched before the report
+body vs the file                    → 122 against 170 lines; the file has 48 lines of changes the issue never got
+```
+
+**Two failed attempts on 2026-11-02, both mine, both worth keeping.**
+
+1. `open docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md: no such file or directory`, `$status 1`. The path in my message had
+   been rendered as a markdown link (`[ASSIGNMENT-AT-MVP-DRAFT.md](http://ASSIGNMENT-AT-MVP-DRAFT.md)`); the paste
+   carried the link and not the path.
+2. `fish: No matches for wildcard 'docs/manager/ASSIGNMENT*.md'`, `$status 124`. The glob was right and the working
+   directory was `/` — there is no clone there. I had assumed a checkout without ever checking, twice.
+
+Neither attempt sent anything: `wc -l` still answered 122 both times. The command at the top of this section now depends
+on nothing local, which is the property the first two lacked.
+
+**Correction, same day.** The first version of this section said the body "still says Python package". That was wrong: the
+body mentions `python --version` once, inside a list of toolchain facts, and the phrase "Python package" appears nowhere in
+it. I had read a `grep -ci python` count of `1` as the phrase without checking the line. The finding is unchanged — the
+issue is stale, `updatedAt` proves it — but the description of *how* it is stale was wrong, and a wrong description in this
+file is how the next reader stops trusting the rest of it.
+
+`updatedAt` is the honest test here: GitHub rewrites it on every body edit, and it still carries the filing timestamp. So
+the `gh issue edit` either did not run, or ran against a different repository, or failed with a 403 in your own shell
+too — which would mean the *account* lacks issue write access, not just this session's integration. The command to
+re-run, and the two greps, are above; if `gh` prints `Resource not accessible by integration` on your side as well, the
+fix is in the GitHub app permissions, not in this repository. **The file stays the source of truth** even
+after this: the issue carries a copy, the repository carries the version, and when they disagree the file wins — that is
+stated at the top of the file itself.
 
 ## 6. Branch protection (optional, later)
 
@@ -278,14 +404,16 @@ workflow lands, or the rule will block every pull request.
 
 ## Summary of what changes when
 
-| Action | Needed for | Blocking? |
+| Action | State on 2026-11-01 | Blocking? |
 | --- | --- | --- |
-| 1. Close `tzim#86` as a duplicate of `tzim#85` | not leaving noise in another project's tracker | no |
-| 2. Attach labels | grouping the issue list | no |
-| 3. Repository description | consistency with `tzim` | no |
-| 4. Merge the docs commit in `tzim` | canonical spec home (Q9) | no — a checksummed copy is here |
-| 5. Clear B-01 | **the MVP start** | **yes** |
-| 6. Branch protection | platform-enforced merge rules | no |
+| 1. Close `tzim#86` as a duplicate of `tzim#85` | **done** — both are closed; `#85` shipped in v0.16.0 | — |
+| 2. Attach labels | **done** — `v0.1` on #1…#9, `manager`+`assignment` on #10 | — |
+| 3. Repository description | **done** — description and topics are set | — |
+| 4. Merge the docs commit in `tzim` | open — `handoff/auto-tzim/` still does not exist on `tzim@main` (404) | no — a checksummed copy is here |
+| 5. Clear B-01 | **cleared** — PR #84 merged 2026-10-30, tracker idle | — |
+| 6a. `main` protection, option 1 | **done and verified 2026-11-02** — review rule deleted (`204`), then the real blocker: a required check named `test` that no workflow could report (the repository has none), also deleted. `pulls/16` is `clean`; `branches/main` reports `enforcement_level: "off"`. Follow-up: re-add checks with the **real** CI context when AT-01 lands | — |
+| 6b. Refresh issue #10 body | **open** — you reported it done on 2026-11-02, but `updatedAt` is still 2026-10-29 and the body is byte-identical to the old 122-line copy (the file is 170) | yes, before the coder starts |
+| 7. Retire `tzim#7` label `v0.1` → `v0.2` (AT-07 left the MVP) | open — optional, the assignment file already says so | no |
 
 If any command fails with 403 as well, the token lacks issue/pull-request write scope: that is a GitHub connection
 setting for this conversation, not something to work around in the repository.
@@ -300,6 +428,7 @@ These are the failures that look like "the command is wrong" but are not, in the
 | --- | --- | --- |
 | `gh: command not found` | GitHub CLI is not installed in that terminal (a different machine from this session) | install `gh`, or use the browser (see §2) or the `curl` variant |
 | `syntax error near unexpected token 'do'`, or `end` expected | the terminal runs **fish**; `for … do … done` is bash/zsh syntax | use the `fish` block in §2 |
+| `fish: $? is not the exit status. In fish, please use $status.` | the terminal runs **fish**, where `$?` does not exist | `gh … ; echo status=$status` — and note that the verification blocks in §6a and §6b print a **value** (`null`, a line count) instead of an exit code, so they cannot be read wrong in either shell |
 | `The token in ... is invalid` / `gh auth login` prompt | `gh` is installed but not authenticated | `gh auth login` once; `gh auth status` to confirm |
 | `unknown flag: --add-label` | `gh` older than 2.0 | `gh --version`; upgrade, or use `curl` |
 | `accepts 1 arg(s), received 0` / `received 9` | the loop lost its variable (bad paste) or someone passed several numbers, which `gh issue edit` does not accept | run the one-line-per-issue block |
@@ -312,9 +441,13 @@ Diagnostics to paste into an issue if none of the above fits:
 ```sh
 gh --version
 gh auth status
-echo "$SHELL"
+echo "$SHELL"          # fish users: echo $version, or status --is-interactive
 gh issue edit 1 --repo RUdolf1517/auto-tzim --add-label "v0.1" 2>&1 | head -5
 ```
+
+**Why the commands in §6a and §6b carry no `$?`.** The owner's shell is fish, `$?` does not exist there, and a block that
+silently prints nothing about its own failure is worse than no block. So both verification steps print a value a human can
+read: `null` for the removed review rule, a line count for the replaced issue body. Same command in bash, zsh or fish.
 
 The last line is the whole test: in this session it returns
 `Resource not accessible by integration` (a permission error, which means the syntax is fine); in a shell where it

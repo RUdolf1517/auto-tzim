@@ -7,6 +7,68 @@ Nothing has been released. There is no version of `auto-tzim` that can be instal
 
 ## [Unreleased]
 
+### Fixed — the leftovers of the sweep, and the audit closed (2026-11-02)
+
+A re-read of every document against the decisions, instead of trusting the sweep that produced them. It found four
+things that were still wrong, and they are worth naming because each one is the kind of error that survives review:
+
+- **The v0.1 network claim was alive in nine files.** [README](README.md), [SECURITY](SECURITY.md),
+  [guarantees](docs/guarantees.md) (A2 and A6), [architecture](docs/architecture.md), [faq](docs/faq.md),
+  [CONTRIBUTING](CONTRIBUTING.md) and [cli](docs/cli.md) §2.11 still described the single `update-check` request that
+  [D-28](docs/manager/DECISIONS.md) removed, and [config](docs/config.md) still said a key was "used only by
+  `update-check`". `update-check` is now documented as a command that **does not exist in v0.1** and exits `2` if typed,
+  which is what AC-9 and corpus `W-02` already asserted. The documents disagreed with the gate that tests them; the gate
+  was right.
+- **Python idioms had survived in five acceptance rows.** `shell=False`, `stdin=DEVNULL`, `import urllib.request`,
+  `socket.socket`, `os.replace` and "no `pty` import" were still the evidence demanded by AC-5, INV-8, INV-14 and INV-15
+  after [D-33](docs/manager/DECISIONS.md). They now demand Rust: `std::process::Command` with one `.arg()` per item, no
+  `sh -c`, `Stdio::null()`, a source check that keeps `std::net` behind one test guard, and a planted
+  `TcpStream::connect` as the control that proves the check can fail.
+- **The assignment still told the coder to build SQLite.** Step 5 of
+  [ASSIGNMENT-AT-MVP-DRAFT](docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md) said "SQLite state" and `shell=False` — in the file
+  the coder is meant to work from, one day after [D-35](docs/manager/DECISIONS.md) removed the database. Fixed, and the
+  D-35 pointer is now explicit.
+- **`reason_code` was decided but never written down.** [D-27](docs/manager/DECISIONS.md) surfaced it as `reason`;
+  `cli.md` did not mention the field at all. It is now in §2.8 and §3, and corpus `A-12` gives an unknown code a case.
+
+### Added — the 2026-11-01 audit is closed, with the check behind each finding
+
+[docs/audits/2026-11-01-tzim-v0.16.1.md](docs/audits/2026-11-01-tzim-v0.16.1.md) carries `Status: closed` and a
+close-out table mapping all ten findings to the document that now carries each one. The finding text is unchanged, as
+that folder's rule requires. The close-out says what it does not claim: **nothing was executed**, so it closes actions,
+not behaviour — the pinned binary in AT-08 is the first thing that can test the contract.
+
+Three corpus rows were added the same day — `A-11` (`--capabilities`: good document, wrong capability schema, wrong
+result schema, flag rejected, missing key), `A-12` (an unknown `reason_code` passed through, never mapped) and `X-17`
+(`EPIPE` does not replace an earned exit `1`) — and two were reworded (`A-01` now takes its version from the pin file,
+`R-01` now names the prompting child it stands for). Adding rows to a frozen corpus is allowed here for one reason only:
+**there is no code and no result yet**, so nothing is being edited *after* a result is known. The reason is written in
+the commit and in the close-out.
+
+### Resolved — `main` protection is machine gates only, and the blocker was a placeholder
+
+[D-24](docs/manager/DECISIONS.md) is applied (2026-11-02). Two deletions, and the second is the instructive one:
+
+- the **review requirement** went first, because it returned `403` to be satisfied: GitHub forbids approving your own pull
+  request at every permission level, so the rule could only end in `--admin`;
+- the pull request stayed `blocked` afterwards, with `review_decision: null`. My note had said a blocked pull request with
+  no configured checks "can only come from a required review" — the `204` disproves it, which is why the account of this
+  is in the file with the error intact;
+- the admin dump showed why: a required status check named **`test`**, in a repository with **zero workflows**. Nothing
+  could ever report it, so every pull request against `main` was blocked permanently. Deleted too.
+
+Verified from this session rather than accepted: `pulls/16` answers `mergeable_state: clean`, and `branches/main` reports
+`required_status_checks.enforcement_level: "off"` with the branch still `protected: true`. **Standing obligation:** when
+AT-01 lands CI, required checks come back with the context the workflow actually reports — a check nobody reports protects
+nothing, which is exactly what this rule demonstrated.
+
+### Still open — the assignment issue, and two commands of mine that never ran
+
+Issue #10 is still the 122-line 2026-10-29 body; the file is 170. Two attempts to send it failed on my commands, not on
+the owner's shell: the first carried a path that the chat rendered into a markdown link, the second used a glob from `/`
+where there is no clone. [OWNER-ACTIONS](docs/manager/OWNER-ACTIONS.md) §6b now leads with a form that needs neither a
+clone nor a working directory — it fetches the body from the contents API and pipes it to `gh issue edit`.
+
 ### Added — charter v0.2 and the MVP issue set (2026-10-29)
 
 - `MANAGER-SPEC.md` updated to the owner's **version 0.2**: nineteen invariants (invariant 2 rewritten around a read-only
@@ -33,6 +95,22 @@ Nothing has been released. There is no version of `auto-tzim` that can be instal
 - [EVIDENCE-PROTOCOL.md](docs/manager/EVIDENCE-PROTOCOL.md): how a handoff is verified — SHA binding, CI runs, artifact
   checksums, row reconciliation with `jq`, byte evidence, the read-only-plan proof, the executed exit-code matrix, six
   negative controls the reviewer performs personally, and the four claim marks.
+
+### Changed — no C in the build, and state is plain files
+
+`rusqlite` is gone ([D-35](docs/manager/DECISIONS.md)); state and history are JSONL files and atomically replaced JSON
+under `AUTO_TZIM_HOME`. The trade is stated rather than implied: no SQL queries and no cross-file transactions, in exchange
+for a build with no C in it and a history a user can read with `cat`. The three primitives that replace a database —
+`atomic_write`, `append_line`, `create_exclusive` — and the single-writer rule they rest on are in
+[state.md](docs/state.md) §2. Recovery, retention, schema versioning and the exit code for corrupt state are unchanged; the
+fixture cases `L-04`/`L-06` now describe a malformed JSONL line instead of a corrupt database.
+
+### Changed — `cargo install`, and the crate keeps its hyphen
+
+[D-36](docs/manager/DECISIONS.md): distribution is GitHub releases + Homebrew + `cargo install auto-tzim`. The CLI crate is
+renamed from `auto-tzim-cli` to `auto-tzim` so that the published name produces the right binary — a crate name is forever,
+so it is decided before publication rather than after. A `cargo`-installed binary is updated by asking `cargo`, not by
+replacing the file, because cargo keeps its own bookkeeping in `.crates.toml`.
 
 ### Changed — the implementation language is Rust
 

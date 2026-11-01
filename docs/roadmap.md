@@ -15,7 +15,7 @@ exactly one new way to do damage, and that way is the thing tested before the ve
 | --- | --- | --- | --- |
 | **v0.1** | A person points it at one folder, reads a plan, approves it, and gets smaller files | none yet — nothing runs without a person | 17 acceptance rows, 23 invariants at one final SHA, macOS + Linux |
 | **v0.2** | It runs on a timer, a TUI shows what it did, and it tells you when `tzim` has a new version | it acts while nobody is watching | no overlapping runs, forced-schedule test on both platforms, no socket outside one documented request |
-| **v0.3** | It can update `tzim` itself, with the lock held and the result verified | it replaces the binary its own safety depends on | a real in-place upgrade from the previous version, verified by version, hash and a smoke run |
+| **v0.3** | It updates both binaries — `tzim` and itself — in either of two modes: ask first, or don't | it replaces the binary its own safety depends on, and then its own code | a real in-place upgrade of each, verified by version, hash, `doctor` and a smoke run, plus a revert that is a tested path |
 | **v0.4** | A Qt window over the same core | a second front door that can drift from the first | the GUI contains no discovery, subprocess or updater code |
 | **v1.0** | The contract stops moving | users' automation starts depending on names we can no longer change | two consecutive minors with no contract change, no open Medium finding |
 
@@ -62,7 +62,7 @@ the argv and the history, and a notification when `tzim` itself has a newer rele
   default. `pause`/`resume`/disable/remove genuinely change OS state. A missed run does not cause a catch-up storm: the
   timer fires `run --once` and nothing else, so `run --once` keeps exactly one implementation and the scheduler has no
   eligibility rules of its own.
-- **TUI** (Textual, optional extra): folder and profile editing, the plan with its exact argv, current file and counters,
+- **TUI** (`ratatui`, **a separate binary** `auto-tzim-tui`, D-34): folder and profile editing, the plan with its exact argv, current file and counters,
   history, pause/resume, and the update notification. It reads and writes through the core API only. Dangerous changes —
   `transforms`, cloud sync, a scheduled update — need a separate confirmation screen whose default is **No**.
 - **`update-check` returns** (D-28 deferred it here): one documented `GET`, notify only, 24 h cache, exit `5` on failure,
@@ -81,36 +81,58 @@ scheduler state change verified against the real OS (`launchctl print`, `systemc
 **What would stop it:** a platform where a user timer cannot be paused reliably — then that platform ships without the
 scheduler rather than with a scheduler that lies about being paused.
 
-## 4. v0.3 — controlled update: let it touch its own dependency
+## 4. v0.3 — controlled update: it touches both binaries
 
-**A user gets:** an upgrade of `tzim` performed by the tool, with the lock held, the old identity recorded and the new one
-verified.
+**A user gets:** `tzim` and `auto-tzim` kept up to date by the tool — either after they approve, or without being asked,
+according to one setting they chose (D-31, D-32).
 
 **In scope.**
 
-- Update only through an explicitly configured official Homebrew tap/formula; the name is never guessed.
-- Before: no active run, the global lock held, the old version and binary identity recorded.
-- After: version and capabilities re-checked, the binary hash recorded, and a read-only smoke run before anything is
-  processed. A failed update leaves a clear log and runs no compression.
-- `update_policy = "scheduled"` becomes available only after one successful manual update, as a separate opt-in.
-- `auto-tzim` **never** updates itself through this mechanism.
+- **Two targets, one operation:** the `tzim` binary the installation depends on, and `auto-tzim` itself. `tzim` first,
+  because if the pair breaks we still have a working half to say so.
+- **Two modes**, `update_mode = "confirm" | "auto"`, separate from the optimisation `mode` (D-29). A single switch would
+  decide two unrelated things at once: "optimise without asking" says nothing about "replace the program".
+- **One mechanism, two binaries** (D-31, D-33): both `tzim` and `auto-tzim` are static executables, so both are updated the
+  same way — download beside the target, verify SHA-256, `rename` over it, verify by running it, keep the old inode until
+  the new one has answered. The only distinction is ownership: a Homebrew-installed binary is updated by asking `brew`,
+  and an installation whose provenance cannot be established is **refused** with the command to run by hand.
+- **One lock, both directions:** no update while a run is active, no run while an update is in progress.
+- **Verified after every update:** `--version`, `doctor`, the adapter probe against `tzim`, and a read-only smoke run on a
+  bundled fixture.
+- **A revert that is a tested path**, not a claim: a failed verification reinstalls the previous version through the same
+  installer and records `reverted`. This is the first version allowed to use the word "rollback", because it is the first
+  one where the code path exists and has been run.
+- **Never a downgrade** unless asked; **never a contract jump** in `auto` mode (a major version, or a change to a
+  documented status, exit code or config field) — that one always asks, in both modes.
 
-**Out of scope:** automatic rollback. It is not claimed until it exists and has been tested; until then an update that
-fails leaves a working old binary and a log.
+**Out of scope:** signing (integrity is SHA-256 against the published `SHA256SUMS`, which protects against corruption and a
+broken mirror, not against a compromised publisher — [SECURITY.md](../SECURITY.md) says so plainly); updating anything the
+user installed by other means; `auto-tzim` updating `tzim` while `tzim` updates itself.
 
-**Gate.** An isolated environment with the previous release installed, upgraded the same way a user would be, verified by
-version, hash, adapter probe and a smoke run (charter §11.3). Checking the formula on GitHub is not evidence.
+**Gate — pre-registered now, judged later.** Written before the code so the criteria cannot be shaped by it:
 
-**What would stop it:** no reliable way to detect that a package manager changed the binary under a running process —
-then the feature ships as "detect and tell the user" instead of "perform".
+1. `SIGKILL` during each phase of the update (download, verify, install, verify-after) leaves a **working** installation in
+   every case, proven by running it afterwards.
+2. A checksum mismatch aborts before anything is installed, with the artifact discarded.
+3. A redirect to an undocumented host aborts the update.
+4. The new version fails `doctor` ⇒ the old one is reinstalled and the history row says `reverted`; the tool then works.
+5. An update attempted during a run, and a run attempted during an update, both refuse with exit `6`/`8` respectively.
+6. An installation with unknown provenance is refused, and the refusal names the command to run.
+7. `auto` mode performs rules 2–5 identically to `confirm`; the only difference between the modes is the question.
+8. The isolated end-to-end test of charter §11.3, run for each target: previous release installed, updated the way a user
+   would be, version and behaviour verified.
+
+**What would stop it:** a target platform where the installer cannot be driven non-interactively and idempotently — then
+that platform ships "detect and tell the user" instead of "perform", as v0.2 does.
 
 ## 5. v0.4 — Qt GUI: a second front door
 
 **A user gets:** native folder pickers, a preview of the plan, status and history tables, and pause/scheduler controls.
 
-**In scope.** PySide6, a thin wrapper over the same core. Packaging, signing, notarisation and sandbox entitlements are
-documented before the release, not after. The GUI does not start itself after installation and needs no administrator
-rights.
+**In scope.** A **separate binary in its own package** (`auto-tzim-qt`, D-34), built on the same core crate. It ships
+without the CLI and without the TUI: a user who wants only the window downloads only the window. Packaging, signing,
+notarisation and sandbox entitlements are documented before the release, not after; the GUI does not start itself after
+installation and needs no administrator rights.
 
 **Out of scope.** Any file discovery, subprocess handling, adapter logic or updater code outside `core/`. A GUI that
 duplicates core logic is the failure mode this version is gated against.
@@ -132,15 +154,21 @@ first thing a premature `1.0` buys is the right to break someone else's automati
 Not "not yet" — **not planned**, and each of these is refused at the design level, not deferred:
 
 Own codecs or repackers; a `--force` flag; an undo or backup store (see [limitations](limitations.md) §1 for why the
-honest version of that promise is not the one people expect); cloud sync; self-update of `auto-tzim`; a background agent
-with a menu-bar icon; a container image; any change inside the `tzim` repository; Windows before the safety invariants are
-proven on it.
+honest version of that promise is not the one people expect); cloud sync; a background agent with a menu-bar icon; a
+container image; any change inside the `tzim` repository; Windows before the safety invariants are proven on it.
+
+Self-update used to be on this list and is not any more: the owner put it in v0.3 (D-31). What remains refused for good is
+the *way* people usually implement it — a `curl | sh` that executes a download, or replacement of files a package manager
+owns. Downloading, verifying a checksum and renaming a binary we installed ourselves is a different thing, and it is the
+only form this project will ship.
 
 ## 8. What could move the order
 
 - **A reported data-safety defect** stops everything else until it is closed. Nothing outranks it.
 - **A `tzim` contract change** — a new capabilities schema, a removed flag — can pull a compatibility release forward, even
-  as a patch, if it would otherwise make a shipped version refuse to work.
+  as a patch, if it would otherwise make a shipped version refuse to work. The same applies to a security release of
+  `auto-tzim` itself: if the fix cannot wait for v0.3's machinery, it ships as a patch and the update is done by the user
+  by hand, as v0.1 and v0.2 already require.
 - **`transforms`**: `--strip-metadata` and `--fits-tile` stay out until a real-binary test proves preservation for each.
   A FITS-enabled `tzim` build makes that testable, and it could arrive before v0.2 on its own merits.
 - ~~A `tzim` capability API~~ — **it shipped** in v0.16.0 and v0.1 consumes it (D-26). The question it left open is

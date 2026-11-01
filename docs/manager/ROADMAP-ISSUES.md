@@ -59,8 +59,9 @@ same `run --once` and has no eligibility rules of its own, and the mode gate of 
 
 ### AT-01 · Repository and package bootstrap
 
-**Scope.** A Python package `auto_tzim` with `core/` and `cli/` only (the `tui/` and `qt/` directories are *not*
-created), an entry point `auto-tzim`, `pyproject.toml`, CI on `ubuntu-latest` and `macos-latest` for Python 3.12 and
+**Scope.** A Rust workspace (D-33) with `auto-tzim-core` and `auto-tzim-cli` only (the `tui` and `qt` crates are *not*
+created), a `[[bin]]` named `auto-tzim`, `Cargo.toml` + committed `Cargo.lock` + `rust-toolchain.toml`, `cargo-deny`
+configuration, CI on `ubuntu-latest` and `macos-latest` on the pinned toolchain, and
 3.13, and a `lockfile` job that fails on an unpinned dependency.
 
 **Acceptance.** Clean checkout installs; `--help` and `--version` run on both platforms with exit `0`; an unknown
@@ -165,7 +166,8 @@ Removing it makes the privacy page one paragraph instead of a section with an ex
 (timeouts, proxies, rate limits, TLS), and lets `invariant 15` become absolute: *no request, of any kind, ever*.
 
 **What replaces it in the MVP.** Nothing — that is the point. The only work is negative, and it is still tested: AC-9 now
-asserts that **no command opens a socket**, that `urllib`/`socket`/`http` are never imported, and that `update-check`
+asserts that **no command opens a socket** — structurally, because no crate in `Cargo.lock` can open one, and by running
+every command with no route and no DNS — and that `update-check`
 does not exist. Exit code `5` is reserved and unused, so v0.2 can land under the original rules without renumbering.
 
 **When it returns (v0.2):** one documented `GET`, notify only, 24 h cache, exit `5` on failure, opt-out, and the privacy
@@ -209,7 +211,8 @@ installed version. A formula review alone is not evidence.
 
 ## Stage 4 — v0.4 (not assigned)
 
-Qt GUI (PySide6) as a thin wrapper over the same core, dangerous changes behind a confirmation whose default is **No**,
+Qt GUI as a **separate binary and package** built on the same core crate (D-34), dangerous changes behind a confirmation
+whose default is **No**,
 packaging and notarisation documented before a release.
 
 ## Explicitly out of every stage

@@ -1,59 +1,90 @@
 # Dependencies
 
-> **Status: specification, no implementation.** Nothing is installed yet; this page records what the MVP intends to
-> depend on and what it refuses to depend on.
-> Related: [architecture](architecture.md) · [privacy](privacy.md) · [releases](releases.md)
+> **Status: specification, no implementation.** Nothing is built yet; this page records what the MVP intends to depend on
+> and what it refuses to depend on.
+> Related: [architecture](architecture.md) · [privacy](privacy.md) · [releases](releases.md) · [THIRD-PARTY](../THIRD-PARTY.md)
 
-The rule: the standard library first, and a new dependency needs a sentence explaining what it does that the standard
-library does not. A dependency that phones home, runs install-time code, or drags in a build toolchain is refused
+The rule: **the standard library first, and a new crate needs a sentence explaining what it does that `std` does not.** A
+dependency that phones home, runs code at build time on the user's machine, or drags in an async runtime is refused
 regardless of convenience.
 
-## 1. Runtime
+The stack was changed from Python to Rust on 2026-11-01 ([D-33](manager/DECISIONS.md), [CONFLICTS C-5](spec/CONFLICTS.md)).
+The counting rule that comes with that: a Rust dependency is one line in `Cargo.lock` on disk, while a Python dependency
+could arrive through the environment — which is the property this page is built on now.
 
-| Dependency | Why | Alternative considered | Refused because |
+## 1. Runtime — the shipped binary
+
+| Crate | Why | What `std` cannot do | Refused alternative |
 | --- | --- | --- | --- |
-| `tomllib` (stdlib, 3.11+) | reads TOML | `toml`, `tomlkit` | stdlib is available and read-only is all we need for reading |
-| `tomli-w` (D-15, manager default) | writes TOML; `tomllib` cannot | hand-rolled writer | A hand-written TOML serialiser is a correctness risk in the one file that defines what may be touched; `tomli-w` is small, pure Python, no dependencies, no install hook. Alternative: write JSON — refused, because the specification fixes TOML |
-| `sqlite3` (stdlib) | state and history | JSON files | transactions, a real schema, and crash recovery are the point of the state layer |
-| ~~`urllib.request`~~ | — | — | **removed from v0.1** (D-28): the MVP makes no network request. It returns in v0.2 with `update-check`, using the standard library exactly as before |
-| `subprocess`, `signal`, `os`, `stat`, `fnmatch`, `hashlib`, `json`, `logging` (stdlib) | everything else | — | — |
-| ~~`pty`~~ | — | — | **refused**: no PTY is ever allocated (charter §6-12, D-21) |
+| `clap` (derive) | argv parsing, help text, `--` handling | no argument parser in `std`; hand-rolling one is how a flag like `--json` becomes a filename | a hand-written parser; a shell wrapper |
+| `serde` + `toml` | the documented TOML config, strict schema, unknown fields rejected | no TOML reader in `std` | a hand-written TOML parser — a correctness risk in the one file that decides what may be touched |
+| `serde_json` | the documented NDJSON output | no JSON in `std`; string-building JSON is how output becomes unparseable | manual `format!` construction |
+| `rusqlite` (`bundled`) | state and history, the schema this specification documents | no SQLite in `std` and none guaranteed on the host; `bundled` compiles the library into the binary | a system SQLite dependency (different versions on every host) |
+| `sha2` | binary identity, record hashes | no SHA-256 in `std` | shelling out to `shasum`/`sha256sum` — a shell dependency and a locale hazard |
+| `thiserror` | typed errors that map to exit codes | `std` gives no derive; without typed errors the exit-code contract becomes string matching | `anyhow` everywhere (an opaque error is not a code) |
 
-No codec, no image library, no archive library, no `shell=True` wrapper: those belong to `tzim`.
+That is the entire runtime set: six crates, all of them boring, none of them capable of opening a socket. The `bundled`
+SQLite is the only C compilation, and it happens at build time on the release machine, never on the user's.
 
-## 2. Development only
+**Not a runtime dependency, deliberately invoked:** `tzim`. It is a separate MIT-licensed executable the user installs; we
+run it as a child process and never link, vendor or import it. That process boundary is the licence boundary.
 
-| Dependency | Why | Notes |
+**Refused outright:** any async runtime (`tokio`, `async-std` — the runner is sequential, and a second execution model is a
+second set of failure modes to test); any HTTP crate (`reqwest`, `ureq`, `hyper`, `curl`) while v0.1 makes no request;
+any crate that shells out or executes downloaded content; any crate whose build script downloads something at build time.
+
+**How these refusals are enforced, not just stated:** `cargo deny` fails the build on a licence outside the allow-list, a
+duplicate crate, a banned crate name, or a source outside crates.io; `cargo tree` in CI asserts that no crate in the graph
+can open a socket; `Cargo.lock` is committed and reviewed as part of the pull request, so an added dependency is a visible
+line rather than an accident of installation.
+
+## 2. Build and test only
+
+| Crate | Why | Notes |
 | --- | --- | --- |
-| `pytest` | the test runner | pinned with a hash |
-| `pytest-timeout` | fails a hanging test instead of hanging CI | optional; the value is that the suite proves timeouts rather than inheriting the runner's |
-| `ruff` | linting and formatting | configuration lives in the repository, not in a comment |
-| `mypy` (or `pyright`) | typing | one of them, not both, and only if the annotations are load-bearing |
+| `assert_cmd` + `predicates` | black-box CLI tests: spawn the binary, assert on stdout, stderr and the exit code | the exit-code contract is tested the way a user sees it, not through an internal function |
+| `tempfile` | isolated fixture directories per case | every case gets its own tree; no test writes into the repository |
+| `serde_json` (dev) | parsing our own NDJSON back, so a test asserts a schema rather than a substring | a test that greps stdout proves nothing about JSON |
+| `insta` (optional) | snapshots of the proposal text and the human output | optional: a snapshot that nobody reads is a rubber stamp |
 
-None of these is imported by the released package.
+`cargo test` is the runner; `cargo fmt --check`, `clippy -D warnings` and `cargo deny check` are CI gates. Nothing in this
+list ships in the binary.
+
+**The harness is part of the workspace**, not an external tool ([testing-harness](testing-harness.md)): the fake `tzim`,
+the case runner and the pinned-binary fetcher are one `auto-tzim-harness` binary, so `run-case <ID>` is a command anyone can
+reproduce without installing a language runtime.
 
 ## 3. Later stages (not now)
 
-| Dependency | Stage | Why then |
+| Crate | Stage | Why then |
 | --- | --- | --- |
-| `textual` | v0.2 | TUI; optional extra, never required for the CLI |
-| `PySide6` | v0.4 | Qt GUI; optional extra, with its own packaging story (signing, notarisation, entitlements) |
+| `ratatui` + `crossterm` | v0.2 | the TUI, as a **separate binary** (`auto-tzim-tui`), never a mode of the CLI (D-34) |
+| `cxx-qt` | v0.4 | the Qt app, as a **separate binary and its own package** (`auto-tzim-qt`), linking `auto-tzim-core` (D-34) |
 
-Both are deliberately outside the MVP: an optional GUI that becomes a mandatory dependency of the CLI is a regression
-in the only thing this tool promises — being a small, auditable orchestrator.
+Both stay outside the MVP on purpose: a front door that becomes a mandatory dependency of the CLI is a regression in the
+only thing this tool promises — being a small, auditable orchestrator.
+
+The Qt artifact is the one place where Rust costs something visible: it needs a Qt runtime and a packaging story that
+`PySide6` would have given for free. D-34 answers that by separating the artifact rather than by pretending the cost is
+small.
 
 ## 4. Pinning and verification
 
-- Runtime dependencies are pinned to exact versions with hashes in a requirements file; a CI job fails when an
-  unpinned dependency appears (the `tzim` repository uses the same pattern with a `lockfile` job).
-- Test-only dependencies are pinned in a separate file so that a test update cannot silently change the shipped
-  package.
-- Every dependency is listed in a third-party notice with its licence when the first release happens.
-- A dependency update is a reviewed change with a changelog entry; a silent `pip install -U` in CI is not allowed.
+- `Cargo.lock` is committed; a build without it (`--locked` in CI) is a failed build.
+- The toolchain is pinned in `rust-toolchain.toml`; a toolchain bump is a minor release and is recorded in the changelog,
+  because it can change code generation.
+- `cargo deny` enforces the licence allow-list, the crate ban list and the registry.
+- A dependency addition is a pull-request line in `Cargo.lock` plus an entry in this table; a crate that is not in the
+  table is not accepted, even if the code compiles.
 
 ## 5. What would make us add a dependency
 
-1. A correctness argument the standard library cannot meet (the TOML writer is the only current example).
-2. A cross-platform behaviour the standard library does not abstract (for example reliable file locking, if the
-   platform-specific code becomes larger than the dependency).
-3. Never: convenience, "it is standard practice", or a transitive dependency of a transitive dependency.
+A dependency is accepted when all four hold: `std` or an existing crate cannot do it without a correctness risk; it is
+maintained; its licence is on the allow-list; and it can be explained in one sentence on this page. Convenience is not on
+the list, and neither is "it saved twenty lines".
+
+## 6. What there is no longer
+
+`tomli-w`, `pytest`, `pytest-timeout`, `ruff`, `mypy`/`pyright` and `urllib.request` left with the Python stack (D-33), and
+`urllib` had already left with D-28 when the MVP gave up its network request. Their replacements are in the tables above;
+the requirement they existed for — a strict config, a real test runner, a linter, a licence check — is unchanged.

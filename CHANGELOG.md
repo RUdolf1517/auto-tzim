@@ -34,6 +34,23 @@ Nothing has been released. There is no version of `auto-tzim` that can be instal
   checksums, row reconciliation with `jq`, byte evidence, the read-only-plan proof, the executed exit-code matrix, six
   negative controls the reviewer performs personally, and the four claim marks.
 
+### Changed — the implementation language is Rust
+
+The owner's decision, 2026-11-01 ([D-33](docs/manager/DECISIONS.md)): `auto-tzim` is a Rust workspace, not a Python
+package. `SPEC.md` §4.1 recommends Python 3.12+, and it is **not edited** — it is pinned with a recorded SHA-256, so the
+override is recorded as a decision and the conflict is filed as [C-5](docs/spec/CONFLICTS.md). Every document that
+described the Python stack was rewritten the same day: dependencies, releases, testing harness, contributing,
+architecture, third-party notices, and the acceptance rows that asserted "no `urllib` import".
+
+What the change buys, concretely: installation is a static binary with no interpreter and no environment to corrupt;
+self-update becomes the same atomic `rename` the `tzim` repository already uses, instead of surgery on `site-packages`;
+and the zero-network invariant stops being a test and becomes a property of the artifact — there is no HTTP client in
+`std`, so an outbound request would have to appear as a dependency in `Cargo.lock`, where CI sees it.
+
+What it costs: the Qt GUI, which loses mature `PySide6` and gains `cxx-qt`. [D-34](docs/manager/DECISIONS.md) answers that
+by splitting the artifact rather than by pretending the cost is small — three front doors (CLI, TUI, Qt), three binaries,
+three installs, one core crate.
+
 ### Changed — the roadmap is versioned
 
 [roadmap.md](docs/roadmap.md) rewritten around versions instead of features: each one states what a user gets, the new

@@ -42,7 +42,7 @@ gh run view <run-id> --repo RUdolf1517/auto-tzim --log > /tmp/run-<id>.log   # k
 suite that must run subprocess tests; the job's `head_sha` is not the claimed SHA; or the log shows a `continue-on-error`
 swallowing a red step.
 
-Cross-check the platform matrix: at minimum `ubuntu-latest` **and** `macos-latest`, Python 3.12 and 3.13. A green job on
+Cross-check the platform matrix: at minimum `ubuntu-latest` **and** `macos-latest`, on the pinned toolchain. A green job on
 one platform is half the claim.
 
 ## 2. Artifacts: what was attached, and does it belong here

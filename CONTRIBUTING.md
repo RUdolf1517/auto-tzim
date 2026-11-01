@@ -69,10 +69,13 @@ it stops merges and releases until reproduced and fixed. Include the `auto-tzim`
 ## 7. Building and running (once the code exists)
 
 ```sh
-python3.12 -m venv .venv && . .venv/bin/activate
-pip install -e '.[dev]'          # planned; pinned in requirements files
-pytest -q
-ruff check . && ruff format --check .
+cargo build --locked              # workspace: core, cli, harness
+cargo test --locked               # unit, integration, and the black-box CLI suite
+cargo fmt --check && cargo clippy --all-targets -- -D warnings
+cargo deny check                  # licences, banned crates, sources
+cargo run -p auto-tzim-harness -- run-case M-01    # one corpus case, by id
 ```
 
-Until the package exists, these commands are the plan, not instructions.
+Until the workspace exists, these commands are the plan, not instructions. The language is Rust
+([D-33](docs/manager/DECISIONS.md)); `SPEC.md` §4.1 still recommends Python and is overridden, not edited
+([CONFLICTS C-5](docs/spec/CONFLICTS.md)).

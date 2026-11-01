@@ -34,7 +34,7 @@ Gates: GATES.md (17 acceptance rows, 23 invariants) · Corpus: FIXTURE-CORPUS.md
 
 ## 2. CI
 
-| Job | Platform | Python | Status | Run id | Head SHA |
+| Job | Platform | Toolchain | Status | Run id | Head SHA |
 | --- | --- | --- | --- | --- | --- |
 | test | ubuntu-latest | 3.12 | | | |
 | test | macos-latest | 3.12 | | | |

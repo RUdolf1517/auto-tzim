@@ -30,8 +30,8 @@
 
 ## 3. The fake `tzim`
 
-A small program (or a Python entry point invoked through a wrapper script) with a controlled behaviour table selected
-by an environment variable or a config file. It must be able to:
+A small program — a Rust helper binary in the workspace, built by `cargo`, not a script that needs an interpreter — with a
+controlled behaviour table selected by an environment variable or a case id. It must be able to:
 
 - emit each status, with and without a note, with and without an error object;
 - exit `0`, `1`, `2`, `3`, `4`, and die by signal;

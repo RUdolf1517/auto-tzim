@@ -76,5 +76,5 @@ repository is `coder-reported` yet, because no code exists.
   `release-assets.githubusercontent.com`, which this session cannot reach, and no Rust toolchain is available.
   Every `tzim` claim is therefore `source-inspected` against the tree at `d4e4597`, not `tool-executed`.
   Behavioural confirmation of the pinned binary is an MVP task (AT-08) and a CI gate.
-- The local interpreter is Python 3.11.2; the project targets 3.12+. That is an analysis detail only — CI must
+- The language moved to Rust on 2026-11-01 (D-33); the earlier Python notes in this log are history. CI must
   pin its own interpreter.

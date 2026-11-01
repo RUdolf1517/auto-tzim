@@ -29,7 +29,7 @@ and the exit-code contract of D-18/D-19 proven by real invocations. No network, 
 
 **Required implementation:**
 
-1. `auto_tzim` package with `core/` and `cli/` only; no `tui/`, no `qt/` (#1).
+1. Rust workspace (D-33) with `auto-tzim-core` and `auto-tzim-cli` only; no `tui`, no `qt` crate (#1).
 2. TOML config v1 with strict validation, canonical roots, forbidden-root / `AUTO_TZIM_HOME` / cloud-sync checks,
    permissions, atomic write, corrupt-config safety, `config validate` and the `folder` commands (#2).
 3. `lstat` discovery and stability per [`docs/safety.md`](../safety.md) §2, and the candidate plan of D-04 with a plan
@@ -84,7 +84,8 @@ not discussed.
 **Required raw artifacts:** CI run IDs per platform at the final head with logs; the command/exit-code matrix with raw
 stdout/stderr and `$?`; per-file rows for the fixture corpus including skips and failures; before/after SHA-256 for every
 corpus file; the invocation counter for every scan and apply case; the pinned artifact's SHA-256 and the matching
-`SHA256SUMS` line; SQLite dumps for the recovery scenarios; fake-`tzim` invocation logs; `python --version`,
+`SHA256SUMS` line; SQLite dumps for the recovery scenarios; fake-`tzim` invocation logs; `rustc --version` and the pinned
+toolchain,
 `uname -a`, the `auto-tzim` head SHA and the `tzim` identity per platform.
 
 **Documentation to update:** `README` (installation, first read-only plan, what is not promised), config reference

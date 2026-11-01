@@ -13,19 +13,20 @@ Date of this board: **2026-10-29** (updated after the owner's charter v0.2).
 | Specification copies | `SPEC.md` v0.1 (from `tzim`), `MANAGER-SPEC.md` **v0.2** (owner, 2026-10-29) — [provenance](../spec/PROVENANCE.md), [conflicts resolved](../spec/CONFLICTS.md) |
 | Charter v0.2 findings | P-01/P-02/P-03 **decided by the owner** (charter §16); recorded as D-01…D-05, D-18, D-19 |
 | GitHub issues AT-01…AT-09 | **created** — [#1](https://github.com/RUdolf1517/auto-tzim/issues/1) … [#9](https://github.com/RUdolf1517/auto-tzim/issues/9) |
+| Product decisions 2026-11-01 | Four, all recorded: read `--capabilities` (D-26), surface the refusal `reason` (D-27), no network in v0.1 (D-28), and **two modes sharing one install path** (D-29) |
 | Consolidated assignment | **prepared and filed** as [#10](https://github.com/RUdolf1517/auto-tzim/issues/10); **B-01 cleared on 2026-10-30** (`tzim` PR #84 merged, tracker idle, v0.16.1 released 2026-11-01). Start now waits on the contract drift below, not on the charter |
-| Upstream request | [RUdolf1517/tzim#86](https://github.com/RUdolf1517/tzim/issues/86) — capabilities + structured reasons; not a dependency |
-| Acceptance matrix | [GATES.md](GATES.md) — 13 acceptance rows, 19 invariants, pre-registered |
+| Upstream request | [RUdolf1517/tzim#85](https://github.com/RUdolf1517/tzim/issues/85) — capabilities + structured reasons. **Delivered**: implemented in `tzim` PR #91, shipped in v0.16.0. My duplicate #86 is closed |
+| Acceptance matrix | [GATES.md](GATES.md) — **17 acceptance rows, 23 invariants**, pre-registered |
 | Risk register | [RISK-REGISTER.md](RISK-REGISTER.md) — 26 rows, four of them promoted to charter requirements in v0.2 |
-| Product documentation | 16 documents under `docs/`, all marked "specification, no implementation" |
+| Product documentation | 20 documents under `docs/`, all marked "specification, no implementation"; 52 files on `main` in total |
 | Product code in this repository | none, by design |
 | Documentation on `main` | **merged** — PR [#11](https://github.com/RUdolf1517/auto-tzim/pull/11), merge commit `1328919`, 45 files. Landed with `--admin` because `main` requires a review and GitHub forbids self-approval — see [OWNER-ACTIONS](OWNER-ACTIONS.md) §6a |
 | Decisions awaiting owner | D-07 (update source), D-09 (hash cap), D-15 (dependency pin) — manager defaults in force |
 | Release readiness | not applicable; nothing is releasable and nothing claims to be |
 | Owner actions needed | [OWNER-ACTIONS.md](OWNER-ACTIONS.md) — remaining: repo description and topics, the docs-only `tzim` PR for the spec pair, and the deferred §6a decision. Nothing here blocks the MVP any more |
 | Contract drift | **[open](https://github.com/RUdolf1517/auto-tzim/blob/main/docs/audits/2026-11-01-tzim-v0.16.1.md)** — `tzim` v0.16.0 shipped `--capabilities`, `reason_code` and JSON schema 2; ten findings, six severity A. Three need an owner answer ([Q11–Q13](QUESTIONS-TO-OWNER.md)) |
-| Known defect I introduced | I filed `tzim#86` without re-listing the open issues; **`tzim#85` already covered the same request** (created 19:59Z, twelve minutes earlier, and better argued). #85 is canonical; #86 must be closed as a duplicate — one command in [OWNER-ACTIONS.md](OWNER-ACTIONS.md) §1. #10's reference to #85 was right all along |
-| Known GitHub-permission limits | The integration may create issues and labels, but every edit, comment and label-attach call returns HTTP 403 "Resource not accessible by integration", so the labels `v0.1` (on #1…#9), `assignment` and `manager` (on #10) are created and unattached — one command block in [OWNER-ACTIONS.md](OWNER-ACTIONS.md) §2 |
+| Known defect I introduced | I filed `tzim#86` without re-listing the open issues; **`tzim#85` already covered the same request**. **Closed** — and the mistake is recorded in [STATUS-LOG](STATUS-LOG.md), not deleted |
+| GitHub-permission limits | Reads, creations, pull requests and `--admin` merges work; **issue edits, comments, closures and label attaches return 403**. Labels are in place (#1…#9 `v0.1`, #10 `manager`+`assignment`) — attached by the owner, since I could not |
 
 ## Documents
 

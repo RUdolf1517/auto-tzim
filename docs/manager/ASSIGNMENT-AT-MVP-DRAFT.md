@@ -100,10 +100,15 @@ Merge/Release performed by coder: no
 - Accepted on macOS and Linux only; Windows untested and must be named as such.
 - The real-binary suite pins `tzim v0.16.1` artifacts verified against the release `SHA256SUMS`; `latest` is forbidden.
   If GitHub is unreachable in CI the job fails rather than silently skipping.
-- `tzim` has no machine-readable capability list and no structured refusal reason: the MVP delegates the default set
-  (no `--formats`), keeps `skipped_by_tzim` generic, and records version + binary hash. The upstream request
-  [RUdolf1517/tzim#85](https://github.com/RUdolf1517/tzim/issues/85) describes the future API and is **not** a
-  dependency. (#86 is a duplicate of it, filed by me by mistake; it should be closed.)
+- **`tzim` now has both interfaces** and the MVP consumes them (D-26, D-27): `--capabilities` is read and schema-checked
+  (capabilities schema 1, result schema 2), and the stable `reason_code` is passed through as `reason` beside the verbatim
+  `note`. The default set is still delegated — `--formats` is never passed — and observed rather than promised. The request
+  that produced this, [tzim#85](https://github.com/RUdolf1517/tzim/issues/85), was implemented in PR #91 and shipped in
+  v0.16.0; my duplicate #86 is closed.
+- **There is no network code in the MVP** (D-28): `update-check` moves to v0.2, exit `5` is reserved, and AC-9 asserts
+  that no command opens a socket.
+- **Two modes, one install path** (D-29): `confirm` (default) shows a proposal and installs only on approval; `auto` does
+  not ask. Staged copies, a journaled swap, an original deleted only after its verified replacement is in place.
 - `tzim` issue #83 (interactive confirmation) is incompatible with this MVP until its non-TTY behaviour is documented;
   the adapter pins a prompt-free range.
 - Apply-time temporary files inside the target root are `tzim`'s behaviour

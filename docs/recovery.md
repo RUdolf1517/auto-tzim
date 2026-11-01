@@ -18,6 +18,33 @@ atomically, and each row records before/after sizes and, within the documented c
 What **not** to do: delete the SQLite database "to clean up". It is the only record of what happened, and the next run
 will re-plan every file from scratch, which is not dangerous but is slow and loses the explanation.
 
+## 1a. A `.auto-tzim-old-…` file appeared next to your file
+
+**What you will see:** a file named `photo.png` and, beside it, `photo.png.auto-tzim-old-3f2a91-07`. Nothing is broken and
+nothing is half-written: that name is the crash-safe half of an install (D-29).
+
+**What happened:** replacing a file is three steps — move the original aside, move the verified replacement into place,
+delete the one moved aside. A crash between any two leaves a complete, readable file under a temporary name. That is the
+design, not a leak: at every instant at least one full copy exists that can be restored.
+
+**What to do:** run `auto-tzim status`. The next start finds the journal and finishes the job — either restoring the
+original (the replacement never landed) or removing the leftover (the replacement did land). It prints one line per file
+it resolved, so you know which happened. Do not delete these files by hand; if the program cannot resolve one, it says so
+and leaves it, because guessing is worse than leaving evidence.
+
+**What never happens:** a file is never lost by an interruption. That is the whole reason the swap looks like this
+instead of `unlink` + `write`.
+
+## 1b. `confirm` mode refused with `6` and asked for no confirmation
+
+**What you will see:** exit `6`, nothing processed, a message naming `--mode auto`.
+
+**What happened:** the proposal must be read by a person. There was no terminal (a pipe, a cron job, `--json`, or a closed
+stdin), so the program refused instead of assuming "yes" — and instead of hanging until a timeout nobody is watching.
+
+**What to do:** run it from a terminal, or use `--mode auto` deliberately. There is no `--yes`, by design: a silenced
+prompt and a different mode are not the same thing, and only one of them can be audited later.
+
 ## 2. A stale lock
 
 What you will see: `run --once` exits **`8`** and names a pid and a start time. (`4` is never produced by `auto-tzim`:

@@ -21,7 +21,7 @@ Reviewer: <name/role>
 Date: <YYYY-MM-DD>
 Scope: AT-01 … AT-09 (#1 … #9), assignment #10
 Specification: SPEC.md 0.1 (sha256 250d0db1…) · MANAGER-SPEC.md 0.2 (sha256 7e798361…)
-Gates: GATES.md (13 acceptance rows, 19 invariants) · Corpus: FIXTURE-CORPUS.md (111 cases)
+Gates: GATES.md (17 acceptance rows, 23 invariants) · Corpus: FIXTURE-CORPUS.md (117 cases)
 
 ## 1. Binding
 

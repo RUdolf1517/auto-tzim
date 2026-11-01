@@ -39,7 +39,8 @@ Gate: a real in-place upgrade, verified by version, hash, adapter probe and a dr
 ## v0.4 — Qt GUI
 
 PySide6, a thin wrapper over the same core: folder pickers, dry-run preview, status/history tables, pause/resume and
-scheduler controls, update notifications. No discovery, subprocess or updater code outside `core/`. Packaging, signing,
+scheduler controls. v0.2 also receives `update-check` (notify only), moved out of v0.1 by D-28 so that the first release
+makes no network request at all. No discovery, subprocess or updater code outside `core/`. Packaging, signing,
 notarisation and sandbox entitlements are documented before a release, not after.
 
 ## Deliberately not on the roadmap
@@ -49,6 +50,7 @@ agent with a menu-bar icon; Windows support in the MVP; any change inside the `t
 
 ## What could move the order
 
-- A `tzim` capability API would simplify v0.1's adapter and might pull the "exact numbers" question ([P-02](manager/problems/P-02-dry-run-is-not-write-free.md)) earlier.
+- ~~A `tzim` capability API~~ — **it shipped** in v0.16.0 and is consumed in v0.1 (D-26). The open question it created is
+  whether to display the default set, which is refused for now ([audit DR-05](audits/2026-11-01-tzim-v0.16.1.md)).
 - A FITS-enabled release build would make the `transforms` allowlist testable and could arrive before v0.2.
 - A reported data-safety defect stops everything else until it is closed.

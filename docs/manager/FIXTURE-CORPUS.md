@@ -168,15 +168,37 @@ create anything.
 
 | ID | Case | Expected |
 | --- | --- | --- |
-| W-01 | resolver disabled; `scan`, `run`, `status`, `history`, `logs`, `folder`, `doctor`, `config validate` | all succeed, zero socket attempts |
-| W-02 | `update-check` with mocked 200 (newer) | `0`, "update available", nothing written outside cache |
-| W-03 | mocked 403 / 429 / 500 / malformed / HTML / non-semver | `5` each, never "up to date" |
-| W-04 | mocked 200 with a newer **major** | "incompatible", exit `0`, nothing acted on |
+| W-01 | every command, both modes, resolver disabled and `socket.socket` patched to raise | all succeed, zero socket attempts, **zero `urllib` imports** |
+| W-02 | `update-check` invoked as a command | exit `2` (unknown command in v0.1, D-28); absent from `--help` |
+| W-03 | a planted `import urllib.request` in the package | the source check **fails** — the control proves the check is live |
+| W-04 | any command with the network stack removed (`PYTHONPATH` shim) | identical behaviour, identical exit codes |
 | W-05 | binary path hash before/after every W-case | identical |
 | D-01 | every documented default vs the schema | equal (reflection) |
 | D-02 | every documented exit code vs the X-matrix | present and equal |
 | D-03 | "undo" in user-facing text | only disclaimers |
 | D-04 | any document mentioning `tzim --dry-run` as our behaviour | none |
+
+## 10. Modes and install (`M-*`, D-29, AC-14…AC-17, INV-20…INV-23)
+
+The point of this block is that **the mode is the only difference**. Every case runs twice where it makes sense, and the
+two runs must agree on everything except the approval row and whether a proposal appeared.
+
+| ID | Case | Expected |
+| --- | --- | --- |
+| M-01 | `confirm`, TTY, answer `y` | proposal on stderr, installs happen, originals replaced, exit `0` |
+| M-02 | `confirm`, TTY, answer `n` / empty / `no` / `NO` / `yep` | exit `0`, **zero** writes in the folder, all rows `skipped_by_user`, history row `declined` |
+| M-03 | `confirm`, stdin is `/dev/null` | exit `6`, nothing processed, message names `--mode auto`; measured with a timeout so a hang is red |
+| M-04 | `confirm` with `--json` | exit `6`, nothing processed (a dataset cannot be asked a question) |
+| M-05 | `auto` on the same tree as M-01 | same per-file outcomes and sizes, no proposal, exit `0` |
+| M-06 | `confirm` then EOF on stdin mid-prompt | exit `0`, nothing installed, nothing half-installed |
+| M-07 | `SIGKILL` between `rename(original → old)` and `rename(staged → original)` | next start restores the original from `.auto-tzim-old-*`; bytes identical; recovery line names the file |
+| M-08 | `SIGKILL` after `rename(staged → original)`, before `unlink(old)` | next start removes the leftover and reports `installed`, not `restored` |
+| M-09 | file edited between plan and install (content only) | `skipped_changed`, original keeps the **edited** bytes, staged copy deleted |
+| M-10 | file edited between plan and install (`mtime_ns` only) | `skipped_changed` — identity includes time, not just size |
+| M-11 | `tzim` returns `already_optimal` / `skipped` / `unsupported` / `failed` in `auto` | no install for that file, original byte-identical, row carries the `reason` code |
+| M-12 | free space below staged size + headroom | exit `6` before the first file, nothing staged, nothing installed |
+| M-13 | staging directory deleted between files by an external actor | that file `failed` with `kind=io`; the rest continue; originals untouched |
+| M-14 | proposal text | contains the sentence about deletion and no undo; contains no path outside the folder |
 
 ---
 

@@ -34,6 +34,21 @@ Nothing has been released. There is no version of `auto-tzim` that can be instal
   checksums, row reconciliation with `jq`, byte evidence, the read-only-plan proof, the executed exit-code matrix, six
   negative controls the reviewer performs personally, and the four claim marks.
 
+### Changed — four product decisions, and what they cost
+
+- **The adapter reads `tzim --capabilities`** ([D-26](docs/manager/DECISIONS.md)) and fails closed on an unexpected schema
+  pair. Cost: a scan is now two spawns, so the harness counting rule changed with it rather than failing a correct build.
+- **Refusal reasons are surfaced** ([D-27](docs/manager/DECISIONS.md)): a `reason` field beside the verbatim `note`; the
+  prose is still never parsed.
+- **`update-check` leaves the MVP** ([D-28](docs/manager/DECISIONS.md)): v0.1 makes no network request at all, `urllib`
+  leaves the dependencies, exit `5` becomes reserved, and charter §17.5 is overridden without editing the pinned `SPEC.md`.
+- **Two operating modes** ([D-29](docs/manager/DECISIONS.md)): `confirm` (default — a proposal, then install on approval)
+  and `auto` (no prompt). One install path, staged copies, a journaled swap, and a rule that an original is deleted only
+  after its verified replacement is in place. Invariant 12 is rewritten with the single approval gate inside it; invariant
+  16 stays true and gains the ordering guarantee beside it.
+
+New acceptance rows AC-14…AC-17, invariants 20…23, and corpus cases `M-01`…`M-14` carry the mechanics.
+
 ### Added — the repository files `tzim` has, and we did not
 
 - [SECURITY.md](SECURITY.md): private reporting, and a scope written for a tool whose job is to move files — a write to

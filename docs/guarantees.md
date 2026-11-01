@@ -30,8 +30,10 @@ must not.
 
 - **That a file shrinks.** Only `tzim` decides, and it may legitimately do nothing (already optimal, refused,
   unsupported).
-- **That an optimization is reversible.** There is no undo, no backup, no trash. A success rewrites the file. This is
-  stated in `--help`, in the README and in [limitations](limitations.md) (invariant 16).
+- **That an optimization is reversible.** Once a replacement is installed the previous bytes are gone: no undo, no
+  backup, no trash (invariant 16). What *is* guaranteed is when that happens — nothing is destroyed before an approved
+  proposal in `confirm` mode, and nothing is destroyed at all for a file that was not replaced. That ordering must never be
+  read as an undo, and [limitations](limitations.md) says so in the same words.
 - **That an apply leaves the directory untouched.** An apply lets `tzim` write a temporary candidate in the destination
   directory and rename it; a hard kill can leave an orphan (R-13). A **scan** touches nothing at all: it invokes no
   file-processing `tzim` and does not need write access to the target root (charter §6-2, D-04).

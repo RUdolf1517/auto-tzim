@@ -13,9 +13,15 @@ A limitations list is part of the product. Each item below is a deliberate bound
 
 ## 1. Irreversible by design
 
-- **There is no undo.** A successful optimization rewrites the file; the previous bytes are gone. Nothing is copied to
-  a trash folder, no backup is made, and `auto-tzim` will not grow a "restore" command without a design that can
-  actually keep the promise.
+- **There is no undo.** Once a replacement is installed the previous bytes are gone: no trash folder, no backup, no
+  `restore` command. `auto-tzim` will not grow one without a design that can actually keep the promise.
+- **What is guaranteed instead is ordering.** In `confirm` mode nothing is destroyed until you have read the proposal and
+  approved it; in `auto` mode files are replaced as they are verified, one at a time. In both modes an original survives
+  untouched if it was not a candidate, not approved, or not successfully replaced. This ordering is not a backup: if the
+  machine dies mid-install, recovery restores that one file from the journal, and nothing restores a file you approved a
+  minute ago.
+- **The swap is visible for a moment.** During install a file briefly exists as `.auto-tzim-old-<run>-<n>` beside its
+  replacement. A crash in that window leaves it there; the next start restores the original and says so.
 - Backup software (Time Machine and similar) may hold an older copy. That is the user's arrangement, not our guarantee.
 
 ## 2. Platform
@@ -45,7 +51,9 @@ A limitations list is part of the product. Each item below is a deliberate bound
 - **A scan knows no numbers.** The plan lists candidates, not predicted savings, and is not a promise that `tzim` will
   change anything (D-23).
 - **One file at a time.** `jobs = 1` in v0.1; parallelism inside a file is `tzim`'s own.
-- **No prompts, ever.** A command that needs a decision requires a flag; in a scheduler or a pipe nothing will ask.
+- **Exactly one prompt in the whole product.** The `confirm` approval gate (D-29) is it. There is no `--yes` to skip it,
+  no "are you sure" anywhere else, no pager, no menu. Anything that would otherwise need a decision takes a flag, and an
+  unattended run uses `--mode auto` — a different mode, not a silenced question.
 - **A refusal is not an error, and it is not typed.** `skipped_by_tzim` and `skipped_unsupported` exit `0`, because
   nothing went wrong; the reason survives as `tzim`'s own note, not as a status we invented.
 - **Exit codes are ours.** `6` means "refused before processing" (no plan yet, paused, low disk), `8` means another run
@@ -58,7 +66,9 @@ A limitations list is part of the product. Each item below is a deliberate bound
 
 ## 5. Honest gaps we inherited from `tzim`
 
-- No machine-readable capability list: we record version and binary hash, delegate the default format set to the binary,
+- The default format set is **observed but not promised**: we read `tzim --capabilities` and delegate the choice to the
+  binary, so two builds of the same version can behave differently. We record version, binary hash and the capability
+  document, and we never turn it into a promise,
   and never display a set we cannot observe (study G-1, charter §6-18).
 - Refusal reasons are prose: every `tzim`-decided skip arrives as one generic `skipped_by_tzim` with the note preserved
   verbatim and never interpreted (study G-2). The upstream request `RUdolf1517/tzim#85` describes the interface that would

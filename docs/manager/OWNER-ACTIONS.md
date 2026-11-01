@@ -374,6 +374,7 @@ These are the failures that look like "the command is wrong" but are not, in the
 | --- | --- | --- |
 | `gh: command not found` | GitHub CLI is not installed in that terminal (a different machine from this session) | install `gh`, or use the browser (see §2) or the `curl` variant |
 | `syntax error near unexpected token 'do'`, or `end` expected | the terminal runs **fish**; `for … do … done` is bash/zsh syntax | use the `fish` block in §2 |
+| `fish: $? is not the exit status. In fish, please use $status.` | the terminal runs **fish**, where `$?` does not exist | `gh … ; echo status=$status` — and note that the verification blocks in §6a and §6b print a **value** (`null`, a line count) instead of an exit code, so they cannot be read wrong in either shell |
 | `The token in ... is invalid` / `gh auth login` prompt | `gh` is installed but not authenticated | `gh auth login` once; `gh auth status` to confirm |
 | `unknown flag: --add-label` | `gh` older than 2.0 | `gh --version`; upgrade, or use `curl` |
 | `accepts 1 arg(s), received 0` / `received 9` | the loop lost its variable (bad paste) or someone passed several numbers, which `gh issue edit` does not accept | run the one-line-per-issue block |
@@ -386,9 +387,13 @@ Diagnostics to paste into an issue if none of the above fits:
 ```sh
 gh --version
 gh auth status
-echo "$SHELL"
+echo "$SHELL"          # fish users: echo $version, or status --is-interactive
 gh issue edit 1 --repo RUdolf1517/auto-tzim --add-label "v0.1" 2>&1 | head -5
 ```
+
+**Why the commands in §6a and §6b carry no `$?`.** The owner's shell is fish, `$?` does not exist there, and a block that
+silently prints nothing about its own failure is worse than no block. So both verification steps print a value a human can
+read: `null` for the removed review rule, a line count for the replaced issue body. Same command in bash, zsh or fish.
 
 The last line is the whole test: in this session it returns
 `Resource not accessible by integration` (a permission error, which means the syntax is fine); in a shell where it

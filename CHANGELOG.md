@@ -48,7 +48,8 @@ the commit and in the close-out.
 ### Not observed — the two owner actions, measured rather than accepted
 
 The owner reported §6a (drop the required review) and §6b (refresh issue #10) done on 2026-11-02. Measured rather than
-accepted: issue #10's `updatedAt` is still `2026-10-29T20:13:58Z` and its body still says "Python package"; `main` is
+accepted: issue #10's `updatedAt` is still `2026-10-29T20:13:58Z` and its body is byte-identical to the stale 122-line
+copy (the file is 170); `main` is
 still `protected: true`, and pull request #16 still reports `BLOCKED` with no status checks configured, which leaves a
 required review as the only thing that can block it. Both are recorded in [OWNER-ACTIONS](docs/manager/OWNER-ACTIONS.md)
 as **not observed**, with the three commands that settle each — `CLEAN` on a checkless pull request, and a changed

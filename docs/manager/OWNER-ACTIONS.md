@@ -249,7 +249,7 @@ not observed rather than as applied.** What this session can measure:
 | `gh api repos/RUdolf1517/auto-tzim/branches/main --jq .protected` | `true` | expected — option 1 keeps the branch protected |
 | `gh api repos/.../branches/main/protection` | `403 Resource not accessible by integration` | the session's token is not a repository admin, so the detail page cannot be read at all, before or after a change |
 | `gh api repos/.../rules/branches/main` | `[]` | no *ruleset* applies; the classic protection rule is invisible to this token |
-| `gh pr view 16 --json mergeStateStatus` | `BLOCKED`, `reviewDecision: ""`, zero required checks configured | **inferred, not read:** with no status checks in the repository, a `BLOCKED` state can only come from a required review or from required conversation resolution — the approval rule looks like it is still on |
+| `gh pr view 16 --json mergeStateStatus` | `BLOCKED`, `reviewDecision: ""`, zero required checks configured | **inferred, not read:** with no status checks in the repository, a `BLOCKED` state can only come from a required review or from required conversation resolution — the approval rule looks like it is still on. `UNKNOWN` is *not* a signal: GitHub computes mergeability lazily and answers `UNKNOWN` until it has, so that answer has to be re-queried, not read as success |
 
 So either the `DELETE` did not take effect (a 404/403 in your terminal looks similar to success if the `gh` output was
 scrolled past), or it took effect and GitHub is still reporting the old merge state. The second is cheap to rule out:
@@ -280,8 +280,10 @@ inherits it — which is exactly why it was rejected on 2026-11-01, before the f
 
 ## 6b. Refresh the assignment issue body (chosen option Б, 2026-11-01)
 
-**Why:** issue [#10](https://github.com/RUdolf1517/auto-tzim/issues/10) still describes the product as it was on 2026-10-29 —
-no `--mode`, no `--capabilities`, no `reason`, and it says "Python package". The file
+**Why:** issue [#10](https://github.com/RUdolf1517/auto-tzim/issues/10) still describes the product as it was on 2026-10-29:
+no `--mode`, no `--capabilities` (it says "`tzim` has no machine-readable capability list"), no `reason`, `skipped_by_tzim`
+kept generic, `SQLite dumps` listed as a required raw artifact, `python --version` in the toolchain list, and
+`RUdolf1517/tzim#86` named as the future API. The file
 [ASSIGNMENT-AT-MVP-DRAFT.md](ASSIGNMENT-AT-MVP-DRAFT.md) is current; the issue is a stale copy, and a coder who reads the
 issue would build the wrong thing.
 
@@ -295,18 +297,28 @@ gh issue edit 10 --repo RUdolf1517/auto-tzim \
 Verify that the copy is real rather than hoped for:
 
 ```sh
-gh issue view 10 --repo RUdolf1517/auto-tzim --json body --jq '.body' | grep -c "mode auto"
-gh issue view 10 --repo RUdolf1517/auto-tzim --json body --jq '.body' | grep -c "capabilit"
+gh issue view 10 --repo RUdolf1517/auto-tzim --json body --jq '.body' | wc -l          # expect ~170, not 122
+gh issue view 10 --repo RUdolf1517/auto-tzim --json body --jq '.body' | grep -c "mode auto"   # expect 1 or more
+gh issue view 10 --repo RUdolf1517/auto-tzim --json body --jq '.body' | grep -c "SQLite dumps"  # expect 0
+gh issue view 10 --repo RUdolf1517/auto-tzim --json updatedAt --jq .updatedAt             # expect today
 ```
 
-Both must be non-zero, and the body must no longer contain "Python package".
+The line count is the cheapest honest test: the file is 170 lines, the stale body is 122. A body that still has 122 lines
+was not replaced, whatever `gh` printed.
 
 **Checked again on 2026-11-02, after you reported this done — the issue is unchanged as far as this session can see:**
 
 ```text
 gh issue view 10 --json updatedAt   → 2026-10-29T20:13:58Z   (unchanged since the issue was filed)
-body                                → 122 lines, no "mode auto", still contains "Python package"
+body                                → 122 lines, byte-identical to the copy fetched before the report
+body vs the file                    → 122 against 170 lines; the file has 48 lines of changes the issue never got
 ```
+
+**Correction, same day.** The first version of this section said the body "still says Python package". That was wrong: the
+body mentions `python --version` once, inside a list of toolchain facts, and the phrase "Python package" appears nowhere in
+it. I had read a `grep -ci python` count of `1` as the phrase without checking the line. The finding is unchanged — the
+issue is stale, `updatedAt` proves it — but the description of *how* it is stale was wrong, and a wrong description in this
+file is how the next reader stops trusting the rest of it.
 
 `updatedAt` is the honest test here: GitHub rewrites it on every body edit, and it still carries the filing timestamp. So
 the `gh issue edit` either did not run, or ran against a different repository, or failed with a 403 in your own shell
@@ -346,7 +358,7 @@ workflow lands, or the rule will block every pull request.
 | 4. Merge the docs commit in `tzim` | open — `handoff/auto-tzim/` still does not exist on `tzim@main` (404) | no — a checksummed copy is here |
 | 5. Clear B-01 | **cleared** — PR #84 merged 2026-10-30, tracker idle | — |
 | 6a. `main` protection, option 1 | **decided**; you reported it done on 2026-11-02, **not observed** — `main` is still protected and pull request #16 still reports `BLOCKED` with no checks configured (403 here for the detail) | yes, before the first **code** PR |
-| 6b. Refresh issue #10 body | **open** — you reported it done on 2026-11-02, but `updatedAt` is still 2026-10-29 and the body still says "Python package" | yes, before the coder starts |
+| 6b. Refresh issue #10 body | **open** — you reported it done on 2026-11-02, but `updatedAt` is still 2026-10-29 and the body is byte-identical to the old 122-line copy (the file is 170) | yes, before the coder starts |
 | 7. Retire `tzim#7` label `v0.1` → `v0.2` (AT-07 left the MVP) | open — optional, the assignment file already says so | no |
 
 If any command fails with 403 as well, the token lacks issue/pull-request write scope: that is a GitHub connection

@@ -35,7 +35,7 @@ invent it; the owner may change it without cost), **superseded**.
 | D-27 | `tzim`'s stable `reason_code` is **surfaced** in our own rows as `reason`, beside the verbatim `note`; no code ever drives our logic | adopted (owner, 2026-11-01) | [audit DR-02](../audits/2026-11-01-tzim-v0.16.1.md), Q12 | AT-05, `cli.md`, `state.md`, corpus `D-*` |
 | D-28 | **`update-check` leaves the MVP** and ships in v0.2; v0.1 makes **zero network requests**. Charter §17.5 is overridden by this decision; the pinned `SPEC.md` is not edited | adopted (owner, 2026-11-01) | Q "AT-07", charter §16 | AT-07 → v0.2, `privacy.md`, `dependencies.md`, AC-9, INV-14/15 |
 | D-29 | Two operating modes — `confirm` (proposal, then install on approval) and `auto` (no prompt) — sharing **one** install path; an original is deleted only after its verified replacement is in place | adopted (owner, 2026-11-01) | this section | AT-05, AT-06, `safety.md`, `cli.md`, `guarantees.md`, GATES AC-14…AC-17 |
-| D-30 | Accepted `tzim` window: **`>=0.16.0, <0.17`**, tied to `capabilities_schema_version: 1` / `result_schema_version: 2`; widened only after a real run | proposed, awaiting owner confirmation | [audit DR-09](../audits/2026-11-01-tzim-v0.16.1.md), Q13 | AT-04 |
+| D-30 | Accepted `tzim` window: **`>=0.16.0, <0.17`**, tied to `capabilities_schema_version: 1` / `result_schema_version: 2`; widened only after a real run | **adopted (owner, 2026-11-01)** — Q13 answered | [audit DR-09](../audits/2026-11-01-tzim-v0.16.1.md), Q13 | AT-04 |
 
 ---
 
@@ -438,4 +438,8 @@ schema pair (`capabilities_schema_version: 1`, `result_schema_version: 2`) must 
 binary SHA-256 recorded in history.
 
 Widening the window requires a real run of the newer binary against the corpus (AT-08), not a reading of its changelog.
-**Status: proposed** — this one is a manager default and the owner can override it at no cost.
+
+**Status: adopted by the owner on 2026-11-01.** The window is deliberately one minor series wide. It is not a claim that
+`0.16.0` and `0.16.1` behave identically — it is a claim that both declare the capabilities/result schema pair we were
+tested against, and that the pair is checked at runtime rather than assumed from the version string. A build inside the
+window that declares a different pair is still refused.

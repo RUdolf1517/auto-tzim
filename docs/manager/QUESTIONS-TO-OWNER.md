@@ -67,7 +67,12 @@ repository.
 filed as one (`tzim#85`; my `#86` duplicates it), no machine-readable capability is assumed, and the default set is delegated rather than
 displayed. The options below are kept as the record of what was weighed.
 
-`tzim` has no machine-readable capability list and no structured skip reason ([study G-1, G-2](TZIM-STUDY-2026-10-29.md)).
+> **Superseded on 2026-11-01:** both gaps were closed upstream. `tzim` v0.16.0 shipped `--capabilities` and a stable
+> `reason_code` (#85, implemented in PR #91). The options below are kept as the record of what was decided when they did
+> not exist; the live questions are Q11–Q13 at the end of this page and in the
+> [2026-11-01 audit](../audits/2026-11-01-tzim-v0.16.1.md).
+
+`tzim` had no machine-readable capability list and no structured skip reason ([study G-1, G-2](TZIM-STUDY-2026-10-29.md)).
 The specification already answers what to do technically — a version-specific adapter with fail-closed behaviour,
 plus an issue in `tzim` for the missing machine interface — but the owner decides whether we file those issues now
 and whether the adapter may rely on a runtime probe.
@@ -183,5 +188,50 @@ merge, close issues or publish releases without explicit delegation (charter §2
 | Q8 (test matrix) | manager default in force: `ubuntu-latest` + `macos-latest`, Python 3.12 and 3.13 |
 | Q9 (canonical spec home) | open, owner action: the docs-only commit `efc31756` is still only on a branch of `tzim` — command in [OWNER-ACTIONS.md](OWNER-ACTIONS.md) §4 |
 | Q10 (who merges, who is the coder) | default in force: one coder, one MVP pull request, owner merges |
+| Q11 (consume `--capabilities`?) | **open** — decides DR-05: delegate blindly, or prove the default set before planning |
+| Q12 (surface `reason_code`?) | **open** — decides DR-02: one generic refusal bucket, or stable codes in our own JSON |
+| Q13 (accepted `tzim` version window) | **open** — decides DR-09; proposed `>=0.16.0, <0.17` on capabilities schema 1 |
 
-The next decision point is not a question but a precondition: B-01 must be cleared before #10 may be started.
+The next decision point is no longer a precondition: **B-01 is cleared** (PR #84 merged 2026-10-30, upstream tracker
+idle, v0.16.1 released 2026-11-01). What stands between the charter and a start is the contract drift in the
+[2026-11-01 audit](../audits/2026-11-01-tzim-v0.16.1.md), and three of its actions are owner decisions — Q11, Q12, Q13.
+
+---
+
+## Q11 — Does the MVP consume `tzim --capabilities`?
+
+The document now exists (v0.16.0+), so "we cannot know the default set" is no longer true — it is a choice.
+
+- **A (recommended):** probe `--capabilities` once at start and in `doctor`, refuse to plan if
+  `result_schema_version` is not the one we were tested against, and keep omitting `--formats`. Strictly more honest than
+  today, costs one subprocess call, and makes `incompatible_tzim` a real decision instead of a version-string guess.
+- **B:** keep the MVP as written — version-keyed adapter, no capability probe. Less code, one more thing the user cannot
+  see, and the pin becomes the only guard.
+- **C:** probe and *display* the default set to the user as "formats that will be attempted". **Not recommended:** a
+  displayed set is a promise, and a promise made from one build is wrong for the next one.
+
+What it blocks: DR-05 and the wording of `formats.md`. What it does not block: anything else.
+
+## Q12 — Do we surface `reason_code` in our own output?
+
+`tzim` now attaches a stable code to every non-optimizing row. Today our design collapses all of them into
+`skipped_by_tzim` plus a verbatim note.
+
+- **A (recommended):** pass the code through as a field on our row and keep the note verbatim. The user gets a stable,
+  greppable reason; we still never parse prose. Costs one field and a schema bump of our own JSON before v0.1 ships.
+- **B:** keep one bucket. Simpler, and the note still explains it — but "why was my file skipped" stays a question users
+  have to read English to answer.
+
+What it blocks: DR-02, our own JSON contract, and the corpus mapping cases.
+
+## Q13 — Which `tzim` versions do we accept?
+
+The adapter must accept something and refuse everything else. Proposed window: `>=0.16.0, <0.17` while we consume
+`capabilities_schema_version: 1` / `result_schema_version: 2`; anything outside it is `incompatible_tzim` (exit `3`) with
+the observed values recorded.
+
+- **A (recommended):** the window above, widened only after AT-08 has actually run a newer binary.
+- **B:** accept any `0.x` with a matching schema — fewer refusals, weaker guarantee.
+- **C:** refuse everything below the pinned version and above it, i.e. exactly one version. Safest, most annoying.
+
+What it blocks: DR-09, the adapter table, and the first real-binary run.

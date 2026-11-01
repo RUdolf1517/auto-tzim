@@ -1,5 +1,10 @@
 # Formats and transformations
 
+> **Upstream contract moved (2026-11-01).** `tzim` v0.16.0 shipped `--capabilities`, a stable `reason_code` and
+> JSON result schema 2; v0.16.1 is the current release and its exit-code precedence is now documented and
+> enforced. Statements below written against `tzim` 0.14 that assume no capability document, an untyped
+> refusal or an older pin are stale: see the [2026-11-01 audit](audits/2026-11-01-tzim-v0.16.1.md).
+
 > **Status: specification, no implementation.**
 > Related: [guarantees](guarantees.md) · [config](config.md) · [safety](safety.md)
 
@@ -23,11 +28,12 @@ its wording.
 
 ## 2. `formats` semantics
 
-- `formats = []` (default) — `--formats` is **not passed**; the binary decides what "default-enabled" means (D-11). The
-  set is deliberately not reconstructed or displayed: there is no machine-readable capability list, and a guess would be a
-  fabricated capability (charter §6-18). For reference only, the release binaries of `tzim` `0.14.0` are built with png,
-  gzip, zip, ico, jpeg, tiff, zlib and zopfli; `fits` and `jpeg-v1` are outside that default, and JPEG is attempted only
-  when named (`--formats jpeg`).
+- `formats = []` (default) — `--formats` is **not passed**; the binary decides what "default-enabled" means (D-11). Since
+  `tzim` v0.16.0 that set is **observable** through `tzim --capabilities` (`default_enabled_formats`), so we no longer have
+  to guess: we still do not *promise* a set, because a promise made from one build is wrong for another. Whether the MVP
+  reads the document before planning is an open owner question (audit DR-05). For reference, a v0.16.1 `default` build
+  reports png, gzip, zip, ico, jpeg, tiff, zlib — with `jpeg` present only because that build has `jpeg-v1`; `fits`, `flac`
+  and `pdf` are compile-time opt-ins and never default-enabled.
 - `formats = ["png"]` — only PNG; everything else is `skipped_policy`, decided by us before any process starts.
 - `formats = ["png", "jpeg"]` — PNG and JPEG; naming `jpeg` is the only way JPEG is ever attempted, exactly as in
   `tzim` (`--formats jpeg`).

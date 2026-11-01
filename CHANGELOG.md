@@ -34,6 +34,27 @@ Nothing has been released. There is no version of `auto-tzim` that can be instal
   checksums, row reconciliation with `jq`, byte evidence, the read-only-plan proof, the executed exit-code matrix, six
   negative controls the reviewer performs personally, and the four claim marks.
 
+### Added — the repository files `tzim` has, and we did not
+
+- [SECURITY.md](SECURITY.md): private reporting, and a scope written for a tool whose job is to move files — a write to
+  the source folder during a scan is a vulnerability, a `tzim` format bug is not.
+- [OWNERS.md](OWNERS.md) and [.github/CODEOWNERS](.github/CODEOWNERS): who decides what, which role may write which path,
+  and why `CODEOWNERS` is a declaration and not an enforced rule while the only identity able to approve is the author.
+- [THIRD-PARTY.md](THIRD-PARTY.md): the licence list for packagers — one runtime dependency, and `tzim` invoked rather
+  than linked.
+- [docs/audits/](docs/audits/README.md): the frozen-audit convention, adopted from `tzim`, with its first entry.
+- [docs/manager/DOC-MODEL.md](docs/manager/DOC-MODEL.md): every document here mapped onto `tzim`'s, with the reason for
+  each difference and for each omission.
+
+### Found — the contract moved under the documentation
+
+- [docs/audits/2026-11-01-tzim-v0.16.1.md](docs/audits/2026-11-01-tzim-v0.16.1.md): `tzim` v0.16.0 shipped
+  `--capabilities`, a stable `reason_code` and JSON result schema 2; v0.16.1 is the current release. Ten findings, six
+  severity A, each with the affected `file:line`. Six documents carry a banner pointing at it.
+- **B-01 is cleared**: `tzim` PR #84 merged on 2026-10-30, the upstream tracker has no open issues or pull requests, and
+  three releases shipped. Charter §3.2 is satisfied — the start is now gated by the drift, not by the blocker
+  ([D-25](docs/manager/DECISIONS.md)).
+
 ### Changed — documentation now lives on `main`
 
 - The complete documentation set was transferred to `main` by pull request

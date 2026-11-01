@@ -96,6 +96,10 @@ line saying so. None of them describes behaviour you can observe today.
 | [releases](docs/releases.md) | Versioning, artifacts, definition of done |
 | [dependencies](docs/dependencies.md) | What is depended on, and what is refused |
 | [CONTRIBUTING](CONTRIBUTING.md) | What will not be accepted, and how work is organised |
+| [SECURITY](SECURITY.md) | How to report a vulnerability privately, and what counts as one for a tool that moves files |
+| [OWNERS](OWNERS.md) | Who decides what, and which role may write which path |
+| [THIRD-PARTY](THIRD-PARTY.md) | Every third-party licence in the shipped set, for packagers |
+| [audits](docs/audits/README.md) | Frozen records of what was true at a commit; first entry: the `tzim` v0.16.1 contract audit |
 
 ### Project records
 
@@ -109,6 +113,7 @@ line saying so. None of them describes behaviour you can observe today.
 | [docs/manager/QUESTIONS-TO-OWNER.md](docs/manager/QUESTIONS-TO-OWNER.md) | Questions asked, and the owner's answers |
 | [docs/manager/RISK-REGISTER.md](docs/manager/RISK-REGISTER.md) | Risks and the control that closes each |
 | [docs/manager/ROADMAP-ISSUES.md](docs/manager/ROADMAP-ISSUES.md) | Issue breakdown per stage, with acceptance criteria |
+| [docs/manager/DOC-MODEL.md](docs/manager/DOC-MODEL.md) | How this repository's documents map onto `tzim`'s, and why each difference exists |
 | [docs/manager/GATES.md](docs/manager/GATES.md) | Pre-registered acceptance matrix for the MVP |
 | [docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md](docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md) | The MVP assignment — prepared, filed as #10, not started |
 | [docs/manager/HANDOFF-TEMPLATE.md](docs/manager/HANDOFF-TEMPLATE.md) · [REVIEW-TEMPLATE.md](docs/manager/REVIEW-TEMPLATE.md) | What the coder hands over, and how it is reviewed |

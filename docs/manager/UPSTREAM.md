@@ -1,36 +1,52 @@
 # Upstream: what we need from `tzim`, and where it stands
 
-Date: **2026-10-29**. `auto-tzim` changes nothing in `tzim` (charter §3.6). This page tracks the other direction: the
-issues and pull requests in `RUdolf1517/tzim` that affect us, what we assume about each, and what would change here if it
-landed.
+**Read on 2026-11-01 at `f605c2ea` (v0.16.1).** `auto-tzim` changes nothing in `tzim` (charter §3.6). This page tracks the
+other direction: the issues, pull requests and releases in `RUdolf1517/tzim` that affect us, what we assume about each, and
+what changes here when it moves.
 
-State was read with `gh` on 2026-10-29 and is **a snapshot, not a subscription** — re-read it before quoting it.
+A snapshot, not a subscription — re-read it with `gh` before quoting it. Every revision of this page carries a read date
+for the same reason.
 
-## 1. Open items that matter to us
+## 1. State of the upstream tracker
 
-| Item | State | What it is | Our relation to it |
-| --- | --- | --- | --- |
-| `tzim#85` | OPEN | `feat(cli): add versioned machine-readable capabilities and structured result reason codes` — created 19:59Z | **Canonical** upstream request for the interface our adapter lacks (study G-1, G-2). Not a dependency; nothing here waits for it |
-| `tzim#86` | OPEN | My duplicate of #85, filed 20:11Z without re-listing the open issues | **To be closed as a duplicate** ([OWNER-ACTIONS](OWNER-ACTIONS.md) §1). Its only unique content is the concrete JSON sketches |
-| `tzim#83` | OPEN | `feat(cli): add interactive confirmation for opt-in format handling without a force bypass` | **Compatibility condition.** The day a `tzim` can prompt, our invariant 12 (no prompt, no PTY) needs a documented non-TTY refusal on their side. Until then the adapter pins a prompt-free range |
-| `tzim#82` | OPEN | `feat(jpeg): ship V1 verification and enable baseline JPEG by default` | Would change the *default* format set of a future binary. Our rule already survives it: we never display a default set, we delegate by omitting `--formats` (D-11) |
-| `tzim#78`, `#59`, `#57` | OPEN | FITS/PDF measurement and evidence work | Not ours; relevant only because their completion is precondition §3.2 (blocker B-01) |
-| `tzim` PR #84 | OPEN, MERGEABLE, updated 20:18Z | `Extend residual FITS acceptance coverage for #78` | **Blocks the MVP start** under charter §3.2, not our design |
-| `tzim` release `v0.14.0` | published | The artifact our real-binary suite pins | Pinned by version **and** SHA-256; `latest` is forbidden (D-13) |
+**Zero open pull requests. Zero open issues.** The set the coder was assigned is finished, and three releases shipped in
+the days after it:
+
+| Release | Published | What it means for us |
+| --- | --- | --- |
+| [`v0.15.0`](https://github.com/RUdolf1517/tzim/releases/tag/v0.15.0) | 2026-10-30 | opt-in FLAC (#79) and opt-in PDF (#80) handlers; the #57/#59 measurement work resolved as *refused after measurement* / *threshold not applied*, not as admission |
+| [`v0.16.0`](https://github.com/RUdolf1517/tzim/releases/tag/v0.16.0) | 2026-11-01 | **`--capabilities`, JSON result schema 2 and `reason_code`** (#85); Windows per-user installer; upstream `SECURITY.md` |
+| [`v0.16.1`](https://github.com/RUdolf1517/tzim/releases/tag/v0.16.1) | 2026-11-01 | performance and verification internals; **exit-code precedence documented and enforced** (#109) |
+
+### Closed items that used to be on this page
+
+| Item | Outcome |
+| --- | --- |
+| PR #84 — residual FITS acceptance coverage | **merged** 2026-10-30T14:55:59Z. This was blocker **B-01**; charter §3.2 is now satisfied |
+| `tzim#85` — capabilities + structured reasons | **closed as implemented**, PR #91, merge `503d1eca`. Shipped in v0.16.0 |
+| `tzim#86` — my duplicate of #85 | **closed**. The duplication mistake is recorded in [STATUS-LOG](STATUS-LOG.md) and was never repeated |
+| `tzim#83` — interactive confirmation | **shipped**: a default-No prompt for `--fits-tile` on a single file on a TTY, never for non-TTY, `--json`, `--dry-run` or batch runs |
+| `tzim#82` — JPEG by default with V1 verification | **shipped**, with build-aware wording in `--list-formats` |
+| `tzim#78`, `#57`, `#59` — FITS/PDF measurement | closed with measured, pre-registered outcomes; several are refusals, and upstream says so plainly |
+
+**The consequence:** four things this project's documents describe as missing or future now exist. The full list, with
+`file:line` and severity, is the [2026-11-01 audit](../audits/2026-11-01-tzim-v0.16.1.md). It is not a footnote — it is the
+reason the MVP should not start until the documents are corrected.
 
 ## 2. What we rely on, and how we would notice it changing
 
+Updated for v0.16.1. The third column is the point: a dependency is only trustworthy if something goes red when it moves.
+
 | We rely on | Where it is written | How a change becomes visible here |
 | --- | --- | --- |
-| `tzim --version` prints `tzim <semver>`, exit `0` | `src/main.rs:22` | `A-02`…`A-06` cases fail with `incompatible_tzim` (exit `3`) |
-| the `--json` result stream: one `file` row per file, one `summary` with `schema: 1` | `docs/cli.md` §4 | `A-07`…`A-09` cases: missing schema, unknown status, extra field |
-| exit codes `0/1/2/3/4` with the documented meanings | `docs/cli.md` §5 | `R-10` (verification failure) and `R-11` (usage) cases |
-| `skipped` is generic, the reason lives in a free-text `note` | `docs/cli.md` §4 | `D-02` mapping test; we never classify from the note |
-| no prompt, no stdin read in the current binary | `grep -rn stdin src/` → no hits at `d4e4597` | `R-01` (blocked stdin) and `R-02` (no TTY) |
+| `--version` prints `tzim <semver>`, exit `0` | `src/main.rs`, `docs/cli.md` §2 | `A-02`…`A-06`: unparsable or unknown version ⇒ `incompatible_tzim` (exit `3`) |
+| `--capabilities` prints one JSON object, `capabilities_schema_version: 1`, `result_schema_version: 2` | `docs/cli.md` §"capabilities document" | `A-10`: missing document, unknown schema version or unknown opt-in policy ⇒ fail closed |
+| the `--json` result stream: one `file` row per file, one `summary` with `schema: 2`, `reason_code` on non-optimizing rows | `docs/cli.md` §4 | `A-07`…`A-09`: missing schema, unknown status, unknown schema version |
+| exit codes `0/1/2/3/4`; precedence `2 → 4 → 3 → 1 → 0`; `EPIPE` preserves an earned code; missing input is `1` | `docs/cli.md` §5, CHANGELOG v0.16.1 #109 | `R-10`, `R-11`, `X-01`…`X-16` |
+| a refusal is `skipped` (or `unsupported`) with a stable `reason_code` and a human `note` | `docs/cli.md` §4 | `D-02` mapping; we never classify from the note |
+| no prompt, no stdin read on any non-TTY path | `docs/cli.md` §"FITS tile confirmation" | `R-01`, `R-02`: a child waiting on stdin is killed |
 | no network from the binary | `docs/releases.md` §1 | `W-01`: resolver disabled, all commands green |
-
-A change to any of these is not "handled by updating docs": it fails a case, the job goes red, and the adapter entry is
-revised in a reviewed change with its own evidence.
+| release artifacts: stable unversioned URLs plus `SHA256SUMS` | `docs/releases.md` §3 | `pinned.py`: a missing or mismatched checksum fails the run (exit `5`), never a fallback to `latest` |
 
 ## 3. Compatibility matrix
 
@@ -41,41 +57,35 @@ matrix.
 | --- | --- | --- | --- | --- |
 | — | none yet | — | — | — |
 
-Filling a row requires: the pinned artifact hash, the T1–T10 contract cases green, and the `A-*` adapter cases green on
-that binary. Two rows for two builds of the same version are allowed and expected — the FITS and `jpeg-v1` features prove
-that a version string is not a capability statement.
+Filling a row requires: the pinned artifact hash, the contract cases green, and the `A-*` adapter cases green on that
+binary. Two rows for two builds of the same version are expected — the FITS and `jpeg-v1` features prove that a version
+string is not a capability statement. **No binary has been executed by this project yet**; every claim on this page is a
+source claim, and the audit says so in its limits section.
 
-## 4. If #85 lands
+## 4. The interface landed — what happens now
 
-What we would do, in order — and what we would **not** do:
+`tzim#85` was filed by this project on 2026-10-29 and shipped two days later. The plan when it lands was written before it
+did, which is the only reason this page does not have to be improvised now:
 
-1. Read the new interface as a contract, not as a convenience: `version`, `json_schema`, `formats`, `features`, `opt_ins`
-   (including `confirmation_required`).
-2. Replace the version-keyed adapter table with a capability table, keeping the fail-closed rule: an unknown field or an
-   unparsable document is still `incompatible_tzim`.
-3. Keep `--version` as the identity probe; add a `--capabilities --json` probe to `doctor`.
-4. Delete nothing from the corpus that the interface makes easier — the `A-*` cases stay, because a future binary can
-   regress.
-5. **Not** start displaying "the default set" as a promise; it remains a delegation (D-11).
-6. **Not** enable `transforms` on the strength of an interface alone: charter §6-11 also requires an installed build that
-   has the handler and a real-binary test.
+1. Read the document as a contract: `build_features`, `compiled_formats`, `default_enabled_formats`, `selection_flags`,
+   `handler_opt_ins`, `transformations`, `confirmation_policies`.
+2. Keep the fail-closed rule: an unknown `capabilities_schema_version`, an unknown `result_schema_version`, or an unknown
+   opt-in policy is still `incompatible_tzim`. Unknown *fields* may be ignored only where our behaviour does not depend on
+   them.
+3. Keep `--version` as the identity probe and add a `--capabilities` probe to `doctor`.
+4. Delete nothing from the corpus that the interface makes easier — `A-*` cases stay, because a future binary can regress.
+5. **Do not** start displaying "the default set" as a promise of what will be optimized. It is now *observable* rather than
+   a guess, which is a different and better thing — but the owner has to decide whether we consume it (audit DR-05).
+6. **Do not** enable `transforms` on the strength of an interface alone: charter §6-11 also requires an installed build
+   with the handler and a real-binary test.
 
-## 5. If #83 lands
+## 5. Rules for filing anything upstream
 
-Charter invariant 12 survives only if `tzim` documents, and we can test, that a non-TTY invocation **refuses** with a
-documented status and exit code instead of waiting. Until then:
-
-- the adapter range stays prompt-free;
-- `R-01` (a child that blocks on stdin is killed by our timeout) stays in the corpus as a defence in depth, not as a
-  substitute for their contract;
-- a `tzim` that prompts with `stdin=/dev/null` would fail `R-01` in CI, which is exactly the intended outcome.
-
-## 6. Rules for filing anything upstream
-
-Learned the hard way this week (I filed a duplicate):
+Learned the hard way in October (I filed a duplicate of #85 and had to close it):
 
 1. **List the open issues immediately before filing** (`gh issue list --repo RUdolf1517/tzim --state open`), and read the
    two or three closest titles.
 2. One request per issue, with the concrete shape (fields, example output) and an explicit "not a dependency" line.
 3. No pull request, no branch, no code change from this project without the owner's instruction.
-4. Record the number in this file and in [DECISIONS](DECISIONS.md) D-22 in the same turn it is created.
+4. Record the number here and in [DECISIONS](DECISIONS.md) in the same turn it is created.
+5. Check the tracker is idle before assuming it: as of 2026-11-01 it is empty, so a new issue would be the only open one.

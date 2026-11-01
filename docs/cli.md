@@ -120,13 +120,13 @@ Typed NDJSON, one value per line, on stdout, nothing else, `"schema": 1` in ever
 | `logs` | one `{"type":"log","lines":[…]}` |
 
 ```json
-{"schema":1,"type":"result","command":"doctor","tzim":{"path":"/usr/local/bin/tzim","realpath":"/usr/local/bin/tzim","sha256":"…","size":1048576,"version":"0.14.0","adapter":"tzim-0.14","version_status":"supported"},"platform":{"os":"linux","arch":"x86_64","python":"3.12.7"},"config":{"path":"…","schema":1,"folders":1},"state":{"path":"…","ok":true}}
+{"schema":1,"type":"result","command":"doctor","tzim":{"path":"/usr/local/bin/tzim","realpath":"/usr/local/bin/tzim","sha256":"…","size":1048576,"version":"0.16.1","adapter":"tzim-0.16","version_status":"supported"},"platform":{"os":"linux","arch":"x86_64","python":"3.12.7"},"config":{"path":"…","schema":1,"folders":1},"state":{"path":"…","ok":true}}
 
 {"schema":1,"type":"file","folder":"01J…","plan_id":"…","path":"/Users/example/Pictures/project/a.png","relative_path":"a.png","status":"planned","policy":{"formats":"default","transforms":[],"reason":null},"identity":{"dev":1,"ino":42,"size":1258291,"mtime_ns":1690000000000000000},"argv":["tzim","--json","/Users/example/Pictures/project/a.png"]}
 
-{"schema":1,"type":"plan","plan_id":"…","plan_hash":"sha256:…","folder":"01J…","created":"2026-10-29T19:00:00Z","candidates":9,"excluded":4,"tzim":{"version":"0.14.0","sha256":"…"}}
+{"schema":1,"type":"plan","plan_id":"…","plan_hash":"sha256:…","folder":"01J…","created":"2026-10-29T19:00:00Z","candidates":9,"excluded":4,"tzim":{"version":"0.16.1","sha256":"…"}}
 
-{"schema":1,"type":"run","run_id":"…","plan_id":"…","started":"2026-10-29T19:00:00Z","finished":"2026-10-29T19:02:11Z","counts":{"planned":9,"optimized":7,"already_optimal":1,"skipped_unsupported":1,"skipped_by_tzim":0,"skipped_policy":0,"skipped_unstable":0,"hardlink_skip":0,"failed":0,"interrupted":0},"binary":{"version":"0.14.0","sha256":"…"},"exit_code":0}
+{"schema":1,"type":"run","run_id":"…","plan_id":"…","started":"2026-10-29T19:00:00Z","finished":"2026-10-29T19:02:11Z","counts":{"planned":9,"optimized":7,"already_optimal":1,"skipped_unsupported":1,"skipped_by_tzim":0,"skipped_policy":0,"skipped_unstable":0,"hardlink_skip":0,"failed":0,"interrupted":0},"binary":{"version":"0.16.1","sha256":"…"},"exit_code":0}
 ```
 
 Rules:

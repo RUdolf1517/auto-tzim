@@ -92,7 +92,7 @@ garbage version, missing binary or unknown `schema` ⇒ `3` before planning; no 
 `--list-formats`, `--check-deps` or `--dry-run`; `skipped` ⇒ one generic status with the verbatim note; a filename that
 looks like a flag cannot become one.
 
-**Tests.** Versions `0.13.9`, `0.14.0`, `0.15.0`, `1.0.0`, garbage, empty output, non-zero exit; files named
+**Tests.** Versions `0.15.0`, `0.16.0`, `0.16.1`, `0.17.0`, `1.0.0`, garbage, empty output, non-zero exit; files named
 `--zopfli`, `-r`, `--json`, `--`, `-`; `formats = ["png"]` and `[]`; a test double that parses `--list-formats` must fail
 the source check.
 
@@ -142,7 +142,7 @@ fixture for every other command; filesystem diff of the binary path and `AUTO_TZ
 real suite against a pinned release artifact verified against `SHA256SUMS`, with T1–T10 of the study; the invocation
 counter; before/after checksums for every non-candidate outcome; the traceability table filled in.
 
-**Acceptance.** T1–T10 green on macOS and Linux against `tzim v0.14.0`; a mismatch fails with the observed JSON attached;
+**Acceptance.** T1–T10 green on macOS and Linux against `tzim v0.16.1`; a mismatch fails with the observed JSON attached;
 every skip/refusal/failure has an equal-checksum proof; the counter shows one `--version` and zero path invocations for
 scan/dry-run, ≥1 path invocation for apply; a deliberately broken expectation fails the suite; `docs/testing.md` §6
 moves from `planned` to `exists`.

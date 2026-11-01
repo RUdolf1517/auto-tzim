@@ -168,10 +168,10 @@ create anything.
 
 | ID | Case | Expected |
 | --- | --- | --- |
-| W-01 | every command, both modes, resolver disabled and `socket.socket` patched to raise | all succeed, zero socket attempts, **zero `urllib` imports** |
+| W-01 | every command, both modes, run with no network namespace and with the DNS resolver disabled | all succeed, zero connection attempts |
 | W-02 | `update-check` invoked as a command | exit `2` (unknown command in v0.1, D-28); absent from `--help` |
-| W-03 | a planted `import urllib.request` in the package | the source check **fails** — the control proves the check is live |
-| W-04 | any command with the network stack removed (`PYTHONPATH` shim) | identical behaviour, identical exit codes |
+| W-03 | a planted `ureq`/`reqwest` line in `Cargo.toml` | `cargo deny` **fails** and `cargo tree` reports it — the control proves the check is live, not decorative |
+| W-04 | the release binary run in a container with no network and no DNS | identical behaviour, identical exit codes |
 | W-05 | binary path hash before/after every W-case | identical |
 | D-01 | every documented default vs the schema | equal (reflection) |
 | D-02 | every documented exit code vs the X-matrix | present and equal |

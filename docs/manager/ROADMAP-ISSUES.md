@@ -33,12 +33,35 @@ Stage boundaries are load-bearing: nothing from v0.2+ may be merged into the MVP
 
 ---
 
+## Versions and issues
+
+The product roadmap lives in [docs/roadmap.md](../roadmap.md); this page is the work breakdown for the version currently
+being delivered. Only one version has issues.
+
+| Version | Issues | State | Acceptance |
+| --- | --- | --- | --- |
+| v0.1 — MVP | #1…#9 (AT-01…AT-09), assignment #10 | **prepared**, not started (AT-07 struck by D-28) | [GATES.md](GATES.md) — 17 rows, 23 invariants at one final SHA |
+| v0.2 — scheduler, TUI, `update-check` | none yet | deliberately not created | written before its first line, from [roadmap §3](../roadmap.md) |
+| v0.3 — controlled update | none yet | deliberately not created | charter §11.3 real upgrade test, from [roadmap §4](../roadmap.md) |
+| v0.4 — Qt GUI | none yet | deliberately not created | from [roadmap §5](../roadmap.md) |
+
+**Why v0.2+ has no issues.** An issue set written today would describe software whose contracts have not been through a
+single release, and every one of them would be rewritten after the first real user report. The version is committed in the
+roadmap; the breakdown is written when the version starts, in the same week, against the GATES text that will judge it.
+This is not a queue of promises — it is a refusal to pretend we know v0.3's details before v0.1 exists.
+
+The v0.2 set, when it is written, inherits one constraint from v0.1 that cannot be renegotiated: the scheduler calls the
+same `run --once` and has no eligibility rules of its own, and the mode gate of D-29 is not bypassable by any front end.
+
+---
+
 ## Stage 1 — MVP / v0.1 (assigned as one set, #1…#10)
 
 ### AT-01 · Repository and package bootstrap
 
-**Scope.** A Python package `auto_tzim` with `core/` and `cli/` only (the `tui/` and `qt/` directories are *not*
-created), an entry point `auto-tzim`, `pyproject.toml`, CI on `ubuntu-latest` and `macos-latest` for Python 3.12 and
+**Scope.** A Rust workspace (D-33) with `auto-tzim-core` and `auto-tzim-cli` only (the `tui` and `qt` crates are *not*
+created), a `[[bin]]` named `auto-tzim`, `Cargo.toml` + committed `Cargo.lock` + `rust-toolchain.toml`, `cargo-deny`
+configuration, CI on `ubuntu-latest` and `macos-latest` on the pinned toolchain, and
 3.13, and a `lockfile` job that fails on an unpinned dependency.
 
 **Acceptance.** Clean checkout installs; `--help` and `--version` run on both platforms with exit `0`; an unknown
@@ -143,7 +166,8 @@ Removing it makes the privacy page one paragraph instead of a section with an ex
 (timeouts, proxies, rate limits, TLS), and lets `invariant 15` become absolute: *no request, of any kind, ever*.
 
 **What replaces it in the MVP.** Nothing — that is the point. The only work is negative, and it is still tested: AC-9 now
-asserts that **no command opens a socket**, that `urllib`/`socket`/`http` are never imported, and that `update-check`
+asserts that **no command opens a socket** — structurally, because no crate in `Cargo.lock` can open one, and by running
+every command with no route and no DNS — and that `update-check`
 does not exist. Exit code `5` is reserved and unused, so v0.2 can land under the original rules without renumbering.
 
 **When it returns (v0.2):** one documented `GET`, notify only, 24 h cache, exit `5` on failure, opt-out, and the privacy
@@ -187,7 +211,8 @@ installed version. A formula review alone is not evidence.
 
 ## Stage 4 — v0.4 (not assigned)
 
-Qt GUI (PySide6) as a thin wrapper over the same core, dangerous changes behind a confirmation whose default is **No**,
+Qt GUI as a **separate binary and package** built on the same core crate (D-34), dangerous changes behind a confirmation
+whose default is **No**,
 packaging and notarisation documented before a release.
 
 ## Explicitly out of every stage

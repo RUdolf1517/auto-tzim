@@ -150,7 +150,7 @@ Typed NDJSON, one value per line, on stdout, nothing else, `"schema": 1` in ever
 | `logs` | one `{"type":"log","lines":[…]}` |
 
 ```json
-{"schema":1,"type":"result","command":"doctor","tzim":{"path":"/usr/local/bin/tzim","realpath":"/usr/local/bin/tzim","sha256":"…","size":1048576,"version":"0.16.1","adapter":"tzim-0.16","version_status":"supported"},"platform":{"os":"linux","arch":"x86_64","python":"3.12.7"},"config":{"path":"…","schema":1,"folders":1},"state":{"path":"…","ok":true}}
+{"schema":1,"type":"result","command":"doctor","tzim":{"path":"/usr/local/bin/tzim","realpath":"/usr/local/bin/tzim","sha256":"…","size":1048576,"version":"0.16.1","adapter":"tzim-0.16","capabilities_schema":1,"result_schema":2,"version_status":"supported"},"platform":{"os":"linux","arch":"x86_64","toolchain":"rustc 1.xx (pinned)"},"config":{"path":"…","schema":1,"folders":1},"state":{"path":"…","ok":true}}
 
 {"schema":1,"type":"file","folder":"01J…","plan_id":"…","path":"/Users/example/Pictures/project/a.png","relative_path":"a.png","status":"planned","policy":{"formats":"default","transforms":[],"reason":null},"identity":{"dev":1,"ino":42,"size":1258291,"mtime_ns":1690000000000000000},"argv":["tzim","--json","/Users/example/Pictures/project/a.png"]}
 

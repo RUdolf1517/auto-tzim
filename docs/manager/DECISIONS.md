@@ -20,7 +20,7 @@ invent it; the owner may change it without cost), **superseded**.
 | D-12 | `tzim` gets files, never directories, never `-r` | adopted | manager | AT-04, AT-05 |
 | D-13 | Integration tests pin a release artifact by SHA-256; never `latest` | adopted | manager | AT-08 |
 | D-14 | Stability tests inject the clock | adopted | manager | AT-03, AT-08 |
-| D-15 | Dependencies pinned with hashes; `tomli-w` is the only write dependency | proposed (manager default) | manager | AT-01, AT-02 |
+| D-15 | Dependencies pinned with hashes; ~~`tomli-w` is the only write dependency~~ **superseded by D-33**: pinned `Cargo.lock`, `cargo deny` allow-list | superseded (was a manager default) | manager | AT-01, AT-02 |
 | D-16 | Our own JSON envelope: typed NDJSON, `schema: 1` | adopted | manager | AT-06 |
 | D-17 | Local JSONL logs, 30 days, size cap, no environment dump | adopted | manager | AT-05, AT-09 |
 | D-18 | Exit `7` internal, `8` lock, `4` unused, `130`/`143` signals; no raw `tzim` passthrough | adopted | charter §16 P-03 | AT-06 |
@@ -36,6 +36,10 @@ invent it; the owner may change it without cost), **superseded**.
 | D-28 | **`update-check` leaves the MVP** and ships in v0.2; v0.1 makes **zero network requests**. Charter §17.5 is overridden by this decision; the pinned `SPEC.md` is not edited | adopted (owner, 2026-11-01) | Q "AT-07", charter §16 | AT-07 → v0.2, `privacy.md`, `dependencies.md`, AC-9, INV-14/15 |
 | D-29 | Two operating modes — `confirm` (proposal, then install on approval) and `auto` (no prompt) — sharing **one** install path; an original is deleted only after its verified replacement is in place | adopted (owner, 2026-11-01) | this section | AT-05, AT-06, `safety.md`, `cli.md`, `guarantees.md`, GATES AC-14…AC-17 |
 | D-30 | Accepted `tzim` window: **`>=0.16.0, <0.17`**, tied to `capabilities_schema_version: 1` / `result_schema_version: 2`; widened only after a real run | **adopted (owner, 2026-11-01)** — Q13 answered | [audit DR-09](../audits/2026-11-01-tzim-v0.16.1.md), Q13 | AT-04 |
+| D-31 | **`auto-tzim` updates itself as well as `tzim`** — v0.3 covers both, by delegating to the installer that owns each artifact, never by rewriting a package in place | adopted (owner, 2026-11-01); overrides charter §11.2 last bullet | SPEC §11.2, prior roadmap §7 | v0.3 issues, `update.md`, `releases.md` |
+| D-33 | **The implementation language is Rust**, not Python: a static binary in a workspace (`auto-tzim-core` library + `auto-tzim` CLI), pinned toolchain, `cargo` build and test. Overrides `SPEC.md` §4.1 | adopted (owner, 2026-11-01) | `SPEC` §4.1/§17; [CONFLICTS C-5](../spec/CONFLICTS.md) | every document, AT-01…AT-09 |
+| D-34 | **Three front doors, three artifacts**: the CLI, the TUI (v0.2) and the Qt app (v0.4) are separate binaries with separate installs; only the core crate is shared | adopted (owner, 2026-11-01) | D-33, charter §12 | v0.2, v0.4, packaging |
+| D-32 | **Two update modes**, `confirm` and `auto`, separate from the optimisation modes; safety rules that protect a file and a binary hold in both | adopted (owner, 2026-11-01) | D-29 vocabulary | v0.3 issues, `config.md`, `cli.md` |
 
 ---
 
@@ -180,6 +184,11 @@ binary. No `latest`, no floating tag, no source build in the MVP job.
 `tomllib` (stdlib) reads TOML; `tomli-w` (pure Python, no dependencies) writes it; `sqlite3` and `urllib.request` come
 from the standard library; no HTTP client library, no image or archive library, no `shell=True`. Test-only dependencies
 are pinned separately. Every pin carries a hash and a CI job fails on an unpinned dependency.
+
+**Superseded on 2026-11-01 by [D-33](#d-33--rust-not-python).** The reasoning below belongs to the Python stack:
+`tomli-w` was chosen because `tomllib` can only read. Under Rust the same requirement is met by `serde` +
+`toml`, and the pinning policy moved to `Cargo.lock` plus `cargo deny`. Kept as written, because the *question*
+("how does a dependency get pinned and verified?") did not change with the language.
 
 ## D-16 · Our own JSON envelope
 
@@ -443,3 +452,193 @@ Widening the window requires a real run of the newer binary against the corpus (
 `0.16.0` and `0.16.1` behave identically — it is a claim that both declare the capabilities/result schema pair we were
 tested against, and that the pair is checked at runtime rather than assumed from the version string. A build inside the
 window that declares a different pair is still refused.
+
+## D-31 · Updating both binaries
+
+The owner's instruction, 2026-11-01: *auto-update is not only for `tzim`; `auto-tzim` updates itself too, and there are two
+modes — one updates automatically, the other asks the user.*
+
+**This overrides two things, both recorded rather than quietly deleted.** Charter §11.2 ends with "Обновление `auto-tzim`
+этим механизмом не выполняется", and [roadmap](../roadmap.md) §7 listed self-update among the things that are *not planned*
+rather than deferred. The pinned `SPEC.md` is **not** edited (same rule as D-28): the override lives here. The roadmap entry
+moves into v0.3.
+
+### Both targets are now the same problem
+
+The first draft of this section said the opposite, and D-33 is why it changed. `auto-tzim` was a Python package, so
+"updating itself" meant rewriting `site-packages/`, an entry point and a dependency tree — surgery on someone else's
+environment, whose failure modes are a half-importable installation that `pip check` cannot repair. That code was refused,
+and the update was going to be delegated to `pip`/`brew`.
+
+**Under D-33 both binaries are static Rust executables**, so one mechanism covers both:
+
+```text
+download to a temporary path beside the target ──► verify SHA-256 against the published SHA256SUMS
+      ──► fsync ──► rename over the old path ──► keep the old inode until the new binary answers --version
+      ──► verify (doctor, adapter probe, smoke run) ──► success: drop the old inode | failure: rename it back
+```
+
+That is the same shape for `tzim` and for `auto-tzim`, which is the whole point: one code path, one set of tests, one
+failure mode. A `SIGKILL` during any step leaves a working binary — never half of one — because `rename` inside a
+directory is atomic and the old inode is not unlinked until the new one has answered.
+
+**What still differs, and must not be hidden:** a binary installed by Homebrew lives in a Cellar that the package manager
+owns. Replacing it behind `brew`'s back makes the formula's bookkeeping wrong, and the next `brew upgrade` will either
+silently revert the change or refuse. So:
+
+| Installation | Who performs the update | Why |
+| --- | --- | --- |
+| a tarball from the release page, unpacked by the user | **we do**, by atomic replacement | we own the file's provenance, and we recorded its hash at install time |
+| Homebrew formula in a tap | **we ask `brew` to do it**, then verify | the package manager owns the Cellar; replacing files under it is how installations become unrepairable |
+| anything else — a system package, a checkout, an unknown path | **refused**, exit `6`, with the command to run by hand | provenance unknown, so automatic replacement is not ours to perform |
+
+Provenance is **recorded at install time** and shown in `doctor`; it is never guessed from `PATH` at update time. A binary
+that we did not install, at a location we cannot account for, is never replaced automatically.
+
+### The rules that hold regardless of mode
+
+1. **Nothing is updated while a run is active**, and no run starts while an update is in progress: one global lock, taken
+   for the whole operation in both directions. The same rule as `tzim` (update.md §2.2).
+2. **Identity is recorded on both sides** — version, provenance, artifact SHA-256 — before and after, in history.
+3. **The result is verified before the update is considered finished**: the new binary answers `--version`, `doctor`
+   passes, the adapter accepts `tzim`, and a read-only smoke run on a bundled fixture succeeds.
+4. **A failed verification reverts to the previous version** — the kept inode is renamed back, or the package manager is
+   asked to reinstall the old version — and the history row says `reverted`. This is the first release that may use the word
+   "rollback", because it is the first one where rollback is a tested code path rather than a wish. If the revert itself
+   fails, the update is reported `failed` with both versions and both hashes, and nothing else is attempted.
+5. **Never a downgrade** unless the user asks for one explicitly: a version lower than the installed one is refused.
+6. **Never across a contract change without consent**: a major-version jump, or a jump that changes a documented status,
+   exit code or config field, is refused in `auto` mode and offered in `confirm` mode with the change summarised.
+7. **No `curl | sh`, no unsigned redirect, no download executed before its published checksum matches.** A redirect to a
+   host that is not the documented one aborts the update.
+8. **Signing is not claimed.** Artifact integrity is SHA-256 against the published `SHA256SUMS`; that protects against
+   corruption and a broken mirror, not against a compromised publisher account. [SECURITY.md](../../SECURITY.md) says so
+   in those words rather than implying more.
+
+### The order of an update
+
+```text
+lock ──► is a run active? ⇒ refuse 6
+       ──► what does the user have? (version, installer, hash) ──► history
+       ──► is a newer version published? ──► no ⇒ exit 0, "up to date"
+       ──► mode gate: asks, or does not
+       ──► tzim first (the binary we depend on), then ourselves
+       ──► verify: --version, doctor, adapter probe, smoke run
+       ──► success ⇒ history row "updated"  |  failure ⇒ revert, history row "reverted"
+unlock
+```
+
+`tzim` goes first on purpose: if updating `tzim` breaks the pair, we still have a working `auto-tzim` to say so. Doing it
+the other way round would leave the newer half of a mismatched pair in charge of diagnosing the older one.
+
+## D-32 · Two update modes
+
+Same vocabulary as D-29, deliberately: a user who has learned `confirm`/`auto` for optimisation should not have to learn a
+second word for updates.
+
+| | `update_mode = "confirm"` (default) | `update_mode = "auto"` |
+| --- | --- | --- |
+| When a newer version exists | prints what it is, what it changes, and the command | performs the update |
+| Who acts | the user | the tool |
+| Ask before replacing `tzim` | yes | no |
+| Ask before replacing `auto-tzim` | yes | no |
+| Where it can run | anywhere | anywhere, but refuses without confirmation only if a rule below bites |
+
+**It is a separate setting from `mode`** (D-29), because the two decisions are genuinely different: "optimise my photos
+without asking" says nothing about "replace the program that is doing it". Both defaults are the careful one, and both can
+be raised independently.
+
+```toml
+mode = "confirm"          # optimisation: ask before touching files
+update_mode = "confirm"   # updates: ask before touching the binaries
+```
+
+**What `auto` means in the presence of the rules above:** it removes the question, not the checks. A binary whose checksum
+does not match is never installed automatically; a version that jumps the contract is never installed automatically; a
+verification that fails reverts automatically and reports it. `auto` is "do the routine part without me", not "do whatever
+is published".
+
+**Recommended pairing, stated as a recommendation and not enforced:** `mode = "auto"` with `update_mode = "confirm"` for a
+scheduled, unattended installation — the routine file work needs no supervision, while the rare event that changes the
+software does. It is a recommendation because the owner's instruction was two independent switches, and enforcing a pairing
+would be the manager deciding a product question.
+
+**The residual risk in `auto`, named:** a bad release reaches the user without their consent, and the only things between
+them and it are the release gate, the checksum, the smoke run and the revert. That is a real reduction in control compared
+with `confirm`, and it is the user's choice to make — but the documentation must not describe `auto` as "safe because it
+verifies", as if verification made the choice costless.
+
+## D-33 · Rust, not Python
+
+The owner's decision, 2026-11-01: *the project is built in Rust.*
+
+`SPEC.md` §4.1 says "Core и CLI: Python 3.12+", with `tomllib`, stdlib `sqlite3`, Textual and PySide6 named under it, and
+§17.1 says "Инициализировать Python package". That text is **not edited** — it is pinned with a recorded SHA-256 and stays
+the document that was signed. The override lives here, dated and attributable, exactly as §16 established for P-01…P-03
+([CONFLICTS C-5](../spec/CONFLICTS.md) records the conflict itself).
+
+**Why this is the better fit, concretely.** Not "Rust is faster" — this program orchestrates a codec, it is not one.
+
+1. **A static binary is the whole installation.** No interpreter, no virtualenv, no `pip check` to become unrepairable, no
+   "works in my venv". The audience installs a tool on a machine that must keep working.
+2. **Self-update becomes the `tzim` problem, not the `site-packages` problem** (D-31). A binary is replaced with a
+   `rename` after a checksum check: atomic, revertible, already proven in the sibling repository. A Python package is
+   replaced by surgery on someone else's environment, and I refused to write that code — under Rust, the refusal
+   disappears because the situation does not exist.
+3. **The zero-network invariant becomes structural.** In Python, `urllib` is one import away and the claim is defended by a
+   test. In Rust there is no HTTP client in `std`, so an outbound request requires a dependency, and **a dependency is
+   visible in `Cargo.lock` and greppable in CI**. AC-9 changes from "a test catches you" to "the artifact cannot do it
+   without leaving a trace in the manifest".
+4. **Same stack as `tzim`**: `clippy`, `cargo-deny`, musl static builds, `SHA256SUMS`, a Homebrew formula, the same CI
+   shape. Two repositories with one author should not hold two build philosophies.
+5. **`stdin`/`PTY` discipline is easier to prove**, because process handling is explicit and there is no interpreter to
+   inherit anything.
+
+**What it costs, stated plainly.**
+
+- The Qt GUI (v0.4) is the loser: `PySide6` is mature and free, `cxx-qt` is neither. D-34 answers that by separating the
+  artifact rather than by pretending the cost is small.
+- The MVP takes longer: ownership, error types and process-group handling are more work than `subprocess.run`.
+- Every Python-specific paragraph in this repository was rewritten on 2026-11-01. That work existed because the language
+  decision arrived *after* 52 documents and 30 decisions — a fact worth remembering when the next foundational question
+  appears.
+
+**Accepted stack.**
+
+| Concern | Choice | Why |
+| --- | --- | --- |
+| CLI | `clap` (derive) | argv exactly as specified, no parser hand-written, no shell |
+| Config | `serde` + `toml` | strict typed schema; unknown fields rejected, not ignored |
+| JSON | `serde_json` | the documented NDJSON output is a serialised struct, not string building |
+| State | `rusqlite` (bundled SQLite) | the same on-disk format the specification describes; no system SQLite dependency |
+| Hashing | `sha2` | binary identity and record hashes |
+| Errors | `thiserror` inside, no `anyhow` at the edges | the exit-code contract maps to error types, not strings |
+| TUI (v0.2) | `ratatui` + `crossterm`, optional feature | a separate binary, not a startup branch |
+| Qt (v0.4) | `cxx-qt` over `auto-tzim-core` | separate artifact (D-34) |
+
+**Explicitly not adopted:** `tokio` or any async runtime (the runner is sequential, `jobs = 1`; concurrency without a proven
+need is a second execution model to test), any HTTP crate in v0.1, and any crate that spawns its own network activity.
+
+**Reversal condition:** a written owner decision, recorded here, with the reason. Not a drift discovered mid-implementation.
+
+## D-34 · Three artifacts, one core
+
+`auto-tzim` is not one program with three modes; it is one **library** with three front doors:
+
+| Artifact | Crate | Installed by | Contains |
+| --- | --- | --- | --- |
+| `auto-tzim` | `auto-tzim-cli` + `auto-tzim-core` | the release tarball, Homebrew | the CLI, the runner, the state |
+| `auto-tzim-tui` | `auto-tzim-tui` + `auto-tzim-core` | optional, from v0.2 | the terminal interface only |
+| `auto-tzim-qt` | `auto-tzim-qt` + `auto-tzim-core` | optional, from v0.4, its own package | the Qt interface only |
+
+Rules that follow, and are gates rather than intentions:
+
+1. **The core crate owns all behaviour**: discovery, policy, plan, staging, install, adapter, state. A front door that
+   implements any of it is a review failure — the same rule charter §12 already stated, now with a crate boundary that
+   makes it checkable (`cargo tree` shows who depends on what).
+2. **Every front door is optional and separately installable.** A user who wants the CLI never downloads Qt; a user who
+   installs the GUI is not forced to get a TUI.
+3. **No front door shells out to another.** The Qt app links `auto-tzim-core`; it does not drive the CLI through a pipe and
+   parse its stdout. A JSON output is an interface for *users*, not a private protocol between our own binaries.
+4. **The CLI remains the reference implementation of the behaviour**, and every acceptance row is judged against it first.
+   A front door is accepted only when it produces the same outcomes through the same core calls.

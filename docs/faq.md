@@ -55,8 +55,8 @@ One request, from one command: `update-check`. Everything else — including `ru
 complete list is in [privacy](privacy.md).
 
 **Will it update `tzim` for me?**
-Not in v0.1: `update-check` only tells you that a newer version exists. A controlled update is a later stage with its own
-rules ([update](update.md)).
+No. v0.1 has no update command at all. v0.2 adds `update-check`, which only tells you a newer version exists; a controlled
+update with the lock held and the result verified is v0.3, with its own rules ([update](update.md), [roadmap](roadmap.md)).
 
 ## For a reviewer or a newcomer
 

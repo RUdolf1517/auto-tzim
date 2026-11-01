@@ -19,7 +19,7 @@ Issues and commits:
 Implemented behavior:      <3–8 lines: what a user can now do, in the order of the issues>
 Non-goals preserved:       <the charter §6 items that could plausibly have been touched, each with the reason it was not>
 CI runs and artifacts:
-  <run-id>  <workflow>  <platform>  <python>  <status>  <head_sha>
+  <run-id>  <workflow>  <platform>  <toolchain>  <status>  <head_sha>
   …
 Raw evidence locations:    <paths inside evidence/<head-sha>/, or URLs to the uploaded bundle>
 Independent commands/results:
@@ -43,7 +43,7 @@ Produced by the harness ([testing-harness](../testing-harness.md) §6), not asse
 
 ```text
 evidence/<head-sha>/
-  manifest.json     # head sha, platform, python, both binary identities
+  manifest.json     # head sha, platform, toolchain, both binary identities
   SHA256SUMS        # one line per file, generated last
   summary.json      # counts per status — the reviewer recomputes these from the case files
   <case-id>/        # one directory per corpus case, 111 of them at freeze time

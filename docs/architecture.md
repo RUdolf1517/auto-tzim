@@ -20,33 +20,39 @@ attempt through another path, and no "force" flag anywhere in the code base.
 The consequence is a hard boundary worth stating in one line: **`auto-tzim` can only ever prevent work; it can never
 do work `tzim` would not have done.**
 
-The same boundary fixes **when** the binary may be called at all: outside an apply, the only invocation is
-`tzim --version`, for identity. A scan never passes a path, never passes `--dry-run`, and never writes in a target root
-(charter §6-2).
+The same boundary fixes **when** the binary may be called at all: outside an apply, the only invocations are
+`tzim --version` and `tzim --capabilities`, for identity. A scan never passes a path, never passes `--dry-run`, and never
+writes in a target root (charter §6-2, D-26).
 
 ## 2. Modules
 
-The layout is fixed by `SPEC.md` §4.2 and is a review item, not a suggestion:
+The layout is fixed by **D-33** (which replaces the Python tree in `SPEC.md` §4.2 — [CONFLICTS C-5](spec/CONFLICTS.md))
+and is a review item, not a suggestion:
 
 ```text
-auto_tzim/
-  core/
-    config          # read/validate TOML, atomic write, folder CRUD
-    capabilities    # version adapter for tzim: what it may do, what it emits
-    discovery       # walk one approved root, filter, produce candidates
-    stability       # identity capture, age and change checks
-    planner         # deterministic plan + exact argv per file
-    runner          # subprocess, NDJSON parse, timeout, signals
-    policy          # formats, transforms, limits, refusals decided by us
-    state           # SQLite: runs, files, locks, history
-    scheduler       # run-once now; OS adapters from v0.2
-    updater         # update check now; controlled update from v0.3
-    logging         # structured JSONL + retention
-  cli/              # argument parsing, human and JSON rendering, exit codes
+crates/
+  auto-tzim-core/        # the library: all behaviour lives here
+    src/
+      config.rs          # read/validate TOML, atomic write, folder CRUD
+      capabilities.rs    # tzim version + capability document, fail-closed
+      discovery.rs       # walk one approved root, filter, produce candidates
+      stability.rs       # identity capture, age and change checks
+      planner.rs         # deterministic plan + exact argv per file
+      staging.rs         # copy, journal, install, recovery
+      runner.rs          # subprocess, NDJSON parse, timeout, signals
+      policy.rs          # formats, transforms, limits, refusals decided by us
+      state.rs           # SQLite: runs, files, locks, history
+      updater.rs         # v0.3 only; absent from v0.1
+      logging.rs         # structured JSONL + retention
+  auto-tzim-cli/         # argv parsing, human and JSON rendering, exit codes
+  auto-tzim-harness/     # fake tzim, run-case, pinned fetch, evidence bundles
+  auto-tzim-tui/         # v0.2 only, separate binary
+  auto-tzim-qt/          # v0.4 only, separate binary and its own package
 ```
 
-`tui/` and `qt/` do not exist in v0.1. When they exist they call the same `core` API — the review gate for v0.2 and
-v0.4 is that no discovery, subprocess or updater code appears outside `core/` (charter invariant 17).
+Only the first two crates ship in v0.1. The front doors call the same core API, and the crate boundary makes the rule
+checkable rather than aspirational: `cargo tree` shows which crate depends on what, and a front door that pulls in
+discovery or subprocess code is visible in the graph (D-34, charter invariant 17).
 
 ## 3. Data flow of one run
 
@@ -125,8 +131,8 @@ Properties that follow from this shape and are individually tested:
 
 - `scheduler`: `run --once` is the only entry point the scheduler will call in v0.2. No scheduler-specific
   eligibility code will exist, so the scheduler cannot diverge from the CLI.
-- `updater`: v0.1 implements "notify" only. A controlled update (v0.3) must reuse the same version comparison and the
-  same lock, and must refuse while a run is active.
+- `updater`: **does not exist in v0.1** (D-28). v0.2 adds "notify" only; a controlled update (v0.3) must reuse the same
+  version comparison and the same lock, and must refuse while a run is active.
 - `tui`/`qt`: read from the same state API and start the same `run --once`. Any duplicate logic is a review failure.
 
 ## 7. What the architecture deliberately refuses

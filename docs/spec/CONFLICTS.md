@@ -2,7 +2,7 @@
 
 Date: 2026-10-29. Two documents define this project: the technical specification `SPEC.md` (version 0.1) and the
 manager charter `MANAGER-SPEC.md` (version 0.2, whose §16 decided findings P-01…P-03). They were written at different
-times, so in four places they do not say the same thing. A coder must not have to guess, and a reviewer must not have to
+times, so in five places they do not say the same thing. A coder must not have to guess, and a reviewer must not have to
 pick a side per pull request, so the resolution is written down here once.
 
 Rule of precedence, taken from the charter itself: **for process, evidence and acceptance the charter wins; for product
@@ -15,6 +15,7 @@ decision is recorded in [DECISIONS.md](../manager/DECISIONS.md) and cited in the
 | C-2 | Exit codes | §8.2: `0/1/2/3/4/5` (4 = lock) | §16 P-03: add `6` (preflight/policy refusal), `7` (internal), `8` (lock); `4` unused; `130/143` for signals; precedence `130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0`; raw `tzim` codes only in history | **Charter wins.** Decision D-18/D-19. The technical specification's §8.2 table is superseded, and `docs/cli.md` §4 is the operative table |
 | C-3 | `transforms` in the MVP | §6.3: `transforms` is an opt-in field; the MVP may support one | Invariant 11 + §16 P-01: the field must be **empty** in the MVP; confirmation-required transformations do not run | **Charter wins.** Decision D-05: any non-empty `transforms` is a validation error |
 | C-4 | Capability discovery | §7.1: record supported formats/opt-ins "if available"; a version-specific adapter is allowed; §2.1 forbids parsing human output | Invariant 18 + §16 P-01: nothing is inferred from `--info`/`--list-formats`/`note`; default set is delegated to the binary without `--formats`; unknown contract ⇒ `incompatible_tzim` | **Charter wins, and it is stricter.** Decision D-01: the only capability call is `tzim --version` |
+| C-5 | Implementation language | §4.1: "Core и CLI: **Python 3.12+**", with `tomllib`, stdlib `sqlite3`, Textual and PySide6; §17.1: "Инициализировать Python package" | §4.1 is a *recommendation* heading ("Рекомендуемая архитектура"), not an invariant; the charter fixes behaviour, gates and evidence, and is silent on language | **The owner decided on 2026-11-01: Rust** (D-33). `SPEC.md` stays pinned and unedited; the override is recorded in D-33. This row exists so that no coder reads §4.1 and implements the wrong stack |
 
 Two smaller differences are not conflicts but additions the technical specification does not cover; they are decided in
 [the decision log](../manager/DECISIONS.md) and flagged there as manager decisions with owner notice:
@@ -36,3 +37,18 @@ Two smaller differences are not conflicts but additions the technical specificat
 
 Only when a specification copy changes. Each new copy is recorded in [PROVENANCE.md](PROVENANCE.md), and a conflict that
 a new version resolves disappears from the table with the row noted as closed in the commit message.
+
+## C-5 in detail — why the pinned document is not edited
+
+`SPEC.md` §4.1 is titled "Рекомендуемая архитектура" — *recommended* architecture. Under the precedence rule above, the
+technical specification owns product behaviour, and the language of the implementation is a means to that behaviour rather
+than behaviour itself. Nothing in §15 (acceptance) or §16 (definition of done) names a language.
+
+Editing `SPEC.md` would also break the property that makes it useful: it is pinned with a recorded SHA-256 and read from
+the `tzim` repository, so a local edit makes our copy diverge from the one the owner signed. The project therefore does
+what it did for `§16 P-01…P-03`: **the document stays, the decision is recorded separately and cited**, and every place
+that would have contradicted it now points at [D-33](../manager/DECISIONS.md).
+
+The one thing this row does *not* cover is the Qt GUI. §4.1 names PySide6, and under Rust that dependency disappears — see
+D-34 for what replaces it, and note that the replacement is a separate artifact rather than a different binding of the
+same thing.

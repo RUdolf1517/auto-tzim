@@ -148,7 +148,7 @@ Recommended: **rewritten files only, up to 64 MiB, `null` recorded above the cap
 
 ### Q8 — Test matrix: which macOS, which Linux?
 
-Recommended: `ubuntu-latest` (x86_64) + `macos-latest` (arm64), Python 3.12 and 3.13, plus one job per stage on
+Recommended: `ubuntu-latest` (x86_64) + `macos-latest` (arm64) on the pinned Rust toolchain, plus one job per stage on
 3.12 only. Intel macOS and ARM Linux are documented as untested until someone asks for them. Windows is out of the
 MVP (spec §3 is macOS/Linux).
 
@@ -169,7 +169,7 @@ merge, close issues or publish releases without explicit delegation (charter §2
 
 ## Assumptions the manager will act on unless corrected
 
-1. **A1** — MVP supports macOS and Linux only; CPython 3.12+; no Windows claim in any document.
+1. **A1** — MVP supports macOS and Linux only; Rust on the pinned toolchain (D-33); no Windows claim in any document.
 2. **A2** — one implementation PR for the MVP, commits labelled by issue ID; later stages get their own PRs.
 3. **A3** — the manager writes documentation, issues, gates and reviews; never product code, tests or CI.
 4. **A4** — CI runs on GitHub-hosted runners; no self-hosted infrastructure is introduced.
@@ -185,7 +185,7 @@ merge, close issues or publish releases without explicit delegation (charter §2
 | Q5 (`transforms` empty) | decided for the MVP by charter §6-11 (D-05); the field returns when a machine-readable contract exists |
 | Q6 (update source) | manager default in force (D-07): one GitHub releases API request; owner may override at no cost |
 | Q7 (hash cap) | manager default in force (D-09); `null` above 64 MiB, recorded explicitly |
-| Q8 (test matrix) | manager default in force: `ubuntu-latest` + `macos-latest`, Python 3.12 and 3.13 |
+| Q8 (test matrix) | manager default in force: `ubuntu-latest` + `macos-latest` on the pinned Rust toolchain (D-33) |
 | Q9 (canonical spec home) | open, owner action: the docs-only commit `efc31756` is still only on a branch of `tzim` — command in [OWNER-ACTIONS.md](OWNER-ACTIONS.md) §4 |
 | Q10 (who merges, who is the coder) | default in force: one coder, one MVP pull request, owner merges |
 | Q11 (consume `--capabilities`?) | **open** — decides DR-05: delegate blindly, or prove the default set before planning |

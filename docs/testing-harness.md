@@ -15,16 +15,20 @@ raw material for the reviewer, so its output formats are part of the contract, n
 tests/
   harness/
     fake_tzim.py            # the fake binary: one script, behaviour from a scenario file
-    install_fake.py         # writes a `tzim` shim into a temp bin dir and prepends it to PATH
-    run_case.py             # `run-case <ID>`: one corpus case, one JSON result line
-    pinned.py               # fetch + checksum + cache of the pinned real tzim artifact
-    evidence.py             # bundle writer + manifest with per-file SHA-256
-  cases/                    # one YAML/JSON per corpus ID (N-01.yaml, R-10.yaml, …)
-  conftest.py               # pytest fixtures: tmp root, AUTO_TZIM_HOME, fake bin dir
+  harness/                  # one Rust crate, `auto-tzim-harness`, with subcommands:
+    run-case                # `run-case <ID>`: one corpus case, one JSON result line
+    pinned                  # fetch + checksum + cache of the pinned real tzim artifact
+    evidence                # bundle writer + manifest with per-file SHA-256
+    fake-tzim               # the fake binary itself, built by cargo, not a script
+  cases/                    # one TOML/JSON file per corpus ID (N-01.toml, R-10.toml, …)
 ```
 
-Nothing here may import `auto_tzim` internals except through its public entry points (`python -m auto_tzim` / the
-installed console script), so that a test cannot pass because it called a private function the CLI never reaches.
+The harness is a **Rust binary in the workspace**, not a Python script: `cargo run -p auto-tzim-harness -- run-case X-04`.
+That means a reviewer reproduces a case with a toolchain they already have (the same one that builds the product), and the
+fake `tzim` is a compiled artifact rather than a script that needs an interpreter on the machine.
+
+Nothing here may reach into `auto-tzim-core` otherwise than through its public API or through the CLI binary itself, so
+that a test cannot pass because it called a private function the CLI never reaches.
 
 ## 2. The fake `tzim`
 
@@ -95,7 +99,7 @@ another case's rows.
 ## 4. `run-case <ID>`
 
 ```console
-$ python -m tests.harness.run_case X-04 --bundle /tmp/evidence/<sha>
+$ cargo run -q -p auto-tzim-harness -- run-case X-04 --bundle /tmp/evidence/<sha>
 {"case":"X-04","expected":{"exit":6,"processed":0},"observed":{"exit":6,"processed":0},
  "pass":true,"artifacts":["X-04/stdout.txt","X-04/stderr.txt","X-04/invocations.jsonl","X-04/root-before.txt","X-04/root-after.txt"]}
 ```
@@ -112,7 +116,7 @@ Contract:
 | cleanup | temp roots removed on success, **kept** on failure and their path printed |
 | side effects | only inside its temp dir and the bundle; never touches the repository, the user's home, or the real `tzim` |
 | no sleeps | except the single documented real-age case (`S-03`), which sleeps at most 2 s and says so in its output |
-| prohibition | must not import `auto_tzim` internals; must drive the CLI |
+| prohibition | must not reach into `auto-tzim-core` beyond its public API; must drive the CLI binary |
 
 A case may declare `"platform": "unix-only"` (for `K-08`, `N-17`); on a platform that cannot build it, the result is
 `{"pass":false,"skipped":true,"reason":"…","platform":"…"}` and the reviewer treats it as a finding unless the corpus
@@ -124,7 +128,7 @@ says otherwise — a skip is never silently a pass.
 it under `$ATS_CACHE` (default: the platform cache dir), and prints the resolved path plus its SHA-256:
 
 ```console
-$ python -m tests.harness.pinned --version 0.16.1 --target x86_64-unknown-linux-musl
+$ cargo run -q -p auto-tzim-harness -- pinned --version 0.16.1 --target x86_64-unknown-linux-musl
 {"path":"/cache/tzim-0.16.1-musl/tzim","sha256":"…","version":"0.16.1","sums_line":"<the matching line from SHA256SUMS>"}
 ```
 
@@ -145,7 +149,7 @@ Rules:
 
 ```text
 evidence/<head-sha>/
-  manifest.json            # {"head_sha","created","platform","python","python_version","tzim":{...},"cases":N}
+  manifest.json            # {"head_sha","created","platform","toolchain","rustc_version","tzim":{...},"cases":N}
   SHA256SUMS               # one line per file below, generated last, never edited
   <case-id>/
     stdout.txt  stderr.txt  exit.txt
@@ -155,8 +159,8 @@ evidence/<head-sha>/
   summary.json             # counts per status, recomputable from the case files alone
 ```
 
-`manifest.json` records the head SHA, the OS/arch, the Python version, and the identity of both binaries (ours and
-`tzim`'s). `SHA256SUMS` is written after every other file and verified by the reviewer, so a later edit to a case file is
+`manifest.json` records the head SHA, the OS/arch, the pinned Rust toolchain version, and the identity of both binaries
+(ours and `tzim`'s). `SHA256SUMS` is written after every other file and verified by the reviewer, so a later edit to a case file is
 detectable.
 
 ## 7. What the harness must never do

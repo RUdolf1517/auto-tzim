@@ -34,6 +34,15 @@ Nothing has been released. There is no version of `auto-tzim` that can be instal
   checksums, row reconciliation with `jq`, byte evidence, the read-only-plan proof, the executed exit-code matrix, six
   negative controls the reviewer performs personally, and the four claim marks.
 
+### Changed — the roadmap is versioned
+
+[roadmap.md](docs/roadmap.md) rewritten around versions instead of features: each one states what a user gets, the new
+risk it introduces, what is deliberately out of scope, the gate that has to be passed, and what would stop it. v1.0 is
+defined as the point where the contract stops moving rather than as a feature release, and v0.2+ carries no issue set yet —
+deliberately, because a breakdown written before v0.1 ships describes software nobody has used.
+`update-check` moved to v0.2 in [update.md](docs/update.md) with D-28, and the manager page gained the versions-to-issues
+mapping.
+
 ### Changed — four product decisions, and what they cost
 
 - **The adapter reads `tzim --capabilities`** ([D-26](docs/manager/DECISIONS.md)) and fails closed on an unexpected schema

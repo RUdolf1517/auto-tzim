@@ -33,6 +33,28 @@ Stage boundaries are load-bearing: nothing from v0.2+ may be merged into the MVP
 
 ---
 
+## Versions and issues
+
+The product roadmap lives in [docs/roadmap.md](../roadmap.md); this page is the work breakdown for the version currently
+being delivered. Only one version has issues.
+
+| Version | Issues | State | Acceptance |
+| --- | --- | --- | --- |
+| v0.1 — MVP | #1…#9 (AT-01…AT-09), assignment #10 | **prepared**, not started (AT-07 struck by D-28) | [GATES.md](GATES.md) — 17 rows, 23 invariants at one final SHA |
+| v0.2 — scheduler, TUI, `update-check` | none yet | deliberately not created | written before its first line, from [roadmap §3](../roadmap.md) |
+| v0.3 — controlled update | none yet | deliberately not created | charter §11.3 real upgrade test, from [roadmap §4](../roadmap.md) |
+| v0.4 — Qt GUI | none yet | deliberately not created | from [roadmap §5](../roadmap.md) |
+
+**Why v0.2+ has no issues.** An issue set written today would describe software whose contracts have not been through a
+single release, and every one of them would be rewritten after the first real user report. The version is committed in the
+roadmap; the breakdown is written when the version starts, in the same week, against the GATES text that will judge it.
+This is not a queue of promises — it is a refusal to pretend we know v0.3's details before v0.1 exists.
+
+The v0.2 set, when it is written, inherits one constraint from v0.1 that cannot be renegotiated: the scheduler calls the
+same `run --once` and has no eligibility rules of its own, and the mode gate of D-29 is not bypassable by any front end.
+
+---
+
 ## Stage 1 — MVP / v0.1 (assigned as one set, #1…#10)
 
 ### AT-01 · Repository and package bootstrap

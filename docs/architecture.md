@@ -125,8 +125,8 @@ Properties that follow from this shape and are individually tested:
 
 - `scheduler`: `run --once` is the only entry point the scheduler will call in v0.2. No scheduler-specific
   eligibility code will exist, so the scheduler cannot diverge from the CLI.
-- `updater`: v0.1 implements "notify" only. A controlled update (v0.3) must reuse the same version comparison and the
-  same lock, and must refuse while a run is active.
+- `updater`: **does not exist in v0.1** (D-28). v0.2 adds "notify" only; a controlled update (v0.3) must reuse the same
+  version comparison and the same lock, and must refuse while a run is active.
 - `tui`/`qt`: read from the same state API and start the same `run --once`. Any duplicate logic is a review failure.
 
 ## 7. What the architecture deliberately refuses

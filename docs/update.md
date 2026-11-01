@@ -1,12 +1,16 @@
 # Updates
 
-> **Status: specification, no implementation.** v0.1 is notify-only; controlled update is a later stage and is
-> described here so that the boundary is visible.
+> **Status: specification, no implementation.** `update-check` ships in **v0.2**, not v0.1 (D-28: the MVP makes no
+> network request at all). Controlled update is v0.3. Both are described here so the boundary is visible before either
+> exists.
 > Related: [privacy](privacy.md) · [releases](releases.md) · [roadmap](roadmap.md)
 
-## 1. v0.1 — notify only
+## 1. v0.2 — notify only
 
-`auto-tzim update-check` answers one question: is there a newer `tzim` than the one this installation uses? It:
+> Deferred from v0.1 by D-28. The design below is unchanged; only its version moved, so that the first release a stranger
+> installs opens no socket. Exit `5` is reserved for it and is not produced anywhere in v0.1.
+
+`auto-tzim update-check` (v0.2) answers one question: is there a newer `tzim` than the one this installation uses? It:
 
 - makes one documented request (D-07 — a manager default the owner may override; see [privacy](privacy.md) §1);
 - compares semantic versions, and reports the state as one of `up_to_date`, `update_available`, `incompatible_major`,
@@ -60,9 +64,10 @@ changed, that the binary runs, that the adapter accepts it, and that a dry run o
 same rule `tzim` applies to itself, and the reason `auto-tzim` will not ship an update mechanism that has only been
 reasoned about.
 
-## 4. What v0.1 users should do instead
+## 4. How to update `tzim` by hand (v0.1 and v0.2)
 
-Read the release notes, install the new version through the channel they used originally, then run
+There is no `update-check` and no updater: v0.1 opens no socket at all, and v0.2 only tells you a version exists. Read
+the release notes, install the new version through the channel you used originally, then run
 `auto-tzim doctor` — it will report the new binary's hash and version, and the adapter will either accept it or refuse
 with exit `3`. Nothing else changes: history is keyed on the binary hash, so files decided by the old binary are
 re-examined by the new one (D-06).

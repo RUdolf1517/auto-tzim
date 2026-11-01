@@ -13,6 +13,7 @@ Date of this board: **2026-10-29** (updated after the owner's charter v0.2).
 | Specification copies | `SPEC.md` v0.1 (from `tzim`), `MANAGER-SPEC.md` **v0.2** (owner, 2026-10-29) — [provenance](../spec/PROVENANCE.md), [conflicts resolved](../spec/CONFLICTS.md) |
 | Charter v0.2 findings | P-01/P-02/P-03 **decided by the owner** (charter §16); recorded as D-01…D-05, D-18, D-19 |
 | GitHub issues AT-01…AT-09 | **created** — [#1](https://github.com/RUdolf1517/auto-tzim/issues/1) … [#9](https://github.com/RUdolf1517/auto-tzim/issues/9) |
+| Versions | v0.1 MVP defined and gate-ready · v0.2 scheduler + TUI + `update-check` · v0.3 controlled update · v0.4 Qt · v1.0 is the contract freezing, not a feature. See [roadmap](../roadmap.md) |
 | Product decisions 2026-11-01 | Four, all recorded: read `--capabilities` (D-26), surface the refusal `reason` (D-27), no network in v0.1 (D-28), and **two modes sharing one install path** (D-29) |
 | Consolidated assignment | **prepared and filed** as [#10](https://github.com/RUdolf1517/auto-tzim/issues/10); **B-01 cleared on 2026-10-30** (`tzim` PR #84 merged, tracker idle, v0.16.1 released 2026-11-01). Start now waits on the contract drift below, not on the charter |
 | Upstream request | [RUdolf1517/tzim#85](https://github.com/RUdolf1517/tzim/issues/85) — capabilities + structured reasons. **Delivered**: implemented in `tzim` PR #91, shipped in v0.16.0. My duplicate #86 is closed |

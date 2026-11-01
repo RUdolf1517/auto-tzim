@@ -1,7 +1,7 @@
 # Safety model
 
 > **Status: specification, no implementation.** Each property names the clause it comes from and the test that must exist
-> before acceptance. The operative text is charter v0.2 §6 (nineteen invariants); the technical specification's older
+> before acceptance. The operative text is charter v0.2 §6 (nineteen invariants) plus four added by D-29 (20–23); the technical specification's older
 > invariants 2 and 11 are superseded — see [CONFLICTS](spec/CONFLICTS.md).
 > Related: [architecture](architecture.md) · [guarantees](guarantees.md) · [recovery](recovery.md) · [limitations](limitations.md)
 
@@ -9,7 +9,7 @@
 not change behind its back, and to keep an honest record. The dangerous thing this program could do is hand the wrong
 path — or the right path at the wrong time — to a program that rewrites files in place.
 
-## 1. The nineteen invariants and where each is enforced
+## 1. The twenty-three invariants and where each is enforced
 
 | # | Invariant (charter §6, v0.2) | Enforced by | Test |
 | --- | --- | --- | --- |
@@ -24,14 +24,18 @@ path — or the right path at the wrong time — to a program that rewrites file
 | 9 | Eligibility, refusal, verification, installation stay in `tzim` | one mapping table; verdict recorded, never re-decided | INV-9 |
 | 10 | No re-routing of unknown/unsupported/refused/failed | one path, no fallback branch | INV-10 |
 | 11 | `transforms` must be empty in the MVP; confirmation-required transformations do not run | validation rejects any value (D-05) | INV-11 |
-| 12 | Scheduler/non-TTY/JSON never wait for a prompt and never allocate a PTY | `stdin=DEVNULL`, no `pty` import, timeout | INV-12 |
+| 12 | **No PTY, ever.** The only prompt in the product is the `confirm` approval gate: one line on stderr, one line on stdin, refused when stdin is not a terminal or `--json` is set. A child process is never given a terminal and never inherits our stdin | `stdin=DEVNULL` for every child, no `pty` import, timeout | INV-12 |
 | 13 | `failed` never retried in an automatic loop | retry policy keyed on the invalidation key | INV-13 |
 | 14 | Update-check downloads and replaces nothing | no download code exists in v0.1 | INV-14 |
 | 15 | No telemetry, no undocumented requests | `updater` is the only network client | INV-15 |
-| 16 | No promise of undo | documentation and `--help`; no backup code | INV-16 |
+| 16 | No promise of undo. Nothing is destroyed before an approved proposal, and that sentence may never be read as an undo | documentation, the proposal text, `--help`; no backup code | INV-16 |
 | 17 | The UI never duplicates core logic | review gate for v0.2/v0.4 | INV-17 |
 | 18 | Default-enabled set and refusal reasons are never reconstructed from human output, extensions or the free-text `note`; an unknown contract is fail-closed `incompatible_tzim` | restricted adapter (D-01): `tzim --version` only; generic `skipped_by_tzim` (D-02) | AC-13 |
 | 19 | No passthrough of a raw `tzim` exit code; preflight/pause/resource refusals have their own code `6`; internal errors and signals have documented codes and precedence | own exit contract (D-18/D-19) | AC-8, AC-11 |
+| 20 | The user's folder is not written before the install step of a file: all processing happens on a staged copy inside `AUTO_TZIM_HOME` | staging path construction; no `tzim` invocation carries a source path | AC-14 |
+| 21 | An original is deleted only after its verified replacement is in place and its directory is `fsync`ed — never before, never in a batch, never for a file that was not replaced | journaled install: rename-away, rename-in, fsync, unlink | AC-14, AC-15 |
+| 22 | Identity is re-checked immediately before the work on each file; a changed file is skipped and its original kept | `(dev, ino, size, mtime_ns)` compared to the plan | AC-16 |
+| 23 | `confirm` never hangs, never assumes yes, and treats "no" as a completed outcome: no TTY ⇒ exit `6`; declined ⇒ exit `0`, zero writes | proposal gate; stdin is a terminal or nothing happens | AC-17 |
 
 Invariants 2, 11, 12, 18 and 19 were **tightened** by charter v0.2; the older technical specification allowed a `tzim`
 dry run during a preview and did not fix an exit code for refusals. Where the two disagree, the charter wins.

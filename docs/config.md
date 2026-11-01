@@ -37,7 +37,8 @@ example: `unknown field "folder[0].recurse": did you mean "recursive"?`.
 | Field | Type | Default | Rules |
 | --- | --- | --- | --- |
 | `tzim_path` | string | `""` | empty means "find `tzim` on `PATH`"; a path is resolved and its `realpath` recorded. Must be an absolute path or empty; must not be a directory |
-| `update_policy` | enum | `notify` | `notify` \| `manual`. `scheduled` is reserved for v0.2 and is rejected in v0.1 with a message saying so |
+| `mode` | enum | `confirm` | `confirm` \| `auto` (D-29). `confirm` shows a proposal and installs only on approval; `auto` installs without asking. `--mode` on the command line overrides it. A default of `auto` is refused: destruction by default is not a convenience |
+| `update_policy` | enum | `notify` | reserved: the key is accepted and has no effect in v0.1, because there is no `update-check` command (D-28). `scheduled` is rejected with a message saying so |
 | `allowed_major_versions` | array of integers | `[0]` | used only by `update-check`; a detected version outside this list is reported as incompatible and never acted on |
 
 ## 4. `[[folder]]`
@@ -87,7 +88,7 @@ schema = 1
 
 [installation]
 tzim_path = ""                 # find `tzim` on PATH
-update_policy = "notify"
+mode = "confirm"
 allowed_major_versions = [0]
 
 [[folder]]

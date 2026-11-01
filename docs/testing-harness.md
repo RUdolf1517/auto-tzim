@@ -81,8 +81,13 @@ Every fake invocation appends one JSON object per line to `$ATS_INVOCATION_LOG` 
 | `event: exit` | written by the same process with `exit_code` and `duration_ms`, so a killed child still leaves a spawn row |
 
 **Counting rule used by the reviewer** (`EVIDENCE-PROTOCOL` §5): a *path invocation* is any spawn whose `argv[1:]`
-contains an element that is not a flag and not absent. A scan must produce exactly one spawn per run — `--version` — and
-zero path invocations. An apply must produce at least one path invocation.
+contains an element that is not a flag and not absent. A scan must produce exactly **two** spawns — `--version` and
+`--capabilities` (D-26) — and **zero** path invocations. An apply must produce at least one path invocation, and in
+neither mode may a path invocation name a file inside the user's folder: the work happens on a staged copy (D-29), so the
+rule is checkable from the log alone rather than from reading the code.
+
+This is the change D-26 forced: the old contract said "exactly one spawn". Left unedited it would have failed a correct
+implementation, which is how a real safety test gets deleted for being inconvenient.
 
 The log is append-only and never truncated by the harness; each case gets its own file so a failure cannot be masked by
 another case's rows.

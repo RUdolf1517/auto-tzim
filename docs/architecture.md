@@ -65,6 +65,20 @@ config ──► folders ──► discovery ──► stability ──► polic
 `scan` stops at **plan** and writes nothing in the target root; `apply` (`run --once`) is the only path that reaches
 `runner`, and only for a plan whose hash still matches the tree (D-20).
 
+Inside `runner` there is **one** processing path, whatever the mode is (D-29):
+
+```text
+plan row ──► re-stat ──► copy to staging ──► tzim (on the copy) ──► verify ──► install ──► journal
+                │                                   │                    │          │
+                └ mismatch ⇒ skipped_changed       └ not "optimized"    └ too big   └ rename-away,
+                  (original untouched)                ⇒ no install         ⇒ no install  rename-in, fsync,
+                                                                                        unlink old
+```
+
+`confirm` and `auto` differ in exactly one place — whether a proposal is shown and accepted before the first `install`.
+Everything before it, and the install itself, is shared code, which is why the corpus can prove the mode is the only
+difference (`M-*` cases, AC-14).
+
 Properties that follow from this shape and are individually tested:
 
 - **Deterministic.** Discovery order is the sorted relative path; the plan is a list, not a set. Two runs on an
@@ -101,7 +115,7 @@ Properties that follow from this shape and are individually tested:
 | No symlinks, no special files | `discovery` (lstat, mode bits) | INV-5 |
 | Hard links and unstable files skipped | `stability` | INV-6, R-04 |
 | First apply of a folder needs a matching read-only plan; scan never runs file-processing `tzim` | `planner` cannot reach `runner`; `state` stores the plan id/hash; `cli` refuses with exit `6` | INV-2, AC-2, AC-11, AC-12 |
-| No prompts, no PTY | `runner` (`stdin=DEVNULL`, no `pty` import) + no prompt code + timeout | INV-12, AC-5 |
+| One prompt, no PTY | the `confirm` gate only (D-29); every child gets `stdin=DEVNULL`, no `pty` import, per-file timeout | INV-12, AC-5, AC-17 |
 | No re-routing of a refused file | absence of any fallback branch, reviewed | INV-10 |
 | No automatic retry of `failed` | `state` (retry policy keyed on the invalidation key) | INV-13 |
 | No network except `update-check` | `updater` is the only module that imports a network client | INV-15 |

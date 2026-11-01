@@ -31,6 +31,11 @@ invent it; the owner may change it without cost), **superseded**.
 | D-23 | A candidate plan is not a promise of eligibility or gain | adopted | charter §8.4 | AT-03, AT-04, AT-09 |
 | D-24 | `main` protection: **decision deferred** by the owner on 2026-10-29; interim rule is that an `--admin` merge is permitted for documentation-only pull requests and must be logged in STATUS-LOG | deferred (interim rule adopted) | [OWNER-ACTIONS](OWNER-ACTIONS.md) §6a; charter §2.2 | every future PR to `main` |
 | D-25 | No implementation start until the severity-A drift items of the 2026-11-01 audit are closed; the six `tzim` contract facts this project is built on changed under it | adopted | [audit](../audits/2026-11-01-tzim-v0.16.1.md); charter §3, §9 | AT-01…AT-09 (start), Q11–Q13 |
+| D-26 | The adapter **reads `tzim --capabilities`** and fails closed on an unexpected `capabilities_schema_version` / `result_schema_version`; `--formats` is still never passed | adopted (owner, 2026-11-01) | [audit DR-01](../audits/2026-11-01-tzim-v0.16.1.md), Q11 | AT-04, AC-13, INV-18 |
+| D-27 | `tzim`'s stable `reason_code` is **surfaced** in our own rows as `reason`, beside the verbatim `note`; no code ever drives our logic | adopted (owner, 2026-11-01) | [audit DR-02](../audits/2026-11-01-tzim-v0.16.1.md), Q12 | AT-05, `cli.md`, `state.md`, corpus `D-*` |
+| D-28 | **`update-check` leaves the MVP** and ships in v0.2; v0.1 makes **zero network requests**. Charter §17.5 is overridden by this decision; the pinned `SPEC.md` is not edited | adopted (owner, 2026-11-01) | Q "AT-07", charter §16 | AT-07 → v0.2, `privacy.md`, `dependencies.md`, AC-9, INV-14/15 |
+| D-29 | Two operating modes — `confirm` (proposal, then install on approval) and `auto` (no prompt) — sharing **one** install path; an original is deleted only after its verified replacement is in place | adopted (owner, 2026-11-01) | this section | AT-05, AT-06, `safety.md`, `cli.md`, `guarantees.md`, GATES AC-14…AC-17 |
+| D-30 | Accepted `tzim` window: **`>=0.16.0, <0.17`**, tied to `capabilities_schema_version: 1` / `result_schema_version: 2`; widened only after a real run | **adopted (owner, 2026-11-01)** — Q13 answered | [audit DR-09](../audits/2026-11-01-tzim-v0.16.1.md), Q13 | AT-04 |
 
 ---
 
@@ -300,3 +305,141 @@ whether we surface `reason_code`, and which version window we accept.
 
 **Reversal condition:** an explicit owner instruction to start anyway, recorded here with the reason and the accepted
 consequence.
+
+## D-26 · The adapter reads the capability document
+
+`tzim` v0.16.0 answers `--capabilities` with one read-only JSON object: `capabilities_schema_version`, `result_schema_version`,
+`build_features`, `compiled_formats`, `default_enabled_formats`, `selection_flags`, `handler_opt_ins`, `transformations`,
+`confirmation_policies`. The MVP reads it at start and in `doctor`.
+
+Rules that keep this from becoming a new source of invention:
+
+1. **Read, never infer.** We act on the document or we fail; we never complete a missing field from the version string.
+2. **Two schema numbers, both checked.** `capabilities_schema_version` must be `1` and `result_schema_version` must be `2`,
+   the pair we are tested against. Anything else, including a *newer* number, is `incompatible_tzim` (exit `3`) with the
+   observed values recorded. Fail closed, not forward.
+3. **`--formats` is still never passed** (D-11). Knowing the default set does not make it a promise; the binary still decides.
+4. **The document is not displayed as a guarantee.** `doctor` shows the observed set with the binary hash beside it, and the
+   document says it is a description of that binary, not of the product (audit DR-05, option C refused).
+5. **Cost:** one extra spawn at start, so "a scan is exactly one `tzim` invocation" becomes two. The harness contract is
+   updated rather than left to discover this in a red test (see [testing-harness](../testing-harness.md) §4).
+
+**Reversal condition:** a `tzim` release that removes the document, in which case the adapter falls back to the version-keyed
+table and the audit is re-run — not a silent downgrade.
+
+## D-27 · The refusal reason is passed through
+
+Every non-optimizing `tzim` row now carries `reason_code`, a stable identifier, `null` when something was optimized.
+
+- Our rows gain a field `reason`: the code we received, or `null`.
+- `note` stays **verbatim and unparsed**. No branch in our code may read it. This keeps INV-18 intact: the prohibition was
+  never "do not have a reason", it was "do not manufacture one from prose".
+- An **unknown** code is passed through as an unknown code and is never treated as success, eligibility, or consent. A code
+  we do not recognise changes nothing in the run; it is data for the human and for later analysis.
+- Our own skip categories (`skipped_policy`, `skipped_unstable`, `skipped_changed`, `skipped_by_user`) are ours and are
+  never mixed with `tzim`'s codes: the two live in different fields and are documented as such.
+- The field is additive: a consumer written against the earlier shape still reads `status`, `note` and sizes unchanged.
+
+**Why now:** the schema is unshipped, so a field is free. It answers the question users actually ask — *is this fixable?* —
+without teaching anyone to read English prose in a log.
+
+## D-28 · No network in v0.1
+
+`update-check` is removed from the MVP. v0.1 makes **no outbound request of any kind**; `urllib.request` leaves the
+dependency list; `privacy.md` becomes a one-paragraph statement instead of a section with an exception.
+
+- Exit code `5` stays **reserved and unused** in v0.1, so v0.2 can introduce it without renumbering anything.
+- **Charter §17.5 is overridden by this decision.** `SPEC.md` is pinned with a recorded SHA-256 and is **not** edited: the
+  override lives here, dated and attributable, which is exactly the mechanism charter §16 established for P-01…P-03.
+- The tests that guarded "update-check only notifies" (AC-9, INV-14) are not deleted: AC-9 becomes "**no command opens a
+  socket**, asserted with the resolver disabled and a filesystem tripwire", which is a stronger claim than the old one.
+- Cost, accepted: users of v0.1 are not told about v0.2. For a first release with no installed base, that costs nothing.
+
+**Reversal:** v0.2 ships AT-07 under the old rules — notify only, one request, documented, opt-out.
+
+## D-29 · Two modes, one install path
+
+The owner's instruction, 2026-11-01: *there will be two modes — automatic (no confirmation) and optimize-with-confirmation
+(the user reads the proposal, and once they agree the originals are deleted).*
+
+### The modes
+
+| | `confirm` | `auto` |
+| --- | --- | --- |
+| Plan | a separate `scan` step | computed inside the same run |
+| Approval | **required**: proposal on stderr, one line on stdin | none |
+| Who may use it | a person at a terminal | a terminal, cron, a script |
+| Writes before approval | **none** | none — processing happens on a staged copy |
+| Originals deleted | only after approval, file by file | file by file, as each replacement is verified |
+
+**In `auto` there is still a plan.** The owner confirmed the semantics on 2026-11-01: a plan of files is computed inside
+the run and optimized, originals are not kept. The plan is not skipped — it is the internal binding that lets us refuse a
+file that changed between the walk and the work (step 2a). What `auto` removes is the *question*, not the plan.
+
+**Mode selection:** `--mode auto|confirm` on the command line overrides `mode` in the config, which defaults to
+`confirm`. `auto` must be **asked for**: a tool that destroys by default and asks forgiveness in the README is not the
+product being built here.
+
+### The single install path
+
+Both modes run the same code; the mode gates one thing only — whether the proposal is shown and accepted.
+
+1. **Preflight** — lock, binary identity and capabilities, `pause`, folder enabled, matching plan (in `confirm`; computed in
+   `auto`), free space.
+2. For each planned file, in plan order:
+   a. **Re-stat** `(dev, ino, size, mtime_ns)` against the plan. A mismatch is `skipped_changed`; the original is not
+      touched and the file is not processed. This is the anti-TOCTOU check, and it runs *immediately* before the work, not
+      at plan time.
+   b. **Copy** the file into `AUTO_TZIM_HOME/staging/<run_id>/` — never into the user's folder — and `fsync` the copy.
+   c. **Run `tzim`** on the staged copy: argv array, `stdin=DEVNULL`, no PTY, per-file timeout.
+   d. **Verify the result** before it is allowed near the original: exit `0`, `status == optimized`, result smaller than the
+      copy, and our own SHA-256 of the result recorded. Anything else, and the original is not touched.
+   e. **Install**, journaled, in this order: `rename(original → .auto-tzim-old-<run>-<n>)` → `rename(staged → original)` →
+      `fsync(directory)` → `unlink(.auto-tzim-old-…)`. At every instant at least one complete copy exists that recovery can
+      restore from.
+3. **Report**, then delete the run's staging directory.
+
+### Rules that make deletion defensible
+
+- **An original is deleted only after its verified replacement is in place and the directory is fsynced.** Not before, not in
+  a batch at the end, not for a file that was not replaced.
+- **We never delete an original we did not replace.** `already_optimal`, `unsupported`, `skipped`, `failed`, a file not in
+  the plan, a file the user did not approve — untouched, byte for byte.
+- **No undo after install.** The old bytes are gone by design, and the proposal says so in one sentence before asking. What
+  changed is *when* the risk happens: nothing is destroyed until the user has read the proposal and agreed.
+- **`confirm` never hangs and never assumes yes.** No TTY, `--json`, EOF, or a closed stdin is a refusal: exit `6`, nothing
+  processed, with a message saying `--mode auto` exists for unattended use.
+- **A declined proposal is not a failure.** Exit `0`, zero installs, every planned file reported `skipped_by_user`, one
+  history row marked `declined`. Nothing is written to the user's folder.
+
+### Cost, stated plainly
+
+- Staging needs disk: free space must cover the staged copies plus headroom, checked *before* the first file, refused with
+  `6` if not.
+- Two modes are two paths to test. They are one code path plus one gate, and the corpus proves the gate is the only
+  difference (`M-*` cases).
+- A hard kill during install leaves a `.auto-tzim-old-*` beside the file. Recovery restores the original and says so; the
+  file is never lost, but a user *will* see that name in a crash. It is documented in `recovery.md` rather than hidden.
+
+### What this changes in the invariants
+
+- **Invariant 12 is rewritten, not deleted.** "No PTY, ever" stays absolute. "No prompt, in any mode" becomes: *the only
+  prompt is the `confirm` approval gate, it is one line on stderr and one line on stdin, and it fails closed when stdin is
+  not a terminal.*
+- **Invariant 16 is sharpened.** "No promise of undo" stays true; the documentation must now also say that nothing is
+  destroyed before approval, and must not let that sentence imply an undo exists.
+- Four new invariants (20–23) and four new acceptance rows (AC-14…AC-17) carry the mechanics.
+
+## D-30 · Accepted `tzim` versions
+
+`>=0.16.0, <0.17`, checked against the capability document rather than only the version string: within the window, the
+schema pair (`capabilities_schema_version: 1`, `result_schema_version: 2`) must also match, or the answer is
+`incompatible_tzim` (exit `3`). Anything outside the window is refused the same way, with the observed version, schemas and
+binary SHA-256 recorded in history.
+
+Widening the window requires a real run of the newer binary against the corpus (AT-08), not a reading of its changelog.
+
+**Status: adopted by the owner on 2026-11-01.** The window is deliberately one minor series wide. It is not a claim that
+`0.16.0` and `0.16.1` behave identically — it is a claim that both declare the capabilities/result schema pair we were
+tested against, and that the pair is checked at runtime rather than assumed from the version string. A build inside the
+window that declares a different pair is still refused.

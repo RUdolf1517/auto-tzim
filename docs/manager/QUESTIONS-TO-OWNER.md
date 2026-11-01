@@ -190,7 +190,7 @@ merge, close issues or publish releases without explicit delegation (charter §2
 | Q10 (who merges, who is the coder) | default in force: one coder, one MVP pull request, owner merges |
 | Q11 (consume `--capabilities`?) | **open** — decides DR-05: delegate blindly, or prove the default set before planning |
 | Q12 (surface `reason_code`?) | **open** — decides DR-02: one generic refusal bucket, or stable codes in our own JSON |
-| Q13 (accepted `tzim` version window) | **open** — decides DR-09; proposed `>=0.16.0, <0.17` on capabilities schema 1 |
+| Q13 (accepted `tzim` version window) | **decided** 2026-11-01: `>=0.16.0, <0.17` on capabilities schema 1 / result schema 2 ([D-30](DECISIONS.md)) |
 
 The next decision point is no longer a precondition: **B-01 is cleared** (PR #84 merged 2026-10-30, upstream tracker
 idle, v0.16.1 released 2026-11-01). What stands between the charter and a start is the contract drift in the

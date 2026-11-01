@@ -3,17 +3,23 @@
 > **Status: specification, no implementation.**
 > Related: [update](update.md) · [state](state.md) · [limitations](limitations.md)
 
-The short version: `auto-tzim` has **one** network request, it belongs to one command, and everything else stays on
-the machine. This page exists because a tool that watches folders of personal files must be able to say exactly what
-it sends, to whom, and when.
+The short version, for v0.1: **there is no network request at all.** Not one, not on start-up, not on a timer, not in a
+dependency. This page exists because a tool that reads folders of personal files must be able to state that as a fact and
+show how it is tested — and because v0.2 will add the first request, and the statement has to change in public when it
+does (D-28).
 
 ## 1. The complete list of network activity
 
 | Command | Request | When | Data sent |
 | --- | --- | --- | --- |
-| `update-check` | `GET https://api.github.com/repos/RUdolf1517/tzim/releases/latest` | only when the user runs the command (D-07, manager default) | An HTTP request: the host, the path, standard headers from the HTTP client, and the client's IP address. No paths, no file names, no configuration, no identifiers beyond what any HTTP request carries |
+| — | **none** | never | — |
 
-Nothing else. `run`, `scan`, `status`, `history`, `logs`, `folder *`, `doctor` and `config validate` open no socket.
+There is no `update-check` command in v0.1 (D-28): it moves to v0.2, and when it lands it will be one `GET` to the GitHub
+releases API, run only when the user asks, sending nothing but the request itself. The section you are reading is the
+place where that sentence will be written, with the same table and the same "verified by" line.
+
+Nothing else. `run`, `scan`, `status`, `history`, `logs`, `folder *`, `doctor` and `config validate` open no socket —
+and in v0.1 that claim has no exception clause, which is the point.
 `doctor` reports the `tzim` binary's SHA-256 **locally**. A scheduled check does not exist in v0.1; when it does
 (v0.2), it will be opt-in and listed here before it ships.
 
@@ -56,12 +62,13 @@ Consequences, all deliberate:
 - **The `tzim` binary itself**: it opens no socket and checks nothing on the network (`tzim` documents this). We rely
   on that statement and record the binary hash so a different binary is visible.
 
-## 4. If the user wants zero network activity
+## 4. Zero network activity is not a setting in v0.1 — it is the product
 
-- Do not run `update-check`; `update_policy = "manual"` documents the intent, and no command checks implicitly.
-- Block `api.github.com` at the firewall; `update-check` then fails with exit `5` and a message saying so, and nothing
-  else in the product notices.
-- Verify with the test in AT-07/AC-9: with the resolver disabled, `run` and `scan` behave identically.
+- There is nothing to switch off: the resolver is disabled in the test suite for every command, and a socket opened
+  anywhere fails the run rather than being reported.
+- Exit code `5` remains reserved for the v0.2 `update-check` failure and is not produced in v0.1.
+- A user who wants a guarantee at the network layer can run the program with no network at all; nothing degrades, because
+  nothing reaches for it.
 
 ## 5. What would require a new privacy review
 

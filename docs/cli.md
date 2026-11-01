@@ -72,15 +72,45 @@ Builds the plan and **starts no file-processing `tzim`**. Specifically:
 Each scan stores a plan record with an id and a hash over its ordered rows (D-20). That record is what authorises an
 apply.
 
-### 2.6 `run --once [--plan ID] [--folder ID] [--dry-run]`
+### 2.6 `run --once [--plan ID] [--folder ID] [--mode auto|confirm] [--dry-run]`
 
-The only processing entry point in v0.1. It requires a **matching plan**: same folder, complete, and the same plan hash as
-the tree it is about to process. Without one it exits `6` and does nothing (§4, D-03, D-20). `--dry-run` is an alias for
-`scan`: it produces the same read-only plan and processes nothing (D-04).
+The only processing entry point in v0.1. `--dry-run` is an alias for `scan`: it produces the read-only plan and processes
+nothing (D-04).
 
-An apply invokes `tzim` once per planned file with an argv array, `stdin=DEVNULL`, no PTY, and a per-file timeout. Whether
-`tzim` changes a file is entirely its decision; our job is to record the verdict and to prove that every non-candidate
-file is byte-identical afterwards.
+**Two modes, one install path (D-29).** The mode gates exactly one thing: whether a proposal is shown and accepted.
+
+| | `confirm` (default) | `auto` |
+| --- | --- | --- |
+| Plan | must exist and match: same folder, complete, same plan hash as the tree | computed inside the run |
+| Without a matching plan | exit `6` | not applicable |
+| Approval | proposal on stderr, one line on stdin | none |
+| Without a terminal, or with `--json` | **exit `6`**, nothing processed, message points at `--mode auto` | works |
+
+The proposal is the last moment at which refusing costs nothing, so it is written to be read:
+
+```text
+Project images   /Users/example/Pictures/project   9 files   41.2 MiB → 33.8 MiB  (18.0% smaller)
+  a.png      1.20 MiB → 0.98 MiB   -18%
+  b.png      3.10 MiB → 2.55 MiB   -18%
+  …
+Originals will be deleted after each replacement is verified. There is no undo.
+Continue? [y/N]
+```
+
+Anything other than `y` or `yes` — including an empty line, EOF and a closed stdin — is a refusal: exit `0`, nothing
+installed, every planned file reported `skipped_by_user`, one history row marked `declined`.
+
+**The work itself is identical in both modes**, and it never touches the user's folder until the last step:
+
+1. re-stat the file against the plan; a changed file is `skipped_changed` and keeps its bytes;
+2. copy it into `AUTO_TZIM_HOME/staging/<run_id>/` and `fsync`;
+3. invoke `tzim` on **the copy** — argv array, `stdin=DEVNULL`, no PTY, per-file timeout;
+4. accept the result only on exit `0`, `status == optimized` and a smaller size; record the SHA-256;
+5. install: `rename(original → .auto-tzim-old-<run>-<n>)`, `rename(staged → original)`, `fsync(directory)`,
+   `unlink(.auto-tzim-old-…)` — journaled before each step.
+
+Whether `tzim` changes a file is entirely its decision; our job is to record the verdict, delete an original only after
+its verified replacement is in place, and prove that every non-candidate file is byte-identical afterwards.
 
 ### 2.7 `status`
 
@@ -141,12 +171,12 @@ Rules:
 
 | Code | Meaning | Typical source |
 | --- | --- | --- |
-| `0` | the command did what it says; documented skips included | any successful command |
+| `0` | the command did what it says; documented skips included, and a **declined proposal** is a completed outcome, not a failure | any successful command |
 | `1` | at least one file ended `failed` | apply |
 | `2` | usage or configuration error; nothing processed | bad flag, invalid config, unknown `--status` |
 | `3` | `tzim` absent, unreadable, or outside the adapter contract (`incompatible_tzim`) | `doctor`, `scan`, `run` |
 | `4` | **never produced by `auto-tzim`.** Reserved out of every path so a `tzim` verification failure can never be confused with our lock — the lock is `8` | — |
-| `5` | `update-check` failure (network, rate limit, malformed answer) | `update-check` |
+| `5` | **reserved, not produced in v0.1** (D-28): it belongs to `update-check`, which ships in v0.2 | — |
 | `6` | refused before processing: no matching plan (first-run gate), `pause`, `min_free_bytes`, disabled folder, whole-run policy refusal | `run --once` |
 | `7` | internal error: unreadable/corrupt state, unexpected exception, child output our guard cannot attribute to a file | any |
 | `8` | another run holds the lock, or the lock cannot be taken | `run --once` |
@@ -189,7 +219,10 @@ notes.txt        skip  unsupported format        ← known only after an apply, 
 Deliberate choices, recorded so they are not "fixed" later:
 
 - **No `--force`** and no "ignore errors": a refusal is information; the way to change eligibility is the folder policy.
-- **No interactive anything**: no `--yes`, no confirmation prompt, no pager, no PTY.
+- **One prompt, and only one.** The `confirm` approval gate (D-29) is the product's single interaction: one line on
+  stderr, one line on stdin, `n` by default, refused when stdin is not a terminal. There is no `--yes` to skip it — the way
+  to run unattended is `--mode auto`, which is a different mode with the same install path, not a silenced prompt. No
+  pager, no TUI, no PTY anywhere.
 - **No `--jobs` in v0.1**: it exists in the config for v0.2 and is rejected today.
 - **`-` is not stdin**: the program acts on files it must be able to re-read.
 - **No glob patterns on the command line**: `exclude_globs` in the config is the only pattern language.

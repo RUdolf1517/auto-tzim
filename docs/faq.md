@@ -33,8 +33,14 @@ Because a number would require either running the compressor (which writes) or g
 will be handed over and with which flags; the savings appear after an apply, per file, in the history.
 
 **Is there an undo?**
-No. A successful optimization rewrites the file and the previous bytes are gone. Backup software may have a copy; that is
-not a promise we make ([limitations](limitations.md) §1, invariant 16).
+No. Once a replacement is installed, the previous bytes are gone ([limitations](limitations.md) §1, invariant 16). What
+you *do* get is control over when that happens: in the default `confirm` mode nothing is touched until you have read the
+proposal and typed `y`, and a declined proposal installs nothing and exits `0`.
+
+**What are the two modes, and which one should I use?**
+`confirm` (default) shows what would change and waits for your answer; `auto` does the work without asking, for a script
+or a cron job. Both run the same code — the mode only decides whether you are asked. Start with `confirm`
+([cli](cli.md) §2.6, decision D-29).
 
 **What if a file is a symlink, or a hard link, or is being written right now?**
 It is skipped, with the reason recorded: symlinks and special files are never followed, hard-linked files are skipped by
@@ -59,24 +65,31 @@ rules ([update](update.md)).
 deliberately never produced, so a child's failure can never be mistaken for our state
 ([cli](cli.md) §4, decision D-18/D-19).
 
-**What is `skipped_by_tzim`, and why one bucket?**
-`tzim` reports every refusal it makes as `skipped` plus a free-text note. Distinguishing them would mean parsing prose,
-which the charter forbids (invariant 18). So the status stays generic and the note is stored verbatim; the distinctions we
-*can* make — policy, instability, hard links — are made by our own layer, before any process starts.
+**Why was my file skipped?**
+Since `tzim` v0.16.0 every refusal carries a stable `reason_code`, and we pass it through in the `reason` field beside
+`tzim`'s own text, which we keep verbatim. We never parse that text (invariant 18) — but you no longer have to read a
+sentence to know whether the cause is fixable ([cli](cli.md) §2.8, decision D-27).
 
 **Where is the machine-readable capability list of `tzim`?**
-There isn't one. `--info` and `--list-formats` are human text, and the default format set is build-dependent. That is why
-we delegate by omitting `--formats` and record the binary's version and SHA-256 instead of a capability claim. The upstream
-request is [tzim#85](https://github.com/RUdolf1517/tzim/issues/85).
+It exists now, and we read it: `tzim --capabilities` returns one JSON object with the build's features, compiled and
+default-enabled formats and opt-ins. We check its schema versions and fail closed if they are not the pair we were tested
+against (decision D-26). We still never pass `--formats` and still do not display the default set as a promise — a set
+observed on one build is not a fact about the next one.
 
 **Two specifications — which one wins?**
 For process, evidence and acceptance: the manager charter v0.2. For product behaviour: the technical specification 0.1,
 except in the four places charter §16 overrides it, listed in [CONFLICTS](spec/CONFLICTS.md).
 
+**Does `auto-tzim` talk to the network?**
+No. v0.1 opens no socket at all: there is no update check, no telemetry, no crash reporting ([privacy](privacy.md),
+decision D-28).
+
 **Can the coder start?**
-Not yet. Issue [#10](https://github.com/RUdolf1517/auto-tzim/issues/10) carries blocker **B-01**: the previous `tzim` set
-is unfinished, and charter §3.2 forbids starting a new project as a reason to drop it
-([pre-flight](manager/PREFLIGHT-2026-10-29.md) P2).
+Not yet, but for a different reason than before. The old blocker (**B-01**) is gone: `tzim` PR #84 merged on 2026-10-30,
+the upstream tracker is empty and v0.16.1 shipped. What holds the start now is the contract itself — six acceptance-critical
+facts changed in that release, and the documents were corrected on 2026-11-01
+([audit](audits/2026-11-01-tzim-v0.16.1.md), decision D-25). Starting earlier would mean writing code that passes our tests
+and fails against every current `tzim`.
 
 **Why so much documentation before any code?**
 Because the acceptance criteria have to be written before the first result, or they get shaped by it. This project's three

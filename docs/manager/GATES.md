@@ -10,6 +10,12 @@ names the clause it enforces, the behavioural evidence required, and the negativ
 fail. Revised on 2026-10-29 for charter v0.2 (§6 invariants 18–19, §8.4, §16): the read-only candidate plan, the
 generic `skipped_by_tzim`, the exit codes `6/7/8` and the precedence are now first-class acceptance items.
 
+**Revised again on 2026-11-01 (D-26…D-29).** AC-14…AC-17 and INV-20…INV-23 are new and were written *before* any of this
+code exists: one install path for two modes, a crash-safe swap, an identity re-check per file, and a confirmation gate that
+fails closed. AC-9 changed meaning — from "the one request is honest" to "there is no request" — because `update-check`
+left the MVP (D-28). Rows are never deleted here: a superseded row keeps its number and says what superseded it, so a later
+reader cannot mistake a weaker past criterion for a stronger present one.
+
 Pre-registration rules:
 
 1. Each row changes only by a commit written **before** the result that motivated it is seen, with the reason in the
@@ -33,10 +39,14 @@ Pre-registration rules:
 | AC-6 | No retry loop (`SPEC` §15.6) | Second run on an unchanged corpus: zero `tzim` invocations (fake-runner log) and identical statuses | Changing one byte of a previously `failed` file makes it eligible again — proving the invalidation key is live | manager, tool-executed |
 | AC-7 | Recovery after cancellation and crash (`SPEC` §15.7) | Injected `SIGKILL` mid-run: the next start reports the run `interrupted`, the database is readable, no row stays `running`, no row became `optimized` | A crash after the commit point leaves the run `completed`, not `interrupted` | manager, independently |
 | AC-8 | Exit codes are ours, complete and ordered (charter §8.4, §16 P-03, D-18/D-19) | A table executes every command and produces `0/1/2/3/5/6/7/8/130/143` by a **real invocation**, and asserts `4` is never produced; a precedence table asserts every ordering pair of D-19 with a constructed conflict (e.g. a usage error while a lock is held ⇒ `2`); the raw `tzim` code appears only in history, never in `$?` | One row deliberately breaks an expectation to show the table is executed; a fake `tzim` returning `4` must make `auto-tzim` exit `1`, not `4` | manager, tool-executed |
-| AC-9 | Update check only notifies (`SPEC` §15.9) | Resolver disabled for every command except `update-check`; mocked 200 (newer/older), 403, 429, 500, malformed body, non-semver tag; filesystem diff of the binary path and `AUTO_TZIM_HOME` | An error response rendered as "up to date" must fail the suite | manager, tool-executed |
+| AC-9 | **No command opens a socket** (`SPEC` §15.9 as overridden by D-28) | Resolver disabled for **every** command and every mode; a monkeypatched `socket.socket` raises; a tripwire records any `connect`; `update-check` must be absent from `--help` and exit `2` if invoked; `python -X importtime`-free: `urllib` never imported | A "silently skipped" network test, or an `except: pass` around a socket call, must fail the suite — proven by planting one and watching it go red | manager, tool-executed + source-inspected |
 | AC-10 | Documentation matches behaviour (`SPEC` §15.10) | Reflection test: every documented default equals the schema default; every documented exit code appears in the AC-8 table; the limitations list is checked line by line | A documented default the schema contradicts must fail | manager, source-inspected + tool-executed |
 | AC-11 | Preflight refusals return `6`, never `0` (charter §8.4, D-03) | Three real invocations: apply on a folder with no plan; apply while `pause` is active; apply with free space below `min_free_bytes`. Each exits `6`, prints a reason, processes nothing, starts no `tzim` | The same folder after a successful `scan` exits `0` — proving `6` is the gate and not a broken run | manager, tool-executed |
 | AC-12 | Plan binding (D-20) | Apply with a fabricated plan id, a plan whose hash no longer matches the tree, or a plan from another folder ⇒ `6`, nothing processed | Apply with the matching plan ⇒ `0` and the expected outcomes | manager, tool-executed |
+| AC-14 | **One install path, two modes** (D-29) | The same corpus run in `confirm` and in `auto`: identical per-file outcomes, identical install sequence, identical history apart from the mode and the approval row; a source-level check that `mode` is read in exactly one branch (the proposal gate) | A second code path for `auto` — an early return, a duplicated install block, a `if auto: install()` — must fail the source check | manager, tool-executed + source-inspected |
+| AC-15 | **Crash-safe install**: no file is ever lost (D-29) | `SIGKILL` injected at every step of the journal (before rename-away, between the renames, after rename-in, before unlink, after unlink); after each, the next start restores or completes, and the file exists and is readable in every state | A window in which neither the original nor a restorable copy exists fails the test — including the one between `rename(original → old)` and `fsync` | manager, tool-executed |
+| AC-16 | **Changed files are never installed over, never deleted** (D-29) | Identity mutation between plan and install (`dev`, `ino`, `size`, `mtime_ns`, content) for each field separately: the file is `skipped_changed`, its bytes are identical after the run, and the staged copy is deleted | An install that proceeds on a stale stat fails; so does a run that reports `skipped_changed` and installs anyway | manager, tool-executed |
+| AC-17 | **`confirm` never hangs and never assumes yes** (D-29) | No TTY, `--json`, EOF, empty line, `no`, a closed stdin, and a read error each ⇒ exit `6` or `0` as documented, nothing installed, nothing written in the folder; measured with a 2 s timeout so a hang is a red test, not a stall | A single case that waits for input without a terminal, or that continues on EOF, fails | manager, tool-executed |
 | AC-13 | Fail-closed adapter, no invented capabilities (charter §6-18, §8.4) | Fake and real binaries: unparseable `--version`, version outside the range, absent binary, unknown JSON `schema`, unknown `status`, extra optional field. Unsupported cases ⇒ `3` before anything is planned; an extra field is ignored and recorded, not fatal. A source-level check asserts no module spawns `tzim` with `--info`, `--list-formats` or `--check-deps`, and that no code path reads a `note` to classify | A test double that starts parsing `--list-formats` output must fail the source check | manager, both |
 
 ## 2. Safety invariants (charter §6, v0.2)
@@ -56,12 +66,16 @@ Pre-registration rules:
 | INV-11 | `transforms` empty in the MVP | `transforms = ["fits-tile"]` ⇒ validation error before any planning | the same config with `[]` must be accepted |
 | INV-12 | No prompt, no PTY, in any mode | AC-5 | blocked-stdin fixture |
 | INV-13 | `failed` never retried automatically | second run: no invocation for a failed file | manual retry after the file changes succeeds |
-| INV-14 | MVP update check downloads and replaces nothing | no download code; mocked "newer version" leaves the binary path unchanged by hash | the mock must be able to report a version, otherwise the control proves nothing |
-| INV-15 | No telemetry, no undocumented request | resolver disabled outside `update-check` | any socket attempt elsewhere fails the test |
+| INV-14 | v0.1 contains no download, no installer and no network code at all (D-28) | source review: no `urllib`, `socket`, `http` import anywhere in the package; no `update-check` command | a planted one-line `import urllib.request` must fail the source check |
+| INV-15 | No telemetry, no undocumented request — and in v0.1 no documented one either | resolver disabled everywhere; `socket.socket` patched to raise in the whole suite | any socket attempt fails the test, and so does a test that forgets to disable the resolver |
 | INV-16 | No false undo promise | documentation review; no backup code; only disclaimers mention undo | text search for "undo" finds only disclaimers |
 | INV-17 | UI does not duplicate core logic | not applicable in v0.1 (no UI); v0.2/v0.4 gate | — |
 | INV-18 | No prose, `note`, extension or guess for capabilities and reasons | AC-13 source check; the generic `skipped_by_tzim` with the verbatim note | a test double that classifies from a note must fail the check |
 | INV-19 | Own exit codes, `6` for preflight, no raw passthrough, fixed order and precedence | AC-8, AC-11 | a fake `tzim` exit `4`/`8` must not appear as our `$?` |
+| INV-20 | The user's folder is not written before the install step of a file: all processing happens on a staged copy (D-29) | AC-14, AC-15 | the invocation log shows a path invocation naming a file inside the folder | a run whose `tzim` argv contains any path inside the root fails the test |
+| INV-21 | An original is deleted only after its verified replacement is in place and its directory is `fsync`ed — never in a batch, never for a file that was not replaced | AC-14, AC-15 | journal rows + a `SIGKILL` at each step | an install that unlinks first, or that deletes a file whose replacement failed |
+| INV-22 | Identity is re-checked immediately before the work on each file; a changed file keeps its bytes | AC-16 | `M-09`…`M-10` | an install that proceeds on a stale stat |
+| INV-23 | `confirm` never hangs and never assumes yes; a declined proposal is exit `0` with zero writes | AC-17 | `M-02`…`M-06` | a run that continues on EOF, or that exits non-zero because the user said no |
 
 ## 3. Evidence a handoff must contain
 

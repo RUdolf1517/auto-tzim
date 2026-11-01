@@ -26,7 +26,7 @@ invent it; the owner may change it without cost), **superseded**.
 | D-18 | Exit `7` internal, `8` lock, `4` unused, `130`/`143` signals; no raw `tzim` passthrough | adopted | charter §16 P-03 | AT-06 |
 | D-19 | Precedence `130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0` and a fixed preflight order | adopted | charter §16 P-03 | AT-06 |
 | D-20 | Apply requires a plan ID and plan hash produced by a scan of the same tree | adopted | charter §6-2, §8.4 | AT-03, AT-05, AT-06 |
-| D-21 | No PTY is ever allocated; `stdin=DEVNULL`; no `pty` import | adopted | charter §6-12 | AT-05 |
+| D-21 | No PTY is ever allocated; every child's stdin is `/dev/null`; no pseudo-terminal | adopted | charter §6-12 | AT-05 |
 | D-22 | One upstream issue for a capabilities/structured-reasons API, outside this repo's PRs — it is `tzim#85`; my duplicate `#86` is to be closed | **delivered 2026-11-01** — `#85` implemented in `tzim` PR #91, shipped in v0.16.0; `#86` closed | charter §16 P-01 | [audit DR-01, DR-02](../audits/2026-11-01-tzim-v0.16.1.md) |
 | D-23 | A candidate plan is not a promise of eligibility or gain | adopted | charter §8.4 | AT-03, AT-04, AT-09 |
 | D-24 | `main` protection: **resolved 2026-11-01** — the owner chose §6a option 1, machine gates only: the required review is removed because one identity cannot satisfy it, and the gate moves to CI checks plus the written review verdict | **superseded by the owner's §6a choice** | [OWNER-ACTIONS](OWNER-ACTIONS.md) §6a; charter §2.2 | every PR to `main` |
@@ -45,7 +45,11 @@ invent it; the owner may change it without cost), **superseded**.
 
 ---
 
-## D-01 · Restricted adapter
+## D-01 · Restricted adapter · *amended by D-26*
+
+> **Amended 2026-11-01 by [D-26](#d-26--the-adapter-reads-the-capability-document).** The adapter makes **two** calls
+> now — `tzim --version` and `tzim --capabilities`. Everything else below still holds: no prose is parsed, no
+> `--list-formats`, fail closed on an unknown contract, identity recorded. Read "one call" as "two declared calls".
 
 The adapter knows `tzim` by **one** call: `tzim --version`, whose output is `tzim <semver>` on stdout, exit `0`. From
 that it decides whether this binary is in the supported range. Nothing else is read from the binary at scan time.
@@ -138,7 +142,10 @@ all of these are unchanged: `(st_dev, st_ino)`, size, `mtime_ns`, the `tzim` bin
 canonical hash of the policy fields that produced the argv. A version string is not enough: two builds of one version
 differ (FITS, `jpeg-v1`).
 
-## D-07 · One request, one command · *proposed*
+## D-07 · One request, one command · *superseded by D-28*
+
+> **Superseded 2026-11-01 by [D-28](#d-28--no-network-in-v01).** `update-check` is not in v0.1 at all, so the request
+> described here is v0.2 work. The design below is kept because it is what v0.2 will implement, not what v0.1 does.
 
 `update-check` performs `GET https://api.github.com/repos/RUdolf1517/tzim/releases/latest` with no credentials, a 10 s
 timeout, and a 24 h cache. `scan`/`run` never touch the network. Rate limits and errors are exit `5`, never "up to
@@ -147,7 +154,7 @@ date". A major version outside `allowed_major_versions` is reported as incompati
 
 ## D-08 · `AUTO_TZIM_HOME` is never inside a managed root
 
-Otherwise a run could plan its own database, and retention could delete a file a plan references. Validation rejects
+Otherwise a run could plan its own state directory, and retention could delete a file a plan references. Validation rejects
 such a root; discovery excludes the path as a second line of defence.
 
 ## D-09 · Hash policy · *proposed*
@@ -257,7 +264,7 @@ does nothing. A plan that changed even by one file is not "close enough": it is 
 
 ## D-21 · No PTY, no prompts
 
-No `pty` module import, no `openpty`, `stdin=DEVNULL` for every child, no TTY assumption anywhere in the runner, a
+No pseudo-terminal, no `openpty`, stdin on `/dev/null` for every child (`Stdio::null()` in Rust), no TTY assumption anywhere in the runner, a
 per-file timeout as the last line of defence. A child that blocks on stdin is killed and recorded `failed`.
 
 ## D-22 · Upstream issue for capabilities and reasons
@@ -265,6 +272,12 @@ per-file timeout as the last line of defence. A child that blocks on stdin is ki
 One issue in `tzim` describes the future machine interface (a `--capabilities --json` with `version`, `schema`,
 `formats`, `features`; and a structured reason code beside `note`). It is filed from this project and referenced here;
 it is **not** part of any `tzim` pull request, and this project does not wait for it.
+
+> **Delivered 2026-11-01.** [#85](https://github.com/RUdolf1517/tzim/issues/85) was implemented by `tzim` PR #91 and
+> shipped in **v0.16.0**: `--capabilities` with a version-1 schema, and a stable `reason_code` on every non-optimizing
+> row. The MVP consumes both ([D-26](#d-26--the-adapter-reads-the-capability-document),
+> [D-27](#d-27--the-refusal-reason-is-passed-through)). This section stays as the record of what was asked, not as a
+> description of the current binary.
 
 ## D-23 · A candidate plan is not a promise
 
@@ -402,7 +415,7 @@ Both modes run the same code; the mode gates one thing only — whether the prop
       touched and the file is not processed. This is the anti-TOCTOU check, and it runs *immediately* before the work, not
       at plan time.
    b. **Copy** the file into `AUTO_TZIM_HOME/staging/<run_id>/` — never into the user's folder — and `fsync` the copy.
-   c. **Run `tzim`** on the staged copy: argv array, `stdin=DEVNULL`, no PTY, per-file timeout.
+   c. **Run `tzim`** on the staged copy: argv array, stdin on `/dev/null`, no PTY, per-file timeout.
    d. **Verify the result** before it is allowed near the original: exit `0`, `status == optimized`, result smaller than the
       copy, and our own SHA-256 of the result recorded. Anything else, and the original is not touched.
    e. **Install**, journaled, in this order: `rename(original → .auto-tzim-old-<run>-<n>)` → `rename(staged → original)` →
@@ -600,7 +613,8 @@ the document that was signed. The override lives here, dated and attributable, e
 
 - The Qt GUI (v0.4) is the loser: `PySide6` is mature and free, `cxx-qt` is neither. D-34 answers that by separating the
   artifact rather than by pretending the cost is small.
-- The MVP takes longer: ownership, error types and process-group handling are more work than `subprocess.run`.
+- The MVP takes longer: ownership, error types and process-group handling are more work than a one-line subprocess call
+  in Python.
 - Every Python-specific paragraph in this repository was rewritten on 2026-11-01. That work existed because the language
   decision arrived *after* 52 documents and 30 decisions — a fact worth remembering when the next foundational question
   appears.

@@ -19,11 +19,11 @@ must not.
 | ID | Guarantee | Meaning | Proof |
 | --- | --- | --- | --- |
 | **A1** | Nothing outside the plan | Only paths present in an approved, printed plan are ever passed to `tzim`; every path is inside the canonical root | INV-7, AC-1, AC-3 |
-| **A2** | No byte changed by us | `auto-tzim` writes only under `AUTO_TZIM_HOME` (config, state, logs, update cache). It never writes, renames, deletes or chmods a user file | INV-8, source review of every write site |
+| **A2** | No byte changed by us | `auto-tzim` writes only under `AUTO_TZIM_HOME` (config, state, logs, staging). It never writes, renames, deletes or chmods a user file | INV-8, source review of every write site |
 | **A3** | A refusal stays refused | An outcome `tzim` declined, or our policy excluded, is recorded and finished. No fallback, no second handler, no "try the other format" | INV-9, INV-10 |
 | **A4** | Identity is checked, not assumed | A file is only handed over while its `(dev, ino, size, mtime_ns)` matches the captured identity, and the identity is re-read after the process exits | INV-6, R-03, AC-4 |
 | **A5** | The record is honest | Every row states what happened, by whom (our layer or `tzim`), with the raw child result preserved; a dry run is never recorded as a completed optimization | AC-8, AC-10 |
-| **A6** | Local only | No telemetry; no network call except the single documented `update-check` request | INV-15, [privacy](privacy.md) |
+| **A6** | Local only | No telemetry, and no network call of any kind in v0.1 — there is no network code in the binary (D-28); `update-check` ships in v0.2 | INV-15, [privacy](privacy.md) |
 | **A7** | No self-repair of the state | A corrupt config or state file is reported, not silently rewritten, because a silent reset erases the evidence a user needs | AC-7, [recovery](recovery.md) |
 
 ## 2. What `auto-tzim` does not guarantee
@@ -41,9 +41,11 @@ must not.
   arrives as one generic `skipped_by_tzim` with the note kept verbatim. A finer distinction is a future upstream interface
   (`tzim#85`), not something we infer (charter §6-18). The statuses we *can* distinguish — `skipped_policy`,
   `skipped_unstable`, `hardlink_skip` — are decided by our own layer before any process starts.
-- **That the installed build has a given format.** Capabilities are build-dependent and there is no machine-readable
-  list (study G-1). We delegate the default set to the binary (no `--formats`), record the version and the binary hash, and
-  do not report a capability we cannot observe.
+- **That the installed build has a given format, beyond what it declares.** Capabilities are build-dependent, and since
+  v0.16.0 the binary answers `--capabilities` ([D-26](manager/DECISIONS.md)). We read that document before planning, both
+  schema versions must be the ones we were tested against, and we still delegate the default set to the binary (no
+  `--formats`). What we will not do is promise a format the document does not list, or keep a stale copy of it: version,
+  hash and both schema versions are recorded per run.
 - **Anything about a platform we do not test.** macOS and Linux are the MVP claim; Windows and network filesystems
   are named as untested.
 
@@ -76,7 +78,7 @@ Per the evidence standard, these are the assertions a reviewer will demand, not 
 - every failure row's `kind` matches what the child actually reported, including `verify` for `tzim` exit `4`;
 - a second run over an unchanged corpus spawns zero processes (AC-6);
 - a dry run leaves no extra directory entry and writes no `optimized` row (AC-2, AC-10);
-- `run`/`scan` open no socket; `update-check` opens exactly one (AC-9);
+- no command opens a socket, and no crate in the build can open one (AC-9, INV-14);
 - documentation defaults equal schema defaults by reflection (AC-10).
 
 ## 5. Why there is no G2-like guarantee here

@@ -102,10 +102,12 @@ Properties that follow from this shape and are individually tested:
 1. **Pass files, not directories.** Never `-r`, never a directory argument: our plan is the only input (D-12).
    Outside an apply the only invocation is `tzim --version`: no path, no `--dry-run`, no flag that could read a file
    (charter §6-2).
-2. **No shell.** `subprocess.run(argv, shell=False)` with a minimal environment, `stdin=DEVNULL`, captured stdout and
-   stderr with size limits.
+2. **No shell.** `std::process::Command` with one `.arg()` per item — there is no string command line for a filename to
+   be interpolated into — a cleared environment plus an explicit minimum, `.stdin(Stdio::null())`, and captured
+   stdout/stderr with size limits.
 3. **One file per process, no PTY.** Simplifies failure attribution, cancellation and timeouts; costs process startup
-   per file, which is irrelevant next to compression. `stdin=DEVNULL`, no `pty` module, no TTY assumption (D-21).
+   per file, which is irrelevant next to compression. Every child gets `Stdio::null()` on stdin, no pseudo-terminal is
+   allocated, and no TTY is assumed (D-21).
 4. **Parse only the documented JSON.** Keys we need are validated; unknown optional keys are ignored and recorded;
    malformed output is a failure, never a success (study G-4). Prose (`--info`, `--list-formats`, `note`) is never parsed
    (charter §6-18).
@@ -121,10 +123,10 @@ Properties that follow from this shape and are individually tested:
 | No symlinks, no special files | `discovery` (lstat, mode bits) | INV-5 |
 | Hard links and unstable files skipped | `stability` | INV-6, R-04 |
 | First apply of a folder needs a matching read-only plan; scan never runs file-processing `tzim` | `planner` cannot reach `runner`; `state` stores the plan id/hash; `cli` refuses with exit `6` | INV-2, AC-2, AC-11, AC-12 |
-| One prompt, no PTY | the `confirm` gate only (D-29); every child gets `stdin=DEVNULL`, no `pty` import, per-file timeout | INV-12, AC-5, AC-17 |
+| One prompt, no PTY | the `confirm` gate only (D-29); every child gets `Stdio::null()` on stdin, no pseudo-terminal, per-file timeout | INV-12, AC-5, AC-17 |
 | No re-routing of a refused file | absence of any fallback branch, reviewed | INV-10 |
 | No automatic retry of `failed` | `state` (retry policy keyed on the invalidation key) | INV-13 |
-| No network except `update-check` | `updater` is the only module that imports a network client | INV-15 |
+| No network at all | no crate in `Cargo.lock` can open a socket, a source check keeps `std::net` out of the workspace, and both modes complete under `unshare -n` | INV-14, INV-15 |
 | Nothing written outside `AUTO_TZIM_HOME` | every write site enumerated in review; `tzim` does the rest | INV-8 |
 
 ## 6. Extension points reserved now, implemented later

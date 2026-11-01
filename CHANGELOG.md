@@ -7,6 +7,53 @@ Nothing has been released. There is no version of `auto-tzim` that can be instal
 
 ## [Unreleased]
 
+### Fixed — the leftovers of the sweep, and the audit closed (2026-11-02)
+
+A re-read of every document against the decisions, instead of trusting the sweep that produced them. It found four
+things that were still wrong, and they are worth naming because each one is the kind of error that survives review:
+
+- **The v0.1 network claim was alive in nine files.** [README](README.md), [SECURITY](SECURITY.md),
+  [guarantees](docs/guarantees.md) (A2 and A6), [architecture](docs/architecture.md), [faq](docs/faq.md),
+  [CONTRIBUTING](CONTRIBUTING.md) and [cli](docs/cli.md) §2.11 still described the single `update-check` request that
+  [D-28](docs/manager/DECISIONS.md) removed, and [config](docs/config.md) still said a key was "used only by
+  `update-check`". `update-check` is now documented as a command that **does not exist in v0.1** and exits `2` if typed,
+  which is what AC-9 and corpus `W-02` already asserted. The documents disagreed with the gate that tests them; the gate
+  was right.
+- **Python idioms had survived in five acceptance rows.** `shell=False`, `stdin=DEVNULL`, `import urllib.request`,
+  `socket.socket`, `os.replace` and "no `pty` import" were still the evidence demanded by AC-5, INV-8, INV-14 and INV-15
+  after [D-33](docs/manager/DECISIONS.md). They now demand Rust: `std::process::Command` with one `.arg()` per item, no
+  `sh -c`, `Stdio::null()`, a source check that keeps `std::net` behind one test guard, and a planted
+  `TcpStream::connect` as the control that proves the check can fail.
+- **The assignment still told the coder to build SQLite.** Step 5 of
+  [ASSIGNMENT-AT-MVP-DRAFT](docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md) said "SQLite state" and `shell=False` — in the file
+  the coder is meant to work from, one day after [D-35](docs/manager/DECISIONS.md) removed the database. Fixed, and the
+  D-35 pointer is now explicit.
+- **`reason_code` was decided but never written down.** [D-27](docs/manager/DECISIONS.md) surfaced it as `reason`;
+  `cli.md` did not mention the field at all. It is now in §2.8 and §3, and corpus `A-12` gives an unknown code a case.
+
+### Added — the 2026-11-01 audit is closed, with the check behind each finding
+
+[docs/audits/2026-11-01-tzim-v0.16.1.md](docs/audits/2026-11-01-tzim-v0.16.1.md) carries `Status: closed` and a
+close-out table mapping all ten findings to the document that now carries each one. The finding text is unchanged, as
+that folder's rule requires. The close-out says what it does not claim: **nothing was executed**, so it closes actions,
+not behaviour — the pinned binary in AT-08 is the first thing that can test the contract.
+
+Three corpus rows were added the same day — `A-11` (`--capabilities`: good document, wrong capability schema, wrong
+result schema, flag rejected, missing key), `A-12` (an unknown `reason_code` passed through, never mapped) and `X-17`
+(`EPIPE` does not replace an earned exit `1`) — and two were reworded (`A-01` now takes its version from the pin file,
+`R-01` now names the prompting child it stands for). Adding rows to a frozen corpus is allowed here for one reason only:
+**there is no code and no result yet**, so nothing is being edited *after* a result is known. The reason is written in
+the commit and in the close-out.
+
+### Not observed — the two owner actions, measured rather than accepted
+
+The owner reported §6a (drop the required review) and §6b (refresh issue #10) done on 2026-11-02. Measured rather than
+accepted: issue #10's `updatedAt` is still `2026-10-29T20:13:58Z` and its body still says "Python package"; `main` is
+still `protected: true`, and pull request #16 still reports `BLOCKED` with no status checks configured, which leaves a
+required review as the only thing that can block it. Both are recorded in [OWNER-ACTIONS](docs/manager/OWNER-ACTIONS.md)
+as **not observed**, with the three commands that settle each — `CLEAN` on a checkless pull request, and a changed
+`updatedAt`, are the two signatures of success.
+
 ### Added — charter v0.2 and the MVP issue set (2026-10-29)
 
 - `MANAGER-SPEC.md` updated to the owner's **version 0.2**: nineteen invariants (invariant 2 rewritten around a read-only

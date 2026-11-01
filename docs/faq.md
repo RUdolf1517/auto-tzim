@@ -51,8 +51,9 @@ Attribution, cancellation and timeouts stay trivial, and parallelism inside a fi
 later, separately reviewed change ([architecture](architecture.md) §3).
 
 **Is anything sent over the network?**
-One request, from one command: `update-check`. Everything else — including `run` and `scan` — opens no socket. The
-complete list is in [privacy](privacy.md).
+Nothing. v0.1 opens no socket at all (D-28) — there is no network code in the binary to switch off — and `run`/`scan`
+are no exception. The v0.2 `update-check` will be the first request; [privacy](privacy.md) describes it in the future
+tense, on purpose.
 
 **Will it update `tzim` for me?**
 No. v0.1 has no update command at all. v0.2 adds `update-check`, which only tells you a newer version exists; a controlled

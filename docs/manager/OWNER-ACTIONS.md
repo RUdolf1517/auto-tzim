@@ -241,6 +241,27 @@ gh api repos/RUdolf1517/auto-tzim/branches/main --jq .protected            # sti
 gh api repos/RUdolf1517/auto-tzim/branches/main/protection --jq .required_pull_request_reviews   # expect null
 ```
 
+**Checked again on 2026-11-02, after you reported this done — the change is not visible from here, so it is recorded as
+not observed rather than as applied.** What this session can measure:
+
+| Check | Result on 2026-11-02 | Reading |
+| --- | --- | --- |
+| `gh api repos/RUdolf1517/auto-tzim/branches/main --jq .protected` | `true` | expected — option 1 keeps the branch protected |
+| `gh api repos/.../branches/main/protection` | `403 Resource not accessible by integration` | the session's token is not a repository admin, so the detail page cannot be read at all, before or after a change |
+| `gh api repos/.../rules/branches/main` | `[]` | no *ruleset* applies; the classic protection rule is invisible to this token |
+| `gh pr view 16 --json mergeStateStatus` | `BLOCKED`, `reviewDecision: ""`, zero required checks configured | **inferred, not read:** with no status checks in the repository, a `BLOCKED` state can only come from a required review or from required conversation resolution — the approval rule looks like it is still on |
+
+So either the `DELETE` did not take effect (a 404/403 in your terminal looks similar to success if the `gh` output was
+scrolled past), or it took effect and GitHub is still reporting the old merge state. The second is cheap to rule out:
+
+```sh
+gh api -X DELETE repos/RUdolf1517/auto-tzim/branches/main/protection/required_pull_request_reviews
+gh api repos/RUdolf1517/auto-tzim/branches/main/protection --jq '.required_pull_request_reviews'  # expect: null
+gh pr view 16 --repo RUdolf1517/auto-tzim --json mergeStateStatus                                 # expect: CLEAN, not BLOCKED
+```
+
+The third command is the one that settles it: `CLEAN` on a pull request with no checks means no approval is required.
+
 **What changes the day this is applied:** a pull request no longer shows `BLOCKED` waiting for an approval nobody can
 give, and `--admin` stops being the only way to merge. What does **not** change: the requirement that every acceptance row
 be demonstrated and re-run by the reviewer before a merge, and the rule that a documentation-only pull request from the
@@ -278,7 +299,20 @@ gh issue view 10 --repo RUdolf1517/auto-tzim --json body --jq '.body' | grep -c 
 gh issue view 10 --repo RUdolf1517/auto-tzim --json body --jq '.body' | grep -c "capabilit"
 ```
 
-Both must be non-zero, and the body must no longer contain "Python package". **The file stays the source of truth** even
+Both must be non-zero, and the body must no longer contain "Python package".
+
+**Checked again on 2026-11-02, after you reported this done — the issue is unchanged as far as this session can see:**
+
+```text
+gh issue view 10 --json updatedAt   → 2026-10-29T20:13:58Z   (unchanged since the issue was filed)
+body                                → 122 lines, no "mode auto", still contains "Python package"
+```
+
+`updatedAt` is the honest test here: GitHub rewrites it on every body edit, and it still carries the filing timestamp. So
+the `gh issue edit` either did not run, or ran against a different repository, or failed with a 403 in your own shell
+too — which would mean the *account* lacks issue write access, not just this session's integration. The command to
+re-run, and the two greps, are above; if `gh` prints `Resource not accessible by integration` on your side as well, the
+fix is in the GitHub app permissions, not in this repository. **The file stays the source of truth** even
 after this: the issue carries a copy, the repository carries the version, and when they disagree the file wins — that is
 stated at the top of the file itself.
 
@@ -311,8 +345,8 @@ workflow lands, or the rule will block every pull request.
 | 3. Repository description | **done** — description and topics are set | — |
 | 4. Merge the docs commit in `tzim` | open — `handoff/auto-tzim/` still does not exist on `tzim@main` (404) | no — a checksummed copy is here |
 | 5. Clear B-01 | **cleared** — PR #84 merged 2026-10-30, tracker idle | — |
-| 6a. `main` protection, option 1 | **decided, not applied** — needs your `DELETE` (403 here) | yes, before the first **code** PR |
-| 6b. Refresh issue #10 body | open — the issue still says "Python package" and has no modes | yes, before the coder starts |
+| 6a. `main` protection, option 1 | **decided**; you reported it done on 2026-11-02, **not observed** — `main` is still protected and pull request #16 still reports `BLOCKED` with no checks configured (403 here for the detail) | yes, before the first **code** PR |
+| 6b. Refresh issue #10 body | **open** — you reported it done on 2026-11-02, but `updatedAt` is still 2026-10-29 and the body still says "Python package" | yes, before the coder starts |
 | 7. Retire `tzim#7` label `v0.1` → `v0.2` (AT-07 left the MVP) | open — optional, the assignment file already says so | no |
 
 If any command fails with 403 as well, the token lacks issue/pull-request write scope: that is a GitHub connection

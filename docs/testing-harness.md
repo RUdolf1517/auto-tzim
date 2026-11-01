@@ -60,7 +60,7 @@ Required behaviours (the corpus in [FIXTURE-CORPUS](manager/FIXTURE-CORPUS.md) Â
 | read stdin | `read_stdin: true` | blocks; the timeout is the only exit |
 | mutate the file | `mutate: true`, `emit: optimized` | proves our post-run identity check |
 | tripwire on prose commands | `tripwire: ["--info","--list-formats","--check-deps","--dry-run"]` | exits `99` if invoked with any of them (`A-10`) |
-| assert no TTY | `assert_not_tty: true` | exits `98` if `isatty()` on any of the three streams (`R-02`) |
+| assert no TTY | `assert_not_tty: true` | exits `98` if `IsTerminal::is_terminal()` is true on any of the three streams (`R-02`) |
 | die by signal | `die: "SIGSEGV"` | |
 
 The fake must never be able to "pass" a test by doing nothing: if the scenario file is missing or unreadable, it exits
@@ -80,7 +80,7 @@ Every fake invocation appends one JSON object per line to `$ATS_INVOCATION_LOG` 
 | --- | --- |
 | `argv` | proves no shell, no `-r`, no `--dry-run`, no `--formats` when `formats = []`, and that a filename stayed a single element |
 | `stdin_isatty` / `stdout_isatty` / `stderr_isatty` | the no-PTY assertion (`R-02`), asserted from inside the child |
-| `stdin_path` | `stdin=DEVNULL` is observable as `/dev/null`, not as a closed fd |
+| `stdin_path` | `Stdio::null()` is observable as `/dev/null`, not as a closed fd |
 | `cwd` | a run must never execute with the target root as cwd |
 | `event: exit` | written by the same process with `exit_code` and `duration_ms`, so a killed child still leaves a spawn row |
 

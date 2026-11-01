@@ -107,7 +107,7 @@ recorded in [DECISIONS](docs/manager/DECISIONS.md).
 
 - [Safety](docs/safety.md) — the read-only scan, the copy and verify sequence, and every failure mode we can name.
 - [Guarantees](docs/guarantees.md) — what is promised about each file and what is explicitly not.
-- [Privacy](docs/privacy.md) — what leaves the machine, and the single update-check request.
+- [Privacy](docs/privacy.md) — what leaves the machine — in v0.1, nothing.
 - [Limitations](docs/limitations.md) — the things that look like bugs and are not.
 - [Dependencies](docs/dependencies.md) · [Third-party notices](THIRD-PARTY.md) — what is linked and what is invoked.
 - [Releases](docs/releases.md) — artifacts, checksums, and verification before execution.

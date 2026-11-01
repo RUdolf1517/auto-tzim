@@ -36,7 +36,7 @@ controlled behaviour table selected by an environment variable or a case id. It 
 - emit each status, with and without a note, with and without an error object;
 - exit `0`, `1`, `2`, `3`, `4`, and die by signal;
 - print malformed JSON, a truncated line, two summaries, no summary, an unknown `type`, an unknown optional field;
-- hang forever, ignore `SIGTERM`, read `stdin` and block, or assert `isatty()` on stdin/stdout/stderr and fail if any
+- hang forever, ignore `SIGTERM`, read `stdin` and block, or assert `is_terminal()` on stdin/stdout/stderr and fail if any
   of them is a terminal (this is what proves no PTY is allocated);
 - mutate the file it was given while reporting success (this is the case that proves our post-run identity check is
   real);
@@ -96,7 +96,7 @@ For every skip, refusal, unsupported file, failure and dry run:
 | T-CLI-03 | preflight order: pause, disabled folder, no plan, low disk ⇒ `6`; held lock ⇒ `8`; bad config ⇒ `2` | planned |
 | T-PLAN-01 | plan hash binding: fabricated id, stale hash, other folder ⇒ `6`; matching plan ⇒ `0` | planned |
 | T-PLAN-02 | scan leaves the target root byte-identical and works without write access; apply is the positive control | planned |
-| T-RUN-06 | no PTY: child sees `isatty() == False` on all three streams; no `pty` import in the tree | planned |
+| T-RUN-06 | no PTY: child sees `is_terminal() == false` on all three streams; no pseudo-terminal crate in `Cargo.lock` | planned |
 | T-CFG-04 | `transforms` non-empty is rejected; `formats = []` passes no `--formats` | planned |
 | T-ADP-01 | unknown/garbage version, missing binary, unknown schema ⇒ `3`; no prose parsing (source check) | planned |
 | T-UPD-01 | mocked 200/403/429/500/malformed; no socket outside `update-check` | planned |

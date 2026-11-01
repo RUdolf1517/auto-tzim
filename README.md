@@ -22,8 +22,9 @@ never routes a refused file anywhere else.
 - Every result is normalized into a documented status (`optimized`, `already_optimal`, `skipped_unsupported`,
   `skipped_by_tzim`, `skipped_policy`, `skipped_unstable`, `hardlink_skip`, `failed`, `interrupted`) and kept in local
   JSONL history. A `tzim`-decided skip keeps `tzim`'s own reason code — its note is stored verbatim, never interpreted.
-- `update-check` only **notifies** about a newer `tzim`; nothing downloads or replaces a binary in v0.1.
-- Local-only logs, no telemetry, no network access except an explicitly invoked `update-check`.
+- **v0.1 makes no network request at all** (D-28): there is no network code in the binary. `update-check` returns in
+  v0.2 as a notification that never downloads and never replaces a binary.
+- Local-only logs and local-only state; no telemetry.
 
 Scheduler (launchd/systemd user timers), TUI, controlled Homebrew update and a Qt GUI are later stages and are
 deliberately not mixed into the MVP.
@@ -48,7 +49,7 @@ The operative list is charter v0.2 §6 (nineteen invariants). The ones that shap
 11. `transforms` must be empty in the MVP: confirmation-required transformations do not run.
 12. Scheduler/non-TTY/JSON modes never wait for a prompt and never allocate a PTY.
 13. `failed` is never retried in an automatic loop.
-14. `update-check` never downloads or replaces a binary.
+14. v0.1 opens no socket; the v0.2 `update-check` will never download or replace a binary.
 15. No telemetry and no undocumented network requests.
 16. No promise of undo: a successful optimization rewrites the file.
 17. The UI never duplicates core discovery/runner/updater logic.

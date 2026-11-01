@@ -39,7 +39,7 @@ example: `unknown field "folder[0].recurse": did you mean "recursive"?`.
 | `tzim_path` | string | `""` | empty means "find `tzim` on `PATH`"; a path is resolved and its `realpath` recorded. Must be an absolute path or empty; must not be a directory |
 | `mode` | enum | `confirm` | `confirm` \| `auto` (D-29). `confirm` shows a proposal and installs only on approval; `auto` installs without asking. `--mode` on the command line overrides it. A default of `auto` is refused: destruction by default is not a convenience |
 | `update_policy` | enum | `notify` | reserved: the key is accepted and has no effect in v0.1, because there is no `update-check` command (D-28). `scheduled` is rejected with a message saying so |
-| `allowed_major_versions` | array of integers | `[0]` | used only by `update-check`; a detected version outside this list is reported as incompatible and never acted on |
+| `allowed_major_versions` | array of integers | `[0]` | reserved with `update_policy` and used only once `update-check` exists in v0.2 (D-28); the key is accepted and validated now so a config file does not have to change later |
 
 ## 4. `[[folder]]`
 
@@ -75,7 +75,7 @@ Every field is listed; nothing is implicit.
 | `root = "/"`, `"$HOME"`, `"/usr"`, `"/etc"`, `"/System"`, `"/var"`, `"/bin"`, `"/sbin"`, platform analogues | error `forbidden_root` | the allowlist must be narrow; a whole home directory is the classic "it optimized everything" report |
 | `root = ""`, `"."`, `"../photos"`, a relative path | error `root_not_absolute` | the plan must not depend on the working directory |
 | a root that is a file, a symlink, or missing | error `root_not_a_directory` / `root_is_symlink` / `root_missing` | canonicalisation must not launder a link |
-| a root containing `AUTO_TZIM_HOME`, or inside it | error `state_inside_root` | the program must not plan its own database or logs (D-08) |
+| a root containing `AUTO_TZIM_HOME`, or inside it | error `state_inside_root` | the program must not plan its own state directory or logs (D-08) |
 | a known cloud-sync root without `allow_cloud_sync = true` | error `cloud_sync_root` | conflicts with a sync client are silent data races |
 | a NUL byte, a control character, a duplicate `id`, a duplicate `root` | error | ambiguity is not a feature |
 | `follow_symlinks = true`, `allow_hard_links = true`, `jobs > 1`, `[folder.schedule]` | error `not_in_v01` | each names the reason and the stage that will look at it again |

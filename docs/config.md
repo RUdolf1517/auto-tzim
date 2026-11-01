@@ -15,7 +15,7 @@ cannot accidentally touch a user's state.
 | Linux | `${XDG_CONFIG_HOME:-~/.config}/auto-tzim/config.toml` | `${XDG_STATE_HOME:-~/.local/state}/auto-tzim/` |
 | any (tests) | `$AUTO_TZIM_HOME/config.toml` | `$AUTO_TZIM_HOME/state/` |
 
-Directories are created `0700` where the platform supports it, the config, the SQLite database and the log files
+Directories are created `0700` where the platform supports it, the config, the state files and the log files
 `0600`. The file is written to a temporary name in the same directory, flushed, `fsync`ed, renamed over the original,
 and the directory is `fsync`ed. A config that fails to parse is **never** overwritten or "repaired": commands fail
 with exit `2` and a message naming the problem.

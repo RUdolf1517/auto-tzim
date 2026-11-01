@@ -139,9 +139,9 @@ create anything.
 | L-01 | second `run --once` while the first holds the lock | exit **`8`**, nothing processed, no second plan |
 | L-02 | stale lock (pid gone) | reported with pid and start time; re-run after confirming the process is gone succeeds |
 | L-03 | `SIGKILL` of our process mid-run, then a new start | previous run `interrupted`, no row `running`, no row `optimized` |
-| L-04 | corrupt SQLite file | exit **`7`**, no traceback dump, database left untouched |
+| L-04 | malformed line in the middle of a `files.jsonl` | exit **`7`**, the file and line named, nothing rewritten |
 | L-05 | corrupt config | exit `2`, config byte-identical afterwards |
-| L-06 | unwritable state directory | exit `7` with a reason, no partial database |
+| L-06 | unwritable state directory | exit `7` with a reason, no partial file |
 
 ## 8. CLI — the exit-code contract (`X-*`, AC-8, AC-11, AC-12)
 

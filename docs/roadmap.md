@@ -28,9 +28,12 @@ not the promise, the document is.
 **A user gets:** one folder added to a config, a read-only candidate plan, an approval step, and files that are smaller
 afterwards — with every outcome recorded and every non-candidate file proven byte-identical.
 
+**Distributed as:** a static binary from GitHub releases, a Homebrew formula, and `cargo install auto-tzim` (D-36). No
+interpreter, no runtime dependency, and — for the first two channels — nothing to build on the user's machine.
+
 **In scope.**
 
-- Core, CLI, config v1, SQLite state and history, locks, recovery, the full exit-code contract.
+- Core, CLI, config v1, file-based state and history (D-35), locks, recovery, the full exit-code contract.
 - The read-only candidate plan and plan-bound apply (D-20): the plan is a hash over the ordered files; an apply without a
   matching one refuses with exit `6`.
 - **Two modes and one install path** (D-29): `confirm` shows a proposal and installs only on approval; `auto` does not ask.

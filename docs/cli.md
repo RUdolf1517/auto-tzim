@@ -36,7 +36,7 @@ minus the progress line.
 ### 2.1 `doctor`
 
 Prints what a bug report needs: configured `tzim` path, `realpath`, size, SHA-256, `tzim --version`, the adapter entry,
-the platform, the config location and schema, and the state database status. It runs **one** command against the binary —
+the platform, the config location and schema, and the state directory status (schema, runs readable, tail recovery). It runs **one** command against the binary —
 `tzim --version` — and never a file-processing invocation. Exit `0` consistent, `3` `tzim` missing/unreadable/outside the
 adapter contract, `2` invalid config, `7` unreadable state.
 

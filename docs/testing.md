@@ -26,7 +26,7 @@
 | Fake `tzim` | every documented status and exit code, malformed/partial JSON, hang, stdin read, **PTY/TTY expectations**, version mismatch, file mutation behind our back, temporary-file failure, arbitrary file names | fast, deterministic | every push, every platform |
 | Real `tzim`, pinned | the contract we actually depend on: T1–T10 of the [study](manager/TZIM-STUDY-2026-10-29.md#4-exact-checks-for-the-real-binary-input-to-at-08), plus one optimisable PNG and one refused file | seconds | every push, every platform, artifact verified by SHA-256 |
 | End-to-end CLI | every command, human and `--json`, the whole exit-code matrix including `6`/`7`/`8`/`130`/`143` and the precedence pairs, refusal paths, plan binding, crash recovery | seconds | every push, every platform |
-| Failure injection | kill between steps, full disk (simulated), read-only destination, lock contention, corrupt database, corrupt config | seconds | every push |
+| Failure injection | kill between steps, full disk (simulated), read-only destination, lock contention, corrupt state file, truncated JSONL tail, corrupt config | seconds | every push |
 
 ## 3. The fake `tzim`
 

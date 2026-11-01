@@ -129,9 +129,10 @@ the source check.
 **Scope.** **Staging and install** (D-29): copy into `AUTO_TZIM_HOME/staging/<run_id>/`, `tzim` runs on the copy,
 journaled install (`rename`-away → `rename`-in → `fsync` → `unlink`), identity re-check immediately before each file;
 per-file subprocess (`shell=False`, `stdin=DEVNULL`, captured output with a size cap, minimal env, **no PTY**, D-21);
-NDJSON schema guard; timeout `TERM`→`KILL`; signal handling that starts no new files; SQLite state with transactions,
-global/folder/file guards; stale-run recovery to `interrupted` and install recovery from the journal; history; the
-`reason` field (D-27); invalidation key (D-06).
+NDJSON schema guard; timeout `TERM`→`KILL`; signal handling that starts no new files; file-based state (D-35): run
+directories with append-only `files.jsonl`, atomic `run.json` replacement, an exclusive-create run lock with a start-time
+discriminator; stale-run recovery to `interrupted` and install recovery from the journal; history; the `reason` field
+(D-27); invalidation key (D-06).
 
 **Acceptance.** No shell, no `pty` import, child sees `isatty() == False`; hung child killed and recorded `failed`;
 malformed JSON is `failed`, never `optimized`; a child that exits `0` after mutating a file is caught; **no `tzim`

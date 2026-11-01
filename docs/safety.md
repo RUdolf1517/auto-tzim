@@ -92,7 +92,7 @@ A file that fails any layer is finished: no lower layer is tried, no upper layer
 | No matching plan (first apply of the folder) | run does not start | `6` | no |
 | `pause` active | run does not start | `6` | no |
 | Free space below `min_free_bytes` | run does not start | `6` | no |
-| Corrupt state database | run does not start | `7` | no |
+| Corrupt state file (unparseable record, not a truncated tail) | run does not start | `7` | no |
 | `SIGINT`/`SIGTERM` during a run | in-flight and remaining files `interrupted` | `130`/`143` | earlier files keep verified changes |
 
 ## 5. What we refuse to add for convenience

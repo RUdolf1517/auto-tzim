@@ -29,7 +29,7 @@ invent it; the owner may change it without cost), **superseded**.
 | D-21 | No PTY is ever allocated; `stdin=DEVNULL`; no `pty` import | adopted | charter §6-12 | AT-05 |
 | D-22 | One upstream issue for a capabilities/structured-reasons API, outside this repo's PRs — it is `tzim#85`; my duplicate `#86` is to be closed | **delivered 2026-11-01** — `#85` implemented in `tzim` PR #91, shipped in v0.16.0; `#86` closed | charter §16 P-01 | [audit DR-01, DR-02](../audits/2026-11-01-tzim-v0.16.1.md) |
 | D-23 | A candidate plan is not a promise of eligibility or gain | adopted | charter §8.4 | AT-03, AT-04, AT-09 |
-| D-24 | `main` protection: **decision deferred** by the owner on 2026-10-29; interim rule is that an `--admin` merge is permitted for documentation-only pull requests and must be logged in STATUS-LOG | deferred (interim rule adopted) | [OWNER-ACTIONS](OWNER-ACTIONS.md) §6a; charter §2.2 | every future PR to `main` |
+| D-24 | `main` protection: **resolved 2026-11-01** — the owner chose §6a option 1, machine gates only: the required review is removed because one identity cannot satisfy it, and the gate moves to CI checks plus the written review verdict | **superseded by the owner's §6a choice** | [OWNER-ACTIONS](OWNER-ACTIONS.md) §6a; charter §2.2 | every PR to `main` |
 | D-25 | No implementation start until the severity-A drift items of the 2026-11-01 audit are closed; the six `tzim` contract facts this project is built on changed under it | adopted | [audit](../audits/2026-11-01-tzim-v0.16.1.md); charter §3, §9 | AT-01…AT-09 (start), Q11–Q13 |
 | D-26 | The adapter **reads `tzim --capabilities`** and fails closed on an unexpected `capabilities_schema_version` / `result_schema_version`; `--formats` is still never passed | adopted (owner, 2026-11-01) | [audit DR-01](../audits/2026-11-01-tzim-v0.16.1.md), Q11 | AT-04, AC-13, INV-18 |
 | D-27 | `tzim`'s stable `reason_code` is **surfaced** in our own rows as `reason`, beside the verbatim `note`; no code ever drives our logic | adopted (owner, 2026-11-01) | [audit DR-02](../audits/2026-11-01-tzim-v0.16.1.md), Q12 | AT-05, `cli.md`, `state.md`, corpus `D-*` |
@@ -38,6 +38,8 @@ invent it; the owner may change it without cost), **superseded**.
 | D-30 | Accepted `tzim` window: **`>=0.16.0, <0.17`**, tied to `capabilities_schema_version: 1` / `result_schema_version: 2`; widened only after a real run | **adopted (owner, 2026-11-01)** — Q13 answered | [audit DR-09](../audits/2026-11-01-tzim-v0.16.1.md), Q13 | AT-04 |
 | D-31 | **`auto-tzim` updates itself as well as `tzim`** — v0.3 covers both, by delegating to the installer that owns each artifact, never by rewriting a package in place | adopted (owner, 2026-11-01); overrides charter §11.2 last bullet | SPEC §11.2, prior roadmap §7 | v0.3 issues, `update.md`, `releases.md` |
 | D-33 | **The implementation language is Rust**, not Python: a static binary in a workspace (`auto-tzim-core` library + `auto-tzim` CLI), pinned toolchain, `cargo` build and test. Overrides `SPEC.md` §4.1 | adopted (owner, 2026-11-01) | `SPEC` §4.1/§17; [CONFLICTS C-5](../spec/CONFLICTS.md) | every document, AT-01…AT-09 |
+| D-35 | **No C dependencies, and no database engine**: state and history are plain files (JSONL + atomically replaced JSON) under `AUTO_TZIM_HOME`; `rusqlite` is removed | adopted (owner, 2026-11-01) | D-33; owner instruction | AT-02, AT-05, `state.md`, `recovery.md`, GATES, corpus `L-*` |
+| D-36 | Distribution includes **`cargo install auto-tzim`**; the binary name keeps its hyphen; the CLI crate is published as `auto-tzim`, the library as `auto-tzim-core` | adopted (owner, 2026-11-01) | `releases.md`, `update.md` | AT-01, AT-09, packaging |
 | D-34 | **Three front doors, three artifacts**: the CLI, the TUI (v0.2) and the Qt app (v0.4) are separate binaries with separate installs; only the core crate is shared | adopted (owner, 2026-11-01) | D-33, charter §12 | v0.2, v0.4, packaging |
 | D-32 | **Two update modes**, `confirm` and `auto`, separate from the optimisation modes; safety rules that protect a file and a binary hold in both | adopted (owner, 2026-11-01) | D-29 vocabulary | v0.3 issues, `config.md`, `cli.md` |
 
@@ -610,14 +612,15 @@ the document that was signed. The override lives here, dated and attributable, e
 | CLI | `clap` (derive) | argv exactly as specified, no parser hand-written, no shell |
 | Config | `serde` + `toml` | strict typed schema; unknown fields rejected, not ignored |
 | JSON | `serde_json` | the documented NDJSON output is a serialised struct, not string building |
-| State | `rusqlite` (bundled SQLite) | the same on-disk format the specification describes; no system SQLite dependency |
-| Hashing | `sha2` | binary identity and record hashes |
+| State | **plain files** — JSONL logs plus atomically replaced JSON (`std` only) | D-35: no database engine, no C in the build, and a format a user can read with `cat` |
+| Hashing | `sha2` | binary identity and record hashes; pure Rust, no C |
 | Errors | `thiserror` inside, no `anyhow` at the edges | the exit-code contract maps to error types, not strings |
 | TUI (v0.2) | `ratatui` + `crossterm`, optional feature | a separate binary, not a startup branch |
 | Qt (v0.4) | `cxx-qt` over `auto-tzim-core` | separate artifact (D-34) |
 
 **Explicitly not adopted:** `tokio` or any async runtime (the runner is sequential, `jobs = 1`; concurrency without a proven
-need is a second execution model to test), any HTTP crate in v0.1, and any crate that spawns its own network activity.
+need is a second execution model to test), any HTTP crate in v0.1, any crate that spawns its own network activity, and
+**any crate that compiles C** — no `rusqlite`, no `libsqlite3-sys`, no `openssl`, no `zlib` (D-35).
 
 **Reversal condition:** a written owner decision, recorded here, with the reason. Not a drift discovered mid-implementation.
 
@@ -642,3 +645,62 @@ Rules that follow, and are gates rather than intentions:
    parse its stdout. A JSON output is an interface for *users*, not a private protocol between our own binaries.
 4. **The CLI remains the reference implementation of the behaviour**, and every acceptance row is judged against it first.
    A front door is accepted only when it produces the same outcomes through the same core calls.
+
+## D-35 · No C dependencies, and no database
+
+The owner's instruction, 2026-11-01: *state — no C dependencies at all; the alternative is JSONL files next to the
+history.*
+
+**What changes.** `rusqlite` (`bundled` SQLite) is removed. The entire state layer becomes plain files: an append-only
+JSONL log per run, atomically replaced JSON for the small mutable records, an exclusive-create file for the run lock. No
+database engine, no C toolchain in the build, nothing on the host to link against.
+
+**Why this is the better trade here.**
+
+1. **A static binary with no C in it is the whole point of D-33.** `bundled` SQLite compiles ~250k lines of C into every
+   build; it is the one part of the stack that could fail on an unusual target, and it is the one part a packager has to
+   audit by hand.
+2. **The workload is not a database workload.** One writer, a few thousand rows per run, append-only, read back in order.
+   Every property we needed from SQLite — atomicity, durability, single-writer isolation — is achievable with `rename`
+   and `fsync`, and those two primitives are in `std`.
+3. **A user can read their own history with `cat`.** For a tool that touches personal files, that is not a nicety: it is
+   the difference between "the program says what it did" and "the user can check".
+4. **The failure mode is better.** A corrupt SQLite file needs tooling and often a copy to a lab; a corrupt JSONL file has
+   exactly one likely failure — a truncated last line — and the reader can detect and report it.
+
+**What we give up, recorded rather than glossed:** transactions across multiple files (replaced by one-writer-at-a-time
+plus a journal with recovery), indexes (replaced by file naming and a linear scan, documented as a limit), and SQL as an
+inspection tool. [state.md](../state.md) §4 tabulates the swap line by line, and §11 lists the limits we accept.
+
+**What does not change:** the status vocabulary (D-02), the plan binding (D-20), the invalidation key (D-06), the retention
+rules, and the exit code for a corrupt state (`7`). Those were properties of the product, not of the storage engine.
+
+**Reversal condition:** measured evidence that the linear scan is a real problem at the scale users actually have
+(hundreds of thousands of files in one folder), in which case the answer is still not a C database — it is an index file
+written with the same primitives.
+
+## D-36 · Distribution: `cargo install`, releases and Homebrew
+
+The owner's instruction, 2026-11-01: *`cargo install` is planned; the binary keeps the hyphen.*
+
+| Channel | Artifact | Who builds | What we record |
+| --- | --- | --- | --- |
+| GitHub releases | prebuilt static binaries (`x86_64`/`aarch64`, musl and macOS) + `SHA256SUMS` | our release workflow | the exact artifact hash |
+| `cargo install auto-tzim` | built from source on the user's machine | the user's toolchain | `provenance: "cargo"`, plus the reported version |
+| Homebrew tap | formula over the release tarball | Homebrew | `provenance: "brew"` |
+
+Consequences that had to be written down rather than discovered:
+
+1. **Two crates are published**: `auto-tzim-core` (the library) and `auto-tzim` (the CLI crate, which produces the
+   `auto-tzim` binary). The workspace keeps its `[[bin]]`/package naming so that `cargo install auto-tzim` yields
+   `auto-tzim` and not `auto-tzim-cli` — a published crate name is forever, so it is decided now (this is why the crate
+   was renamed from `auto-tzim-cli`).
+2. **The name keeps its hyphen** in the crate, the binary, the formula and every document. One spelling, everywhere.
+3. **A `cargo install` build is not byte-identical to a release artifact**, and we do not pretend otherwise: same source,
+   same lockfile, different compiler and flags. It passes the same checks (`--version`, `doctor`, adapter probe, smoke
+   run) and its provenance is recorded, so an update can pick the right mechanism.
+4. **`cargo install` needs a toolchain on the user's machine**, with at least the MSRV documented in
+   [releases](../releases.md). A user without one uses the tarball.
+5. **Updating a `cargo`-installed binary is delegated to `cargo`**, because cargo keeps its own bookkeeping in
+   `.crates.toml`: replacing the file behind its back would make `cargo install --list` lie. `cargo install --force
+   auto-tzim --version <v>` recompiles — slower, and true ([update](../update.md) §2.2).

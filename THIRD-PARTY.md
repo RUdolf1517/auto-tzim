@@ -14,12 +14,12 @@ add a dependency quietly. Exact versions and checksums are recorded in `Cargo.lo
 | `serde` | typed config and JSON output | MIT OR Apache-2.0 | no |
 | `toml` | reading the TOML config | MIT OR Apache-2.0 | no |
 | `serde_json` | the documented NDJSON output | MIT OR Apache-2.0 | no |
-| `rusqlite` (feature `bundled`) | state and history; compiles SQLite into the binary | MIT | no |
 | `sha2` | binary identity, record hashes | MIT OR Apache-2.0 | no |
 | `thiserror` | typed errors that map to exit codes | MIT OR Apache-2.0 | no |
 
-The bundled SQLite is **public domain** — the one entry here that is not a permissive licence but no licence at all, which
-is worth stating plainly because packagers ask about it.
+**There is no C in the build.** State and history are plain JSONL files written with the standard library (D-35), so there
+is no database engine to vendor, licence or audit — which is the one question packagers usually have about a Rust binary
+that talks to a database, and here it does not arise.
 
 ## External program, not a dependency
 
@@ -42,8 +42,8 @@ dependency tree becomes the other's.
 
 ## Transitive dependencies
 
-`clap` brings `clap_builder` and `clap_derive`; `serde` brings `serde_derive`; `rusqlite` brings `libsqlite3-sys` (the
-bundled C build) and `hashlink`; `toml` brings `toml_edit` and `winnow`; `serde_json` brings `itoa`, `ryu` and `memchr`;
+`clap` brings `clap_builder` and `clap_derive`; `serde` brings `serde_derive`; `toml` brings `toml_edit` and `winnow`;
+`serde_json` brings `itoa`, `ryu` and `memchr`;
 `sha2` brings `digest`, `generic-array`, `typenum`, `block-buffer` and `crypto-common`. All are MIT, Apache-2.0, Zlib or
 0BSD; `cargo deny` enforces the allow-list in CI, and the exact versions and checksums live in `Cargo.lock`.
 

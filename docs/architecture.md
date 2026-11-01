@@ -41,10 +41,10 @@ crates/
       staging.rs         # copy, journal, install, recovery
       runner.rs          # subprocess, NDJSON parse, timeout, signals
       policy.rs          # formats, transforms, limits, refusals decided by us
-      state.rs           # SQLite: runs, files, locks, history
+      state.rs           # plain files: run dirs, JSONL history, journal, locks (D-35)
       updater.rs         # v0.3 only; absent from v0.1
       logging.rs         # structured JSONL + retention
-  auto-tzim-cli/         # argv parsing, human and JSON rendering, exit codes
+  auto-tzim/             # the CLI crate (package `auto-tzim`, binary `auto-tzim`, D-36)
   auto-tzim-harness/     # fake tzim, run-case, pinned fetch, evidence bundles
   auto-tzim-tui/         # v0.2 only, separate binary
   auto-tzim-qt/          # v0.4 only, separate binary and its own package

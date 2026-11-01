@@ -34,6 +34,22 @@ Nothing has been released. There is no version of `auto-tzim` that can be instal
   checksums, row reconciliation with `jq`, byte evidence, the read-only-plan proof, the executed exit-code matrix, six
   negative controls the reviewer performs personally, and the four claim marks.
 
+### Changed — no C in the build, and state is plain files
+
+`rusqlite` is gone ([D-35](docs/manager/DECISIONS.md)); state and history are JSONL files and atomically replaced JSON
+under `AUTO_TZIM_HOME`. The trade is stated rather than implied: no SQL queries and no cross-file transactions, in exchange
+for a build with no C in it and a history a user can read with `cat`. The three primitives that replace a database —
+`atomic_write`, `append_line`, `create_exclusive` — and the single-writer rule they rest on are in
+[state.md](docs/state.md) §2. Recovery, retention, schema versioning and the exit code for corrupt state are unchanged; the
+fixture cases `L-04`/`L-06` now describe a malformed JSONL line instead of a corrupt database.
+
+### Changed — `cargo install`, and the crate keeps its hyphen
+
+[D-36](docs/manager/DECISIONS.md): distribution is GitHub releases + Homebrew + `cargo install auto-tzim`. The CLI crate is
+renamed from `auto-tzim-cli` to `auto-tzim` so that the published name produces the right binary — a crate name is forever,
+so it is decided before publication rather than after. A `cargo`-installed binary is updated by asking `cargo`, not by
+replacing the file, because cargo keeps its own bookkeeping in `.crates.toml`.
+
 ### Changed — the implementation language is Rust
 
 The owner's decision, 2026-11-01 ([D-33](docs/manager/DECISIONS.md)): `auto-tzim` is a Rust workspace, not a Python

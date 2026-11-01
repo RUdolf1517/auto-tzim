@@ -207,21 +207,22 @@ version would have created a rule that gates markdown exactly as hard as code. R
 reviewer with its own identity — the same login that authors the pull requests. With one identity, "required review" is
 not a gate; it is a dialog that can only ever end in `--admin`.
 
-**Status: deferred by the owner on 2026-10-29** — recorded as [D-24](DECISIONS.md), together with the interim rule
-that lets documentation-only pull requests merge with `--admin` while every code pull request waits for this decision.
-Nothing below has been applied; `main` protection is exactly as it was.
+**Status: DECIDED by the owner on 2026-11-01 — option 1, machine gates only.** Recorded as the resolution of
+[D-24](DECISIONS.md); the text below is kept because the analysis is why the option was chosen, not because it is still
+open. Nothing has been applied yet: `DELETE` on branch protection needs your credentials (the same `403` as every other
+write), so the command is at the end of this section.
 
-Three implementable options. The first is my recommendation.
+Three implementable options were on the table. The first was chosen.
 
-### Option 1 — machine gates only (recommended while there is one identity)
+### Option 1 — machine gates only (chosen)
 
-Require a pull request, require the CI checks once they exist, forbid force-pushes and deletions; drop the human approval
-requirement, because it cannot be satisfied by anyone. The human review does not disappear — it moves to
-[EVIDENCE-PROTOCOL](EVIDENCE-PROTOCOL.md) and [REVIEW-TEMPLATE](REVIEW-TEMPLATE.md), which are stricter than a green
-checkmark and produce a written verdict instead of a click.
+Require a pull request and the CI checks once they exist, forbid force-pushes and deletions, and **drop the human approval
+requirement**, because there is exactly one identity and it authors every pull request. The review does not disappear: it
+moves to [EVIDENCE-PROTOCOL](EVIDENCE-PROTOCOL.md) and [REVIEW-TEMPLATE](REVIEW-TEMPLATE.md), which produce a written
+verdict that a green checkmark cannot replace.
 
 ```sh
-# Drop the requirement nobody can satisfy (keeps force-push and deletion blocks if they were set):
+# Drop the requirement nobody can satisfy (force-push and deletion blocks stay as they are):
 gh api -X DELETE repos/RUdolf1517/auto-tzim/branches/main/protection/required_pull_request_reviews
 
 # Then, in Settings → Rules → New branch ruleset, target `refs/heads/main` with:
@@ -233,28 +234,53 @@ gh api -X DELETE repos/RUdolf1517/auto-tzim/branches/main/protection/required_pu
 # Bypass list: repository admins, so an outage does not lock the repository shut.
 ```
 
-### Option 2 — a second identity that can actually approve
-
-A machine account or GitHub App with read access, added as a collaborator and named as a required reviewer. Approval
-becomes real. Cost: a credential to hold, and if it approves automatically it is CI wearing a hat — no better than
-Option 1 and harder to audit.
+Verify:
 
 ```sh
-# after creating the account, with its token or from the UI:
-gh api -X PUT repos/RUdolf1517/auto-tzim/collaborators/NAME-OF-SECOND-IDENTITY -f permission=pull
-# then re-add required_pull_request_reviews with that identity in the reviewer set
+gh api repos/RUdolf1517/auto-tzim/branches/main --jq .protected            # still true
+gh api repos/RUdolf1517/auto-tzim/branches/main/protection --jq .required_pull_request_reviews   # expect null
 ```
 
-### Option 3 — status quo, with the bypass written down
+**What changes the day this is applied:** a pull request no longer shows `BLOCKED` waiting for an approval nobody can
+give, and `--admin` stops being the only way to merge. What does **not** change: the requirement that every acceptance row
+be demonstrated and re-run by the reviewer before a merge, and the rule that a documentation-only pull request from the
+owner's own account is still logged.
 
-Keep the rule as it is and treat `--admin` as the documented path for any pull request the owner's own account opens.
-Cheapest, and honest as long as every bypass gets a [STATUS-LOG](STATUS-LOG.md) line (practice since #11). Risk: the
-bypass becomes a habit, and the first code pull request inherits it.
+### Option 2 — a second approving identity (not chosen)
 
-**What is not optional in any option:** an `--admin` merge gets a STATUS-LOG entry naming the reason. That is the only
-control that survives all three.
+A machine account or GitHub App with read access, added as a collaborator and named as a required reviewer. Approval
+becomes real. Cost: a credential to hold, and if it approves automatically it is CI wearing a hat.
 
-Whichever you pick, record it in [DECISIONS](DECISIONS.md) — the next merge should not have to rediscover this.
+### Option 3 — status quo with the bypass written down (not chosen)
+
+Keep the rule and treat `--admin` as the documented path for any pull request the owner's own account opens. Cheapest, and
+honest as long as every bypass gets a STATUS-LOG line. Risk: the bypass becomes a habit, and the first code pull request
+inherits it — which is exactly why it was rejected on 2026-11-01, before the first code pull request existed.
+
+## 6b. Refresh the assignment issue body (chosen option Б, 2026-11-01)
+
+**Why:** issue [#10](https://github.com/RUdolf1517/auto-tzim/issues/10) still describes the product as it was on 2026-10-29 —
+no `--mode`, no `--capabilities`, no `reason`, and it says "Python package". The file
+[ASSIGNMENT-AT-MVP-DRAFT.md](ASSIGNMENT-AT-MVP-DRAFT.md) is current; the issue is a stale copy, and a coder who reads the
+issue would build the wrong thing.
+
+Issue writes return `403` for this session (re-tested on 2026-11-01), so this is yours:
+
+```sh
+gh issue edit 10 --repo RUdolf1517/auto-tzim \
+  --body-file docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md
+```
+
+Verify that the copy is real rather than hoped for:
+
+```sh
+gh issue view 10 --repo RUdolf1517/auto-tzim --json body --jq '.body' | grep -c "mode auto"
+gh issue view 10 --repo RUdolf1517/auto-tzim --json body --jq '.body' | grep -c "capabilit"
+```
+
+Both must be non-zero, and the body must no longer contain "Python package". **The file stays the source of truth** even
+after this: the issue carries a copy, the repository carries the version, and when they disagree the file wins — that is
+stated at the top of the file itself.
 
 ## 6. Branch protection (optional, later)
 
@@ -278,14 +304,16 @@ workflow lands, or the rule will block every pull request.
 
 ## Summary of what changes when
 
-| Action | Needed for | Blocking? |
+| Action | State on 2026-11-01 | Blocking? |
 | --- | --- | --- |
-| 1. Close `tzim#86` as a duplicate of `tzim#85` | not leaving noise in another project's tracker | no |
-| 2. Attach labels | grouping the issue list | no |
-| 3. Repository description | consistency with `tzim` | no |
-| 4. Merge the docs commit in `tzim` | canonical spec home (Q9) | no — a checksummed copy is here |
-| 5. Clear B-01 | **the MVP start** | **yes** |
-| 6. Branch protection | platform-enforced merge rules | no |
+| 1. Close `tzim#86` as a duplicate of `tzim#85` | **done** — both are closed; `#85` shipped in v0.16.0 | — |
+| 2. Attach labels | **done** — `v0.1` on #1…#9, `manager`+`assignment` on #10 | — |
+| 3. Repository description | **done** — description and topics are set | — |
+| 4. Merge the docs commit in `tzim` | open — `handoff/auto-tzim/` still does not exist on `tzim@main` (404) | no — a checksummed copy is here |
+| 5. Clear B-01 | **cleared** — PR #84 merged 2026-10-30, tracker idle | — |
+| 6a. `main` protection, option 1 | **decided, not applied** — needs your `DELETE` (403 here) | yes, before the first **code** PR |
+| 6b. Refresh issue #10 body | open — the issue still says "Python package" and has no modes | yes, before the coder starts |
+| 7. Retire `tzim#7` label `v0.1` → `v0.2` (AT-07 left the MVP) | open — optional, the assignment file already says so | no |
 
 If any command fails with 403 as well, the token lacks issue/pull-request write scope: that is a GitHub connection
 setting for this conversation, not something to work around in the repository.

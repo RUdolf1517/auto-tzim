@@ -1,5 +1,10 @@
 # Assignment — MVP / v0.1 (AT-01 … AT-09)
 
+> **This file is the source of truth for the assignment.** A copy is published as
+> [#10](https://github.com/RUdolf1517/auto-tzim/issues/10); when the two disagree, this file wins — it is versioned and
+> the issue is not. Reviewed against decisions D-01…D-36 and the pre-registered gates.
+
+
 > **Upstream contract moved (2026-11-01).** `tzim` v0.16.0 shipped `--capabilities`, a stable `reason_code` and
 > JSON result schema 2; v0.16.1 is the current release and its exit-code precedence is now documented and
 > enforced. Statements below written against `tzim` 0.14 that assume no capability document, an untyped
@@ -29,9 +34,13 @@ and the exit-code contract of D-18/D-19 proven by real invocations. No network, 
 
 **Required implementation:**
 
-1. Rust workspace (D-33) with `auto-tzim-core` and `auto-tzim-cli` only; no `tui`, no `qt` crate (#1).
+1. Rust workspace (D-33) with `auto-tzim-core` and the `auto-tzim` CLI crate only; no `tui`, no `qt` crate.
+   `Cargo.lock` committed, `rust-toolchain.toml` pinned, `deny.toml` present, and both crates publishable
+   (`cargo install auto-tzim` must work, D-36) (#1).
 2. TOML config v1 with strict validation, canonical roots, forbidden-root / `AUTO_TZIM_HOME` / cloud-sync checks,
-   permissions, atomic write, corrupt-config safety, `config validate` and the `folder` commands (#2).
+   permissions, atomic write, corrupt-config safety, `config validate` and the `folder` commands — and the **file-based
+   state layer** (D-35): run directories with append-only `files.jsonl`, atomic `run.json` replacement, exclusive-create
+   lock with a start-time discriminator, no C dependency anywhere (#2).
 3. `lstat` discovery and stability per [`docs/safety.md`](../safety.md) §2, and the candidate plan of D-04 with a plan
    id and a plan hash (D-20) (#3).
 4. Restricted adapter: `tzim --version` **and `tzim --capabilities`**, the accepted window `>=0.16.0, <0.17` with
@@ -84,7 +93,7 @@ not discussed.
 **Required raw artifacts:** CI run IDs per platform at the final head with logs; the command/exit-code matrix with raw
 stdout/stderr and `$?`; per-file rows for the fixture corpus including skips and failures; before/after SHA-256 for every
 corpus file; the invocation counter for every scan and apply case; the pinned artifact's SHA-256 and the matching
-`SHA256SUMS` line; SQLite dumps for the recovery scenarios; fake-`tzim` invocation logs; `rustc --version` and the pinned
+`SHA256SUMS` line; the state files for each recovery scenario; fake-`tzim` invocation logs; `rustc --version` and the pinned
 toolchain,
 `uname -a`, the `auto-tzim` head SHA and the `tzim` identity per platform.
 

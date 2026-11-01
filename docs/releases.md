@@ -22,13 +22,20 @@ otherwise it is a major change, because someone's automation may depend on it.
 | `auto-tzim` binary, static musl (Linux x86_64, aarch64) and macOS (x86_64, aarch64) | GitHub releases | one file per target plus a `.tar.gz`; no runtime, no interpreter, nothing to install alongside it |
 | `auto-tzim-tui` binary (v0.2) | GitHub releases, separate artifact | optional; a user who wants the CLI never downloads it (D-34) |
 | `auto-tzim-qt` package (v0.4) | GitHub releases, **separate package** | its own dependency on the Qt runtime; a packager of the CLI does not inherit Qt (D-34) |
+| `auto-tzim` crate on **crates.io** | `cargo install auto-tzim` | built from source on the user's machine; not byte-identical to a release artifact (different compiler), and verified afterwards by the same checks (D-36) |
 | `SHA256SUMS` | GitHub releases | one line per artifact; every published file is listed |
 | source archives | GitHub | generated from the tag; `Cargo.lock` is committed, so a rebuild is reproducible |
 | Homebrew formula | tap, from the first usable release | must be updated for **every** usable release, and verified by a real upgrade test |
 | container image | not planned | a tool that rewrites user files in place in a container is a category error |
 
 Release notes state: the version, the supported `tzim` versions, the platforms actually tested, any change to defaults,
-and any change to the network surface. Tags and artifacts are immutable: a bad artifact is superseded, never silently
+and any change to the network surface.
+
+**Toolchain and MSRV.** The crate declares a minimum supported Rust version, which is the version pinned in
+`rust-toolchain.toml` at release time. A `cargo install` on a toolchain below it fails in the compiler rather than in the
+product — which is the honest failure, and it is written in the README next to the command. Two crates are published:
+`auto-tzim-core` (the library) and `auto-tzim` (the CLI, producing the `auto-tzim` binary). The names keep their hyphen
+(D-36). Tags and artifacts are immutable: a bad artifact is superseded, never silently
 rebuilt under the same tag.
 
 ## 3. Definition of done for a release

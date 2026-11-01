@@ -21,7 +21,7 @@ never routes a refused file anywhere else.
 - `run --once` then invokes the installed `tzim` as a subprocess, one file per process, argv array, no shell, no PTY.
 - Every result is normalized into a documented status (`optimized`, `already_optimal`, `skipped_unsupported`,
   `skipped_by_tzim`, `skipped_policy`, `skipped_unstable`, `hardlink_skip`, `failed`, `interrupted`) and kept in local
-  SQLite history. A `tzim`-decided skip stays generic — its note is stored verbatim, never interpreted.
+  JSONL history. A `tzim`-decided skip keeps `tzim`'s own reason code — its note is stored verbatim, never interpreted.
 - `update-check` only **notifies** about a newer `tzim`; nothing downloads or replaces a binary in v0.1.
 - Local-only logs, no telemetry, no network access except an explicitly invoked `update-check`.
 
@@ -84,7 +84,7 @@ line saying so. None of them describes behaviour you can observe today.
 | [safety](docs/safety.md) | The seventeen invariants, the layers that enforce them, the dangerous windows |
 | [guarantees](docs/guarantees.md) | What this program promises, and the four things it refuses to promise |
 | [formats](docs/formats.md) | Why it supports no format of its own, and how the allowlist works |
-| [state](docs/state.md) | SQLite schema, locks, retention, migrations, what is *not* stored |
+| [state](docs/state.md) | The on-disk layout (plain JSONL, no database), locks, retention, migrations, what is *not* stored |
 | [privacy](docs/privacy.md) | The complete network surface and what is kept locally |
 | [update](docs/update.md) | Notify-only in v0.1; the rules a controlled update must satisfy |
 | [testing](docs/testing.md) | Test layers, fixtures, negative controls, planned traceability |

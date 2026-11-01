@@ -19,12 +19,12 @@ must not.
 | ID | Guarantee | Meaning | Proof |
 | --- | --- | --- | --- |
 | **A1** | Nothing outside the plan | Only paths present in an approved, printed plan are ever passed to `tzim`; every path is inside the canonical root | INV-7, AC-1, AC-3 |
-| **A2** | No byte changed by us | `auto-tzim` writes only under `AUTO_TZIM_HOME` (config, SQLite, logs, update cache). It never writes, renames, deletes or chmods a user file | INV-8, source review of every write site |
+| **A2** | No byte changed by us | `auto-tzim` writes only under `AUTO_TZIM_HOME` (config, state, logs, update cache). It never writes, renames, deletes or chmods a user file | INV-8, source review of every write site |
 | **A3** | A refusal stays refused | An outcome `tzim` declined, or our policy excluded, is recorded and finished. No fallback, no second handler, no "try the other format" | INV-9, INV-10 |
 | **A4** | Identity is checked, not assumed | A file is only handed over while its `(dev, ino, size, mtime_ns)` matches the captured identity, and the identity is re-read after the process exits | INV-6, R-03, AC-4 |
 | **A5** | The record is honest | Every row states what happened, by whom (our layer or `tzim`), with the raw child result preserved; a dry run is never recorded as a completed optimization | AC-8, AC-10 |
 | **A6** | Local only | No telemetry; no network call except the single documented `update-check` request | INV-15, [privacy](privacy.md) |
-| **A7** | No self-repair of the state | A corrupt config or database is reported, not silently rewritten, because a silent reset erases the evidence a user needs | AC-7, [recovery](recovery.md) |
+| **A7** | No self-repair of the state | A corrupt config or state file is reported, not silently rewritten, because a silent reset erases the evidence a user needs | AC-7, [recovery](recovery.md) |
 
 ## 2. What `auto-tzim` does not guarantee
 

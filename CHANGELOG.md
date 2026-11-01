@@ -45,25 +45,29 @@ result schema, flag rejected, missing key), `A-12` (an unknown `reason_code` pas
 **there is no code and no result yet**, so nothing is being edited *after* a result is known. The reason is written in
 the commit and in the close-out.
 
-### Measured, corrected twice — the two owner actions
+### Resolved — `main` protection is machine gates only, and the blocker was a placeholder
 
-The owner reported §6a (drop the required review) and §6b (refresh issue #10) done on 2026-11-02, and both were measured
-rather than accepted. What that produced was two of my own errors, recorded here in the order they were found:
+[D-24](docs/manager/DECISIONS.md) is applied (2026-11-02). Two deletions, and the second is the instructive one:
 
-- **§6a is applied** — the `DELETE` answered `204`, and `review_decision` on pull request #16 fell to `null`, which is
-  what GitHub answers when no approval is required. But the pull request is *still* `blocked`, and my note had said a
-  blocked pull request with no configured checks "can only come from a required review". It cannot: the review rule was
-  gone and the state did not change. The repository has **zero workflows**, so a required status check — a context that
-  nothing will ever report — is the leading candidate, with required signed commits second. The fix is a protection dump
-  read by an admin token, not another inference from the merge badge.
-- **§6b has never actually run.** My command contained the path `docs/manager/ASSIGNMENT-AT-MVP-DRAFT.md`, the chat
-  rendered it as a link, and the owner's paste carried the link instead: `open …: no such file or directory`, `$status 1`,
-  body still 122 lines. The documented command is now a fish glob (`docs/manager/ASSIGNMENT*.md`) or a body fetched
-  straight from the API, so no full filename has to survive a renderer. The earlier claim that the body "still says Python
-  package" was also wrong — it says `python --version`, once, in a list of toolchain facts.
+- the **review requirement** went first, because it returned `403` to be satisfied: GitHub forbids approving your own pull
+  request at every permission level, so the rule could only end in `--admin`;
+- the pull request stayed `blocked` afterwards, with `review_decision: null`. My note had said a blocked pull request with
+  no configured checks "can only come from a required review" — the `204` disproves it, which is why the account of this
+  is in the file with the error intact;
+- the admin dump showed why: a required status check named **`test`**, in a repository with **zero workflows**. Nothing
+  could ever report it, so every pull request against `main` was blocked permanently. Deleted too.
 
-[OWNER-ACTIONS](docs/manager/OWNER-ACTIONS.md) §6a and §6b carry the corrected commands, the protection dump that settles
-the remaining blocker, and both corrections in place rather than applied over the record.
+Verified from this session rather than accepted: `pulls/16` answers `mergeable_state: clean`, and `branches/main` reports
+`required_status_checks.enforcement_level: "off"` with the branch still `protected: true`. **Standing obligation:** when
+AT-01 lands CI, required checks come back with the context the workflow actually reports — a check nobody reports protects
+nothing, which is exactly what this rule demonstrated.
+
+### Still open — the assignment issue, and two commands of mine that never ran
+
+Issue #10 is still the 122-line 2026-10-29 body; the file is 170. Two attempts to send it failed on my commands, not on
+the owner's shell: the first carried a path that the chat rendered into a markdown link, the second used a glob from `/`
+where there is no clone. [OWNER-ACTIONS](docs/manager/OWNER-ACTIONS.md) §6b now leads with a form that needs neither a
+clone nor a working directory — it fetches the body from the contents API and pipes it to `gh issue edit`.
 
 ### Added — charter v0.2 and the MVP issue set (2026-10-29)
 

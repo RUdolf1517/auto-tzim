@@ -285,7 +285,29 @@ Scan output is a statement about which files our policy would hand over, not abo
 by how much. Documentation must not call it eligibility, savings, or "would optimize"; the status of a planned file is
 `planned`, and the outcome exists only after an apply.
 
-## D-24 · `main` protection — deferred, with an interim rule
+## D-24 · `main` protection — machine gates only · *applied 2026-11-02*
+
+**Resolved 2026-11-01 (owner, §6a option 1) and applied 2026-11-02.** What is in force now:
+
+- **no required reviews.** Removed first, because one identity cannot satisfy it: GitHub refuses to let an author approve
+  their own pull request at every permission level, so the rule could only ever end in `--admin`;
+- **no required status checks** — and this one was not a decision, it was a repair. The protection object required a
+  context named `test`, no workflow in the repository produces any context, so every pull request was blocked
+  permanently. A required check nobody reports protects nothing;
+- **review moves to the written verdict** in [EVIDENCE-PROTOCOL](EVIDENCE-PROTOCOL.md): the acceptance rows are
+  demonstrated and re-run by the reviewer, which is a stronger gate than a green badge, and it leaves a record;
+- **verified, not assumed:** pull request #16 answered `mergeable_state: clean` after the second deletion, and
+  `branches/main` reports `required_status_checks.enforcement_level: "off"` while `protected` stays `true`.
+
+**Standing obligation that comes with it.** When AT-01 (#1) lands CI, required checks go back **with the context the
+workflow actually reports**, never a placeholder — the failure of this very rule is the argument. Whether force-push
+blocking and deletion restriction survived the deletions is not visible to this session's token; the admin dump in
+[OWNER-ACTIONS](OWNER-ACTIONS.md) §6a answers it, and option 1 expects both to be on.
+
+The text below is the 2026-10-29 state of the decision, kept because the interim rule it describes is how #11, #12, #13
+and #15 were merged, and a reader should be able to see that the bypass was a documented exception rather than a habit.
+
+---
 
 **Decision as given by the owner on 2026-10-29: do not decide yet.** Three options are on the table in
 [OWNER-ACTIONS](OWNER-ACTIONS.md) §6a (machine gates only; a second approving identity; status quo with logged bypasses).

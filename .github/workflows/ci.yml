@@ -5,13 +5,13 @@ on:
   pull_request:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-15]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master snapshot
@@ -19,6 +19,14 @@ jobs:
           toolchain: 1.82.0
           components: rustfmt, clippy
       - run: cargo build --workspace --locked
+      - name: Check package metadata
+        shell: bash
+        run: |
+          cargo metadata --locked --no-deps --format-version 1 | jq -e '
+            [.packages[] | select(.name == "auto-tzim" or .name == "auto-tzim-core")]
+            | length == 2 and all(.[]; all(.name, .version, .edition, .license, .description, .repository, .rust_version; type == "string" and length > 0))
+          '
+
 
   test:
     strategy:
@@ -26,6 +34,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master snapshot
@@ -57,11 +66,8 @@ jobs:
           "$RUNNER_TEMP/auto-tzim-install/bin/auto-tzim" --version
 
   deny:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-15]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master snapshot
@@ -70,21 +76,11 @@ jobs:
           components: rustfmt, clippy
       - uses: taiki-e/install-action@1215446185352662cec6825af8e979af4006a502 # cargo-deny
       - name: cargo deny check
-        shell: bash
-        run: |
-          set +e
-          cargo deny check 2>&1 | tee "$RUNNER_TEMP/deny-output"
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            python3 -c 'import pathlib, os; s=pathlib.Path(os.environ["RUNNER_TEMP"], "deny-output").read_text(); print("::error title=cargo-deny::" + s[-3000:].replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))'
-          fi
-          exit "$status"
+        run: cargo deny check
+
   pinned-dependencies:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-15]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: python3 scripts/test-check-pins.py

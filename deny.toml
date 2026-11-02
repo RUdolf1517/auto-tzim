@@ -3,6 +3,31 @@ allow = ["MIT", "Apache-2.0", "Unicode-3.0"]
 
 [bans]
 wildcards = "deny"
+allow-workspace = true
+# Deny by default: each transitive crate requires review before admission.
+allow = [
+    "anstream",
+    "anstyle",
+    "anstyle-parse",
+    "anstyle-query",
+    "anstyle-wincon",
+    "clap",
+    "clap_builder",
+    "clap_derive",
+    "clap_lex",
+    "colorchoice",
+    "heck",
+    "is_terminal_polyfill",
+    "once_cell_polyfill",
+    "proc-macro2",
+    "quote",
+    "strsim",
+    "syn",
+    "unicode-ident",
+    "utf8parse",
+    "windows-link",
+    "windows-sys",
+]
 # Explicitly ban known C build and network dependency families. This list is
 # not an exhaustive classifier; new dependencies require review.
 deny = [

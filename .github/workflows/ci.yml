@@ -13,10 +13,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.82.0
-      - run: cargo build --workspace
-      - name: Report lockfile for bootstrap
-        run: |
-          python3 -c 'import base64; s=base64.b64encode(open("Cargo.lock", "rb").read()).decode(); [print(f"::notice title=Lockfile{i//2000:03d}::{s[i:i+2000]}") for i in range(0,len(s),2000)]'
+      - run: cargo build --workspace --locked
+
   test:
     strategy:
       matrix:
@@ -27,11 +25,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.82.0
-      - run: cargo test --workspace
+      - run: cargo test --workspace --locked
+      - name: Package and install
+        shell: bash
+        run: |
+          cargo package --locked -p auto-tzim-core
+          cargo package --locked -p auto-tzim
+          cargo install --locked --path crates/auto-tzim --root "$RUNNER_TEMP/auto-tzim-install"
+          "$RUNNER_TEMP/auto-tzim-install/bin/auto-tzim" --version
       - name: CLI contract
         shell: bash
         run: |
-          cargo build --bin auto-tzim
+          cargo build --locked --bin auto-tzim
           target/debug/auto-tzim --help
           target/debug/auto-tzim --version
           for arg in unknown --unknown; do
@@ -40,6 +45,8 @@ jobs:
             test "$status" -eq 2
             test ! -s stdout.txt
             test -s stderr.txt
+            printf "argument=%s exit=%s stdout=<empty> stderr:\n" "$arg" "$status"
+            cat stderr.txt
           done
   deny:
     strategy:

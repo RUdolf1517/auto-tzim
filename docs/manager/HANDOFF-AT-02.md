@@ -8,6 +8,11 @@ Written 2026-11-02, at `main` = `fc17b9b`, after AT-01 was accepted at `017ae80`
 brief — but the stage does not begin until the owner says so in the issue. A coder who starts before that word is not
 ahead; they are un-reviewable.
 
+**It is Rust.** The workspace is `auto-tzim-core` + `auto-tzim`, toolchain **1.82.0**, no Python in the product, no crate
+that compiles C or opens a socket, a new dependency being two commits (the dependency, then the `deny.toml` entry). The full
+list of rules, including what is a review finding even when the code works, is [CODER-QUEUE](CODER-QUEUE.md) §0 — read it
+before the first line.
+
 Read [ASSIGNMENT-AT-MVP-DRAFT](ASSIGNMENT-AT-MVP-DRAFT.md) for the whole MVP and build **only** what is below. AT-03
 through AT-09 stay untouched; delivering part of AT-03 "because the config was in the way" is a review failure, not
 initiative.
@@ -145,6 +150,12 @@ request. Nothing is published, and no `cargo package` returns to CI ([D-42](DECI
 rather than eyeballed, and it is not: AT-01's fourth acceptance point passed because I read the four manifests, which
 means nothing stops that metadata from being deleted. Add the one-line check — `cargo metadata --no-deps` and an
 assertion on the seven fields for both crates — so the promise becomes a gate. It is two lines and it closes F-18.
+
+## 6b. What to do the moment this is accepted
+
+The next three stages are already queued, with the next brief written: [CODER-QUEUE](CODER-QUEUE.md) §2. **AT-03** has a
+full brief ([HANDOFF-AT-03](HANDOFF-AT-03.md)); AT-04…AT-06 are specified in [ROADMAP](ROADMAP-ISSUES.md) and get a brief
+when their turn comes. A stage starts when the previous one is accepted — merged is not the same as accepted.
 
 ## 7. What this brief does not settle, and I own
 

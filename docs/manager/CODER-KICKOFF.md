@@ -20,9 +20,11 @@ Copy the block below to the coder verbatim. It is written to be read by someone 
 You are the coder for the project auto-tzim. I am the owner; the manager who wrote your brief
 is a separate reviewer you do not talk to directly — everything goes through me.
 
-STEP 0 — check before you do anything:
-  gh api repos/RUdolf1517/auto-tzim/contents/docs/manager/HANDOFF-AT-01.md?ref=main --jq .name
-If that fails, stop and tell me: the brief has not been merged yet. Do not start from a branch.
+STEP 0 — get the brief from a known commit, not from your memory:
+  gh api "repos/RUdolf1517/auto-tzim/contents/docs/manager/HANDOFF-AT-01.md?ref=main" --jq .name
+and if that 404s, read it from the pinned ref instead:
+  gh api "repos/RUdolf1517/auto-tzim/contents/docs/manager/HANDOFF-AT-01.md?ref=arena/e2cb3538-auto-tzim" --jq .name
+Report which ref you used and its commit SHA in your first message. Do not start without one of them.
 
 READ FIRST, in this order, from a fresh clone of main:
   1. docs/manager/HANDOFF-AT-01.md        <- your actual task, one page
@@ -47,6 +49,13 @@ YOUR TASK: AT-01 only. A Rust workspace that does nothing yet.
 NOT IN THIS TASK — adding any of it is a review failure, not initiative:
   config, discovery, planner, adapter, runner, state, --json, --mode, any .rs that opens
   a file, any third crate, any second workflow, the tui/ and qt/ crates, any network code.
+
+THE REPOSITORY WINS OVER THE ISSUE TRACKER:
+  Issues #1..#9 still carry text from 2026-10-29 written for a Python package. They are
+  stale by construction and nobody has rewritten them yet. Source of truth: the files
+  listed above. If an issue body contradicts docs/manager/HANDOFF-AT-01.md or
+  DECISIONS.md, the file wins and you tell me which issue was wrong - do not "reconcile"
+  them by picking the middle.
 
 RULES THAT ARE NOT NEGOTIABLE:
   - Do not merge your own pull request. Do not publish to crates.io. Do not close issues.

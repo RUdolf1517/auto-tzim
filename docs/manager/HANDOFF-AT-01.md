@@ -41,7 +41,7 @@ Each needs its evidence in the handoff. A point without evidence is `not-run`, a
 | 1 | A clean checkout builds and the binary is named `auto-tzim` | `cargo install --path crates/auto-tzim` in a fresh clone, then `auto-tzim --version` |
 | 2 | `--help` and `--version` exit `0` on both platforms | CI run IDs at the final head SHA, one per platform, status and SHA filled in |
 | 3 | An unknown command exits `2` | the invocation, its stdout, its stderr and its exit status, side by side |
-| 4 | Both crates are **publishable** | `cargo package` per crate succeeds. This is a metadata property: **do not publish**, and do not claim a crates.io release |
+| 4 | Both crates carry the metadata a registry requires | the fields are present in both manifests: `name`, `version`, `edition`, `license`, `description`, `repository`, `rust-version`. **No `cargo package` in CI** — it cannot pass before the core is published, and a red step nobody can fix is worse than no step (D-42). Nothing is published |
 | 5 | **An unpinned dependency fails CI** | the negative control, described in §4 |
 | 6 | Nothing beyond help/version exists | the `--help` output, reviewed: no command is advertised that is not implemented |
 

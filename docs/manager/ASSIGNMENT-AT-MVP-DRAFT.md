@@ -49,8 +49,9 @@ and the exit-code contract of D-18/D-19 proven by real invocations. No network, 
 **Required implementation:**
 
 1. Rust workspace (D-33) with `auto-tzim-core` and the `auto-tzim` CLI crate only; no `tui`, no `qt` crate.
-   `Cargo.lock` committed, `rust-toolchain.toml` pinned, `deny.toml` present, and both crates publishable
-   (`cargo install auto-tzim` must work, D-36) (#1).
+   `Cargo.lock` committed, `rust-toolchain.toml` pinned, `deny.toml` present, and both manifests carrying the metadata a
+   registry requires (name, version, edition, licence, description, repository, `rust-version`). **No CI step runs
+   `cargo package`**: packaging is a release step, because it cannot succeed before the core is published (D-42) (#1).
 2. TOML config v1 with strict validation, canonical roots, forbidden-root / `AUTO_TZIM_HOME` / cloud-sync checks,
    permissions, atomic write, corrupt-config safety, `config validate` and the `folder` commands — plus the **three state
    primitives** of D-35 that everything after this point sits on: `atomic_write` (temp → write → `fsync` → `rename` →

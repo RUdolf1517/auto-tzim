@@ -66,9 +66,9 @@ fixed by D-36 because they are published and a crate name is forever; the `tui` 
 dependency.
 
 **Acceptance.** A clean checkout builds and runs; `--help` and `--version` exit `0` on both platforms; an unknown command
-exits `2`; `cargo package` succeeds for both crates (they must be *publishable*, which is a metadata property — actual
-publication is a release action, D-36); `cargo install --path crates/auto-tzim` produces a binary named `auto-tzim`; CI
-green at a recorded head SHA; no behaviour beyond help/version exists yet.
+exits `2`; both manifests carry the metadata a registry requires — *publishable* is a metadata property, and packaging
+itself is a release step that cannot run before the core is published (D-42); `cargo install --path crates/auto-tzim`
+produces a binary named `auto-tzim`; CI green at a recorded head SHA; no behaviour beyond help/version exists yet.
 
 **Tests.** Build and run smoke on both platforms; `--help` exit `0`; unknown command exit `2`; a dependency without a
 version pin fails CI; the installed binary's name is `auto-tzim` and its `--version` prints one line.

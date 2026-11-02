@@ -806,7 +806,13 @@ proves a behaviour.
 here with the hole that allowed it — not patched by adding one more name to the deny list.
 
 
-## D-39 · How a package is verified before anything is published
+## D-39 · How a package is verified before anything is published · *withdrawn by D-42*
+
+> **Withdrawn 2026-11-02, same day, by [D-42](#d-42--packaging-is-not-a-ci-gate-and-nothing-gets-published-in-at-01).**
+> The second row below (`cargo package --no-verify`) turned out not to work on Cargo 1.82, and the third row (a guard
+> asserting an expected failure) should never have been written. The decision is kept as the record of a wrong turn, with
+> the reason the turn was taken.
+
 
 **The problem, stated exactly.** `auto-tzim` depends on `auto-tzim-core` by version (D-36, and F-05 of the first review).
 Cargo strips the `path` when packaging and resolves the dependency from the registry, so before the core exists on
@@ -875,3 +881,40 @@ and exits.
    in, this decision is the reason it is allowed to stay.
 
 **Reversal:** anything a user, a packager or a release needs on their own machine may not be Python.
+
+## D-42 · Packaging is not a CI gate, and nothing gets published in AT-01
+
+**Supersedes [D-39](#d-39--how-a-package-is-verified-before-anything-is-published).** D-39 was wrong, the coder's
+empirical result proves it, and the honest fix is to delete the gate rather than to find a cleverer way to satisfy it.
+
+**What the coder measured.** On Cargo 1.82, `cargo package --no-verify -p auto-tzim` fails with the same
+`no matching package named auto-tzim-core found` as the verified form. `--no-verify` skips the build check, not the
+preparation step that resolves dependencies against the registry. So the middle row of D-39 cannot be executed at all,
+and the "guard" row existed to assert a failure that nothing needed.
+
+**Why the gate should never have existed.** Three facts, in order of importance:
+
+1. **Nothing in this project publishes.** Publication is a release action (D-36), it is the owner's, it needs credentials
+   this project does not have, and no part of AT-01 needs it. A gate that can only run after a release decision does not
+   belong in the CI of a branch that is not being released.
+2. **The acceptance point was my invention.** ROADMAP-AT-01 said "both crates publishable", meaning the manifests must
+   carry what a registry requires. I turned that into `cargo package`, which is a different and much stronger claim — it
+   builds the tarball **against the published registry**, and in a workspace with an unpublished sibling it cannot
+   succeed by construction. Three review rounds, two red CI runs and one useless guard step were spent proving a fact
+   about cargo rather than a fact about our code.
+3. **A check that cannot pass before release is not a check, it is a reminder.** It teaches everyone to skip one red
+   step, and the habit spreads to the steps that matter.
+
+**What replaces it — two lines, both cheap:**
+
+| Where | Check | Proves |
+| --- | --- | --- |
+| CI, every run | every manifest has `name`, `version`, `edition`, `license`, `description`, `repository`, `rust-version` — asserted by the pin checker's companion script, or by `cargo metadata --no-deps` in one line | the crates carry the metadata a registry requires. This is what "publishable" was ever meant to mean |
+| release checklist, `docs/releases.md` §3 | `cargo publish -p auto-tzim-core`, then `cargo package -p auto-tzim`, then `cargo publish -p auto-tzim` | the tarballs build and install against a real registry. Owner's action, in that order, once |
+
+**What is explicitly not done:** no `cargo package` in CI, no `--no-verify`, no assertion that a command fails. If the
+project ever needs a pre-publication smoke test, the answer is a local registry (`cargo publish --dry-run` against one),
+which is a release-time tool, not a branch gate.
+
+**Reversal:** when the core is published, the release checklist verifies packaging for real — and if someone wants that
+in CI afterwards, it goes in as a **release-branch** workflow, not on every pull request.

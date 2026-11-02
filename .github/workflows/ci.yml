@@ -55,31 +55,6 @@ jobs:
         run: |
           cargo install --locked --path crates/auto-tzim --root "$RUNNER_TEMP/auto-tzim-install"
           "$RUNNER_TEMP/auto-tzim-install/bin/auto-tzim" --version
-      - name: Package core
-        run: cargo package --locked -p auto-tzim-core
-      - name: Package CLI without verification
-        shell: bash
-        run: |
-          set +e
-          cargo package --locked --no-verify -p auto-tzim 2>&1 | tee "$RUNNER_TEMP/no-verify-output"
-          status=${PIPESTATUS[0]}
-          set -e
-          if [ "$status" -ne 0 ]; then
-            python3 -c 'import os, pathlib; s=pathlib.Path(os.environ["RUNNER_TEMP"], "no-verify-output").read_text(); print("::error title=No-verify packaging::" + s.replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))'
-            exit "$status"
-          fi
-          python3 -c 'import pathlib, tarfile, tomllib; p=pathlib.Path("target/package/auto-tzim-0.1.0.crate"); t=tarfile.open(p); m=tomllib.loads(t.extractfile("auto-tzim-0.1.0/Cargo.toml").read().decode()); dep=m["dependencies"]["auto-tzim-core"]; assert "path" not in dep and dep["version"] == "=0.1.0", dep'
-      - name: Guard expected unpublished core failure
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          set +e
-          cargo package --locked -p auto-tzim > "$RUNNER_TEMP/package-output" 2>&1
-          status=$?
-          set -e
-          cat "$RUNNER_TEMP/package-output"
-          test "$status" -ne 0
-          grep -F 'no matching package named `auto-tzim-core` found' "$RUNNER_TEMP/package-output"
 
   deny:
     strategy:

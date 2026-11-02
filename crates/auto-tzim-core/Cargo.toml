@@ -5,3 +5,6 @@ edition = "2021"
 license = "MIT"
 description = "Core library for auto-tzim"
 repository = "https://github.com/RUdolf1517/auto-tzim"
+
+[dependencies]
+serde = "*"

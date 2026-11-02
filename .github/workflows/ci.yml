@@ -7,7 +7,7 @@ permissions:
   contents: read
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -22,6 +22,7 @@ jobs:
       - name: Check package metadata
         shell: bash
         run: |
+          # jq is already present on GitHub runners; it validates Cargo's JSON without another project script.
           cargo metadata --locked --no-deps --format-version 1 | jq -e '
             [.packages[] | select(.name == "auto-tzim" or .name == "auto-tzim-core")]
             | length == 2 and all(.[]; all(.name, .version, .edition, .license, .description, .repository, .rust_version; type == "string" and length > 0))
@@ -76,7 +77,15 @@ jobs:
           components: rustfmt, clippy
       - uses: taiki-e/install-action@1215446185352662cec6825af8e979af4006a502 # cargo-deny
       - name: cargo deny check
-        run: cargo deny check
+        shell: bash
+        run: |
+          set +e
+          cargo deny check 2>&1 | tee "$RUNNER_TEMP/deny-output"
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            python3 -c 'import pathlib, os; s=pathlib.Path(os.environ["RUNNER_TEMP"], "deny-output").read_text(); print("::error title=cargo-deny::" + s[-3000:].replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))'
+          fi
+          exit "$status"
 
   pinned-dependencies:
     runs-on: ubuntu-24.04

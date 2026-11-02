@@ -38,6 +38,7 @@ Status values: `open` (nothing implemented yet), `specified` (control described,
 | R-24 | False success or an exit-code collision | High | Own contract D-18/D-19, `4` unused, `6` for preflight, defined precedence | AC-8 matrix, AC-11 preflight cases, a fake `tzim` returning `4` | specified |
 | R-25 | A prompt, a PTY or a blocked read in a non-interactive run | High | stdin on `/dev/null`, no pseudo-terminal, no TTY assumption, timeout as last resort (D-21) | AC-5, including a child that asserts `is_terminal()` on all three streams | specified |
 | R-26 | The tree changes between preview and apply (plan drift) | High | Plan record with a hash over ordered `(path, size, mtime_ns, dev, ino, policy, binary)`; apply refuses on any mismatch (D-20) | AC-12 with a fabricated hash and with one file touched after the scan | specified |
+| R-27 | **A CI job is never acquired and the run is counted as red** (macOS arm64 capacity) | Medium | A cancelled or never-started job is `not-run`, never `passed`; a rerun on the merge commit is the tie-breaker, and a red job on a documentation-only PR does not become green because the PR is documentation | Reproduced on 2026-11-02: `deny (macos-15)` cancelled after 15 minutes with "not acquired by Runner of type hosted", while the same job passed on the merge commit `c0c575a` | observed once |
 
 ## Rules the manager applies to this register
 

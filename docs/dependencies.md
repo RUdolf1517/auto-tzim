@@ -64,6 +64,10 @@ Four mechanisms, and the review is the one that matters ([D-38](manager/DECISION
 4. **review** — adding the allowlist entry is the human step, and it is the only thing that can tell whether a crate
    compiles C or opens a socket. `cargo-deny` reads manifests and licences; it does not read behaviour.
 
+Mechanisms 1 and 2 are checked by `scripts/check-pins.py` and `deny.toml`. The script is Python because it runs only in
+CI and reads manifests ([D-41](manager/DECISIONS.md)); it has no test of its own yet, which F-06 recorded as a gap. It and
+the allowlist are the two places a dependency is *judged* — nothing else in the tree inspects a crate.
+
 So a new dependency is deliberately **two commits**: the dependency, then the allowlist entry. A dependency change should
 also carry `cargo tree -e features`, because enabling a feature on an already-allowed crate is the one hole the allowlist
 does not see.

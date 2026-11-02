@@ -62,6 +62,40 @@ Verified from this session rather than accepted: `pulls/16` answers `mergeable_s
 AT-01 lands CI, required checks come back with the context the workflow actually reports — a check nobody reports protects
 nothing, which is exactly what this rule demonstrated.
 
+### Prepared — the brief for AT-02, and three gaps it would have let a coder invent
+
+[HANDOFF-AT-02](docs/manager/HANDOFF-AT-02.md) is written, ready and **not started**: twelve acceptance points, five
+negative controls that have to be shown red on purpose, six traps, and one line of CI that AT-01 promised and never got
+(F-18).
+
+Writing the brief found three questions the documents did not answer, and a coder would have answered them by accident:
+the format of a folder id ([D-43](docs/manager/DECISIONS.md) — a ULID, hand-rolled, because twenty lines beat a
+dependency and sorting beats a UUID), what "known cloud-sync root" actually means ([D-44](docs/manager/DECISIONS.md) — a
+built-in list, path comparison only, documented as best-effort, escapable with one flag), and how a symlinked root
+behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
+ones are resolved). Each would have been baked into stored data by the first commit.
+
+Two documents were also corrected: `config.md` still called the `min_free_bytes` exit code "pending" though D-03 and
+AC-11 had answered it, and `dependencies.md` still said the pin checker had no test — it does, and I had watched it go
+red the same afternoon. The decision index had silently lost six rows; it now has 45 against 45 sections, in order.
+
+### Accepted — AT-01 passes, and it is the first merge through a real gate
+
+[REVIEW-017ae80](docs/manager/reviews/REVIEW-017ae80.md): **PASS**. Six acceptance points reproduced — the installed
+binary is named `auto-tzim`, `--help`/`--version` exit `0` on Linux and macOS, an unknown argument exits `2` with an empty
+stdout, both manifests carry the registry metadata, an unpinned dependency still fails CI, and nothing beyond help and
+version exists. No file, socket or process API appears anywhere in `src/`.
+
+The one control this environment allowed, I ran: broke `scripts/check-pins.py` on purpose and watched its self-test go red
+with `'*': expected 1, got 0`, then restored it. A checker with an untested control is a checker nobody has seen work.
+
+The review is **post-merge** and says so: the owner merged #21 at 12:19:03Z, thirty-five seconds after the run finished
+green at 12:18:32Z. The order was right; the report simply cannot gate a merge that already happened, and its value is
+that AT-01's evidence is now pinned to a SHA anyone can re-check.
+
+Also fixed by the codebase existing: the branch protection that had to lose its placeholder `test` context ([D-24](docs/manager/DECISIONS.md))
+can now require the **real** contexts this workflow produces.
+
 ### Withdrawn — the packaging gate, and the day it cost
 
 Three review rounds chased a check that cannot pass. `cargo package` does not merely build a tarball: it resolves the

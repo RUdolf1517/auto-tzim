@@ -37,11 +37,20 @@ invent it; the owner may change it without cost), **superseded**.
 | D-29 | Two operating modes — `confirm` (proposal, then install on approval) and `auto` (no prompt) — sharing **one** install path; an original is deleted only after its verified replacement is in place | adopted (owner, 2026-11-01) | this section | AT-05, AT-06, `safety.md`, `cli.md`, `guarantees.md`, GATES AC-14…AC-17 |
 | D-30 | Accepted `tzim` window: **`>=0.16.0, <0.17`**, tied to `capabilities_schema_version: 1` / `result_schema_version: 2`; widened only after a real run | **adopted (owner, 2026-11-01)** — Q13 answered | [audit DR-09](../audits/2026-11-01-tzim-v0.16.1.md), Q13 | AT-04 |
 | D-31 | **`auto-tzim` updates itself as well as `tzim`** — v0.3 covers both, by delegating to the installer that owns each artifact, never by rewriting a package in place | adopted (owner, 2026-11-01); overrides charter §11.2 last bullet | SPEC §11.2, prior roadmap §7 | v0.3 issues, `update.md`, `releases.md` |
+| D-32 | **Two update modes**, `confirm` and `auto`, separate from the optimisation modes; safety rules that protect a file and a binary hold in both | adopted (owner, 2026-11-01) | D-29 vocabulary | v0.3 issues, `config.md`, `cli.md` |
 | D-33 | **The implementation language is Rust**, not Python: a static binary in a workspace (`auto-tzim-core` library + `auto-tzim` CLI), pinned toolchain, `cargo` build and test. Overrides `SPEC.md` §4.1 | adopted (owner, 2026-11-01) | `SPEC` §4.1/§17; [CONFLICTS C-5](../spec/CONFLICTS.md) | every document, AT-01…AT-09 |
+| D-34 | **Three front doors, three artifacts**: the CLI, the TUI (v0.2) and the Qt app (v0.4) are separate binaries with separate installs; only the core crate is shared | adopted (owner, 2026-11-01) | D-33, charter §12 | v0.2, v0.4, packaging |
 | D-35 | **No C dependencies, and no database engine**: state and history are plain files (JSONL + atomically replaced JSON) under `AUTO_TZIM_HOME`; `rusqlite` is removed | adopted (owner, 2026-11-01) | D-33; owner instruction | AT-02, AT-05, `state.md`, `recovery.md`, GATES, corpus `L-*` |
 | D-36 | Distribution includes **`cargo install auto-tzim`**; the binary name keeps its hyphen; the CLI crate is published as `auto-tzim`, the library as `auto-tzim-core` | adopted (owner, 2026-11-01) | `releases.md`, `update.md` | AT-01, AT-09, packaging |
-| D-34 | **Three front doors, three artifacts**: the CLI, the TUI (v0.2) and the Qt app (v0.4) are separate binaries with separate installs; only the core crate is shared | adopted (owner, 2026-11-01) | D-33, charter §12 | v0.2, v0.4, packaging |
-| D-32 | **Two update modes**, `confirm` and `auto`, separate from the optimisation modes; safety rules that protect a file and a binary hold in both | adopted (owner, 2026-11-01) | D-29 vocabulary | v0.3 issues, `config.md`, `cli.md` |
+| D-37 | **Documentation-only pull requests** are merged by the manager without asking, with a STATUS-LOG line; the boundary is mechanical (no `.rs`, `Cargo.toml`, `.github/`, fixtures) and anything touching an acceptance row stays an owner decision | adopted (owner, 2026-11-02) | five "заливай" round trips in one day | every doc pull request |
+| D-38 | "No C, no network" is enforced by **four mechanisms together** — exact pins, a deny-by-default allowlist, an explicit deny list, and the review that approves an allowlist entry; no one of them is the gate | adopted (manager default, 2026-11-02) | D-35; AT-01 question 3 | AT-01…AT-09, `deny.toml`, `dependencies.md` |
+| D-39 | How a package is verified before publication — **withdrawn the same day by D-42** | *withdrawn* | review round 3 | — |
+| D-40 | The **MSRV is the toolchain CI actually runs** (1.82), not `tzim`'s 1.88: `auto-tzim` does not build `tzim` | adopted (manager default, 2026-11-02) | `rust-toolchain.toml`; review F-03 | every manifest, CI |
+| D-41 | **CI-only tooling may be Python; the product may not** — with a self-test, a mention in `dependencies.md`, and folding into the Rust harness at AT-08 | adopted (manager default, 2026-11-02) | `scripts/check-pins.py`; review F-06 | AT-01, AT-08 |
+| D-42 | **Packaging is not a CI gate** and nothing is published in AT-01; "publishable" means the manifest metadata, and the tarballs are verified at release, core first | adopted (owner's question, 2026-11-02) | three review rounds on an unpassable check | AT-01, `releases.md` §2 |
+| D-43 | A folder `id` is a **ULID** — 26 uppercase Crockford characters, sortable by creation, generated once and never derived from the path | proposed (manager default, 2026-11-02) | `config.md` §4; no prior rule for the format | AT-02 |
+| D-44 | The cloud-sync check is a **built-in list of well-known sync directories**, matched on the canonical path, best-effort and bypassable with `allow_cloud_sync = true` | proposed (manager default, 2026-11-02) | `config.md` §5 `cloud_sync_root`; charter §6-8 | AT-02 |
+| D-45 | A root that is **itself a symlink is rejected**; intermediate components are resolved and the canonical path is stored, so `/tmp/x` on macOS is recorded as `/private/tmp/x` | proposed (manager default, 2026-11-02) | `config.md` §5 `root_is_symlink`; D-08 | AT-02, AT-03 |
 
 ---
 
@@ -918,3 +927,64 @@ which is a release-time tool, not a branch gate.
 
 **Reversal:** when the core is published, the release checklist verifies packaging for real — and if someone wants that
 in CI afterwards, it goes in as a **release-branch** workflow, not on every pull request.
+
+## D-43 · A folder id is a ULID
+
+**Status: proposed** (manager default, 2026-11-02). `config.md` says the id is "opaque, immutable, unique; not derived
+from the path", and an example shows `01JEXAMPLE000000000000000000` — 26 characters, which is a ULID — but no rule said
+what a coder must generate. Left alone, the answer would have been "whatever the first coder picked", and it would have
+been baked into every stored profile and every history row.
+
+**Decision.** 26 uppercase Crockford base32 characters: the first 10 encode a 48-bit millisecond timestamp, the last 16
+encode 80 random bits from the operating system. Generated in `auto-tzim-core` by hand — the alphabet and the encoder
+are twenty lines and need no dependency. Validated on load: an id that is not 26 characters of the alphabet is a
+`config` error, so a hand-edited file fails loudly instead of producing two rows that look alike.
+
+**Why not a UUID v4.** It is equally unique and equally opaque, but not sortable, so `folder list` would need a separate
+creation time to be stable, and stability of the listing is an acceptance point. **Why not the `ulid` crate**: one more
+dependency, two commits, an allowlist entry and a review, to replace twenty lines that have one job.
+
+**Reversal is cheap now and expensive later.** Once a profile exists, its id is the key that history hangs on; changing
+the format means a migration. This is why the decision is made here rather than in AT-05.
+
+## D-44 · The cloud-sync check is a built-in list
+
+**Status: proposed** (manager default, 2026-11-02). `config.md` §5 refuses a root that matches a "known cloud-sync root"
+unless `allow_cloud_sync = true`, and `config.md` §4 calls the check "best-effort and documented as such" — but no
+document listed the roots. A coder would have invented six paths and called them the list.
+
+**Decision.** One table in `auto-tzim-core`, matched against the canonical root **and** its ancestors under `$HOME`,
+case-insensitively:
+
+| Family | Matched directory names under `$HOME` |
+| --- | --- |
+| Dropbox | `Dropbox`, `Dropbox (Personal)`, `Dropbox (Business)` |
+| iCloud | `Library/Mobile Documents` |
+| Google | `Google Drive`, `GoogleDrive`, `My Drive` |
+| Microsoft | `OneDrive`, `OneDrive - *` |
+| Yandex | `Yandex.Disk`, `Яндекс.Диск` |
+| Other | `pCloud Drive`, `MEGAsync`, `Nextcloud`, `ownCloud`, `Sync` |
+
+**The semantics are the important half.** It is *best-effort*: a sync folder somewhere else is simply not detected, and
+that is documented rather than solved, because the alternatives are reading another program's database (fragile, and a
+privacy question of its own) or opening a network connection (forbidden by D-28). It is a **path comparison only** — no
+file inside the folder is opened. A false positive costs the user one flag: `allow_cloud_sync = true`. A false negative
+costs them a silent conflict between two writers, which is why the list exists at all.
+
+## D-45 · Symlinked roots, and how far canonicalisation goes
+
+**Status: proposed** (manager default, 2026-11-02). `config.md` §5 has both `root_is_symlink` ("canonicalisation must
+not launder a link") and a requirement to store the canonical path, and those two pull in opposite directions on macOS,
+where `/tmp` is a symlink to `/private/tmp` and every path under it has a symlinked component.
+
+**Decision.** Two steps, in this order:
+
+1. `lstat` the path **as typed**. If the path itself is a symlink, refuse with `root_is_symlink`. A user who points at a
+   link has pointed at something that can be re-pointed tomorrow, and a plan built on it is not reproducible.
+2. Otherwise canonicalise and store the result. Intermediate symlinked components are resolved, so `/tmp/x` is recorded
+   as `/private/tmp/x`. That is not a leak: it is the truth about which directory the tool will walk, and it is what
+   makes duplicate-root detection work when the same folder is spelled two ways.
+
+**Consequence, documented rather than discovered:** on macOS a root added as `/tmp/photos` appears in `folder list` as
+`/private/tmp/photos`. Both spellings resolve to the same root, so the second one is a duplicate — which is the desired
+behaviour and the reason the second step exists.

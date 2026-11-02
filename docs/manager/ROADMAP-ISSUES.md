@@ -57,7 +57,11 @@ same `run --once` and has no eligibility rules of its own, and the mode gate of 
 
 ## Stage 1 — MVP / v0.1 (assigned as one set, #1…#10)
 
-### AT-01 · Repository and package bootstrap
+### AT-01 · Repository and package bootstrap — **accepted 2026-11-02** at `017ae80`
+
+> Merged as `fc17b9b`; verdict and evidence in [REVIEW-017ae80](reviews/REVIEW-017ae80.md). Six acceptance points
+> reproduced by the reviewer, three Low follow-ups named (help subcommand, the Python pin checker, a deprecated checkout
+> action). AT-02 has not started: each stage begins on the owner's word.
 
 **Scope.** A Rust workspace (D-33) with two crates, `auto-tzim-core` (library) and `auto-tzim` (binary) — the names are
 fixed by D-36 because they are published and a crate name is forever; the `tui` and `qt` crates are *not* created.
@@ -78,7 +82,11 @@ version pin fails CI; the installed binary's name is `auto-tzim` and its `--vers
 **Brief.** [HANDOFF-AT-01](HANDOFF-AT-01.md) — the six acceptance points, the negative control that is part of the
 deliverable, and the two traps already present in the documents.
 
-### AT-02 · Config and atomic storage
+### AT-02 · Config and atomic storage — **brief ready, not started**
+
+> Coder brief: [HANDOFF-AT-02](HANDOFF-AT-02.md) — 12 acceptance points, five negative controls, the F-18 metadata check
+> folded in, and the three decisions the documents were missing (D-43/D-44/D-45). The stage begins when the owner says so
+> in #2.
 
 **Scope.** TOML schema `1`; strict validation (unknown fields, empty/relative roots, NUL, control characters, duplicate
 ids and roots); canonicalisation; forbidden-root, `AUTO_TZIM_HOME` containment (D-08) and cloud-sync checks; permissions

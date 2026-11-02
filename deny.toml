@@ -1,0 +1,50 @@
+[licenses]
+allow = ["MIT", "Apache-2.0", "Unicode-3.0"]
+
+[bans]
+wildcards = "deny"
+allow-workspace = true
+# Deny by default: each transitive crate requires review before admission.
+allow = [
+    "anstream",
+    "anstyle",
+    "anstyle-parse",
+    "anstyle-query",
+    "anstyle-wincon",
+    "clap",
+    "clap_builder",
+    "clap_derive",
+    "clap_lex",
+    "colorchoice",
+    "heck",
+    "is_terminal_polyfill",
+    "once_cell_polyfill",
+    "proc-macro2",
+    "quote",
+    "strsim",
+    "syn",
+    "unicode-ident",
+    "utf8parse",
+    "windows-link",
+    "windows-sys",
+]
+# Explicitly ban known C build and network dependency families. This list is
+# not an exhaustive classifier; new dependencies require review.
+deny = [
+    { crate = "cc", reason = "C compilation is forbidden" },
+    { crate = "rusqlite", reason = "SQLite is forbidden" },
+    { crate = "libsqlite3-sys", reason = "SQLite is forbidden" },
+    { crate = "openssl-sys", reason = "C dependency is forbidden" },
+    { crate = "libz-sys", reason = "C dependency is forbidden" },
+    { crate = "reqwest", reason = "networking is forbidden" },
+    { crate = "ureq", reason = "networking is forbidden" },
+    { crate = "hyper", reason = "networking is forbidden" },
+    { crate = "curl", reason = "networking is forbidden" },
+    { crate = "tokio", reason = "network runtime is forbidden" },
+    { crate = "mio", reason = "networking is forbidden" },
+    { crate = "socket2", reason = "networking is forbidden" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -65,7 +65,7 @@ Four mechanisms, and the review is the one that matters ([D-38](manager/DECISION
    compiles C or opens a socket. `cargo-deny` reads manifests and licences; it does not read behaviour.
 
 Mechanisms 1 and 2 are checked by `scripts/check-pins.py` and `deny.toml`. The script is Python because it runs only in
-CI and reads manifests ([D-41](manager/DECISIONS.md)); it has no test of its own yet, which F-06 recorded as a gap. It and
+CI and reads manifests ([D-41](manager/DECISIONS.md)); its self-test runs in CI ([D-41](manager/DECISIONS.md)). It and
 the allowlist are the two places a dependency is *judged* — nothing else in the tree inspects a crate.
 
 So a new dependency is deliberately **two commits**: the dependency, then the allowlist entry. A dependency change should

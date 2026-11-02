@@ -1,0 +1,3 @@
+[workspace]
+resolver = "2"
+members = ["crates/auto-tzim-core", "crates/auto-tzim"]

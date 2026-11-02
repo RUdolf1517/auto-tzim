@@ -18,20 +18,7 @@ jobs:
         with:
           toolchain: 1.82.0
           components: rustfmt, clippy
-      - name: Bootstrap compatible TOML lock
-        run: |
-          cargo update -p toml_edit --precise 0.22.22
-          python3 -c 'import base64; s=base64.b64encode(open("Cargo.lock", "rb").read()).decode(); [print(f"::notice title=Lockfile{i//2000:03d}::{s[i:i+2000]}") for i in range(0,len(s),2000)]'
-      - name: Build workspace
-        shell: bash
-        run: |
-          set +e
-          cargo build --workspace --locked 2>&1 | tee "$RUNNER_TEMP/build-output"
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            python3 -c 'import os, pathlib; s=pathlib.Path(os.environ["RUNNER_TEMP"], "build-output").read_text(); print("::error title=Build failure::" + s[-3000:].replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))'
-          fi
-          exit "$status"
+      - run: cargo build --workspace --locked
       - name: Check package metadata
         shell: bash
         run: |

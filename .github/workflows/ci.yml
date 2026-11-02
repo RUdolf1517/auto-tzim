@@ -23,6 +23,7 @@ jobs:
         shell: bash
         run: |
           # jq is already present on GitHub runners; it validates Cargo's JSON without another project script.
+          # Check the seven registry metadata fields for both workspace packages.
           cargo metadata --locked --no-deps --format-version 1 | jq -e '
             [.packages[] | select(.name == "auto-tzim" or .name == "auto-tzim-core")]
             | length == 2 and all(.[]; all(.name, .version, .edition, .license, .description, .repository, .rust_version; type == "string" and length > 0))

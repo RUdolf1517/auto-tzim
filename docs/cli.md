@@ -48,16 +48,19 @@ first), each naming the field, the rule and a suggested correction.
 ### 2.3 `folder add PATH [--name NAME] [--recursive] [--formats LIST] [--exclude GLOB]...`
 
 Validates and canonicalises `PATH`, creates a profile, processes nothing, prints the resulting profile including the
-canonical root. Exit `2` for a forbidden, relative, missing or symlinked root, a duplicate root, a path inside
-`AUTO_TZIM_HOME`, or a non-empty `transforms` requirement it cannot satisfy.
+canonical root. `NAME` defaults to the basename of the canonical root; it is the folder's identifier from then on
+([config](config.md) §4). Exit `2` for a forbidden, relative, missing or symlinked root, a duplicate root or name, a
+path inside `AUTO_TZIM_HOME`, or a non-empty `transforms` requirement it cannot satisfy.
 
-### 2.4 `folder list`, `folder show ID`, `folder edit ID ...`, `folder enable ID`, `folder disable ID`, `folder remove ID`
+### 2.4 `folder list`, `folder show NAME`, `folder edit NAME ...`, `folder enable NAME`, `folder disable NAME`, `folder remove NAME`
 
-`show` prints the profile plus its last run and counts. `edit` validates the whole result before writing, so a rejected
-edit leaves the file byte-identical. `remove` deletes the profile and its cached eligibility records — never a user file
+Every subcommand takes the folder's **name**, matched case-insensitively and quoted if it contains spaces — there is no
+opaque id to copy out of a file ([D-43](manager/DECISIONS.md)). `edit` also takes `--name`, which renames in place and
+refuses a name another folder already holds. `show` prints the profile plus its last run and counts. `edit` validates
+the whole result before writing, so a rejected edit leaves the file byte-identical. `remove` deletes the profile and its cached eligibility records — never a user file
 — and prints what was removed.
 
-### 2.5 `scan [--folder ID]` — the read-only candidate plan
+### 2.5 `scan [--folder NAME]` — the read-only candidate plan
 
 Builds the plan and **starts no file-processing `tzim`**. Specifically:
 

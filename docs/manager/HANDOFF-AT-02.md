@@ -40,10 +40,10 @@ stage is judged less on features than on **the five ways it is allowed to refuse
 | Atomic write | temp file in the **same directory**, write, `sync_all` (file), `rename`, then `fsync` the **directory**. The temp file is never read, never resumed and never renamed into place by a later run; a stale temp is removed only by a successful following write |
 | Corrupt config | never overwritten, never "repaired", never reformatted. Every subcommand exits `2` and names the problem |
 | Canonicalisation | the stored `root` is the canonical path. `lstat` first: a root that is *itself* a symlink is `root_is_symlink` ([D-45](DECISIONS.md)); intermediate components are resolved, which is why `/tmp/x` on macOS is recorded as `/private/tmp/x` |
-| Folder ids | a ULID ([D-43](DECISIONS.md)): 26 uppercase Crockford characters, sortable by creation, generated once, never derived from the path, never changed by a rename |
+| Folder identity | the folder's **own name** ([D-43](DECISIONS.md)): default the canonical root's basename, `--name` to override, 1–120 trimmed characters, unique case-insensitively, and the handle every subcommand takes instead of an id |
 | Cloud-sync check | the built-in list and its best-effort semantics in [D-44](DECISIONS.md); `allow_cloud_sync = true` bypasses it, and a path that is not in the list passes with no warning |
-| CLI surface | `config validate` and `folder add\|list\|show\|edit\|enable\|disable\|remove`. Exit `0` on success, `2` on any validation, usage or parse error. `--json` is **not** in this stage (AT-06); `scan`, `run`, `status`, `pause`, `resume`, `doctor` still exit `2` as unknown commands |
-| `folder add` | validates, canonicalises, creates the profile, prints the resulting TOML block, and **processes nothing** — adding a folder arms a plan, nothing more |
+| CLI surface | `config validate` and `folder add\|list\|show\|edit\|enable\|disable\|remove`, all taking `NAME`. Exit `0` on success, `2` on any validation, usage or parse error. `--json` is **not** in this stage (AT-06); `scan`, `run`, `status`, `pause`, `resume`, `doctor` still exit `2` as unknown commands |
+| `folder add` | validates, canonicalises, creates the profile, prints the resulting TOML block, and **processes nothing** — adding a folder arms a plan, nothing more. A second folder with the same name or the same canonical root is `duplicate_name` / `duplicate_root` |
 | `folder show` | prints the profile. The "last run and counts" section that [`cli.md`](../cli.md) §2.4 promises needs state, which is AT-05: print `not recorded yet` there rather than inventing fields |
 | `folder remove` | removes the profile and prints what was removed. It never touches a user file, never recurses, and never rewrites history |
 
@@ -64,7 +64,8 @@ is not evidence.
 | 4 | A corrupt config is never overwritten | a file of garbage: every subcommand exits `2`, and the file is byte-identical afterwards |
 | 5 | The write is atomic and the directory survives a crash | a loop that `SIGKILL`s the process at randomised points and then asserts the config **parses and equals either the old or the new content**, never a truncated third thing; no leftover temp file is ever read |
 | 6 | Permissions do not depend on the umask | run under `umask 000`: `stat -c %a` (or `stat -f %Lp`) is `600` for the config and `700` for the directories |
-| 7 | Every documented refusal fires with its reason | one row per case: `""`, `"."`, a relative path, `/`, `$HOME`, a file, a symlink, a root inside `AUTO_TZIM_HOME`, a root containing it, a cloud-sync root; each exit `2`, each with the reason string from [`config.md`](../config.md) §5 |
+| 7 | Every documented refusal fires with its reason | one row per case: `""`, `"."`, a relative path, `/`, `$HOME`, a file, a symlink, a root inside `AUTO_TZIM_HOME`, a root containing it, a cloud-sync root ([D-44](DECISIONS.md) — a folder under `~/Dropbox` or `~/Yandex.Disk` must be **refused**); each exit `2`, each with the reason string from [`config.md`](../config.md) §5 |
+| 7a | A name is the identifier, and a duplicate is refused | add `~/Pictures/proj` (name `project` by default); `folder add` of the same root again is `duplicate_root`; `folder add ~/Other --name Project` is `duplicate_name` (case-insensitive); `folder show project` finds the first and `folder show Project` finds the same one; `folder edit project --name trips` renames it and `folder remove project` then says it does not exist |
 | 8 | Reserved keys are rejected, and the accepted-but-inert ones are accepted | `follow_symlinks = true`, `allow_hard_links = true`, `jobs = 2`, `[folder.schedule]`, `transforms = ["fits-tile"]` → `2` with the stage named; `update_policy = "notify"` and `allowed_major_versions = [0]` → accepted and inert (D-28) |
 | 9 | `AUTO_TZIM_HOME` relocates everything | with it set, no file is created under `$HOME` or `$XDG_*` — shown by a before/after listing of both trees |
 | 10 | `folder remove` deletes no user file | a folder containing a real file: after `remove`, the file is present and byte-identical, and the profile is gone |
@@ -92,6 +93,9 @@ reason is the same: a future reader has to be able to tell a live rule from a de
 - **The reason strings are contract, not prose.** `forbidden_root`, `root_not_absolute`, `root_not_a_directory`,
   `root_is_symlink`, `root_missing`, `state_inside_root`, `cloud_sync_root`, `not_in_v01`, `transforms_forbidden` are
   asserted by the corpus later. Reproduce them exactly; if one seems wrong, it is a finding, not an edit.
+- **The name is the key, and it is typed.** Every command takes `NAME`, quoted if it has spaces. There is no id to copy
+  out of a file ([D-43](DECISIONS.md)); a rename is `folder edit OLD --name NEW` and it does not rewrite history that
+  already exists.
 - **`2` is the config error, `6` is not.** `6` is the preflight refusal *at run time* — no plan, `pause`, free space
   ([D-03](DECISIONS.md), AC-11). A config that fails to parse is the user typing something wrong: exit `2`.
 - **Accepted-but-inert keys exist on purpose.** `update_policy` and `allowed_major_versions` are accepted and do nothing
@@ -118,10 +122,11 @@ assertion on the seven fields for both crates — so the promise becomes a gate.
 ## 7. What this brief does not settle, and I own
 
 Three things had no answer in the documents, so I decided them rather than let a coder invent them:
-[D-43](DECISIONS.md) (a folder id is a ULID, hand-rolled, no dependency), [D-44](DECISIONS.md) (the cloud-sync list is
-built in and best-effort), [D-45](DECISIONS.md) (a symlinked root is rejected, intermediate components are resolved).
-They are marked *proposed*: if the owner disagrees, the change is a paragraph, not a rewrite — but it must happen
-**before** the code, because each one is baked into stored data.
+[D-43](DECISIONS.md) (a folder is identified by its own name — the owner rejected my ULID, correctly, because an
+opaque handle means copy-pasting out of `config.toml` every day), [D-44](DECISIONS.md) (the cloud-sync list is built in,
+it **refuses** by default, and one flag overrides it), [D-45](DECISIONS.md) (a symlinked root is rejected, intermediate
+components are resolved). The owner confirmed all three on 2026-11-02, so they are adopted, not offered: each one is
+baked into stored data and must not be renegotiated by the coder.
 
 One thing this stage deliberately leaves open: `folder list`'s exact column set. Text output, stable enough to test,
 `id · name · root · enabled` is the obvious four; the owner may want a fifth. That is a UI question, and `--json` in

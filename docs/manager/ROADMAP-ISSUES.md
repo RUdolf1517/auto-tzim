@@ -93,12 +93,12 @@ ids and roots); canonicalisation; forbidden-root, `AUTO_TZIM_HOME` containment (
 `0600`/`0700`; atomic write with `fsync` of file and directory; corrupt config never overwritten; `config validate` and
 `folder add|list|show|edit|enable|disable|remove`.
 
-**Acceptance.** Unknown field ⇒ error naming the field, exit `2`; a rejected edit leaves the file byte-identical;
+**Acceptance.** Unknown field ⇒ error naming the field, exit `2`; a folder is identified by its own name ([D-43](DECISIONS.md)); a rejected edit leaves the file byte-identical;
 removal deletes no user file; `AUTO_TZIM_HOME` relocates everything; `transforms` non-empty is rejected (D-05);
 `follow_symlinks = true`, `allow_hard_links = true`, `jobs > 1` and `[folder.schedule]` are rejected with the stage that
 will own them.
 
-**Tests.** Malformed TOML; unknown field; wrong type; duplicate id/root; roots `""`, `"."`, `"/"`, `$HOME`, a file, a
+**Tests.** Malformed TOML; unknown field; wrong type; duplicate name/root; roots `""`, `"."`, `"/"`, `$HOME`, a file, a
 symlink, inside/containing `AUTO_TZIM_HOME`; atomic write interrupted at write/fsync/rename; corrupt file intact;
 permissions under `umask 000`; read-only directory fails without a partial file.
 

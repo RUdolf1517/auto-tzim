@@ -59,7 +59,16 @@ jobs:
         with:
           toolchain: 1.82.0
       - uses: taiki-e/install-action@cargo-deny
-      - run: cargo deny check
+      - name: cargo deny check
+        shell: bash
+        run: |
+          set +e
+          cargo deny check 2>&1 | tee "$RUNNER_TEMP/deny-output"
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            python3 -c 'import pathlib, os; s=pathlib.Path(os.environ["RUNNER_TEMP"], "deny-output").read_text(); print("::error title=cargo-deny::" + s[-3000:].replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))'
+          fi
+          exit "$status"
   pinned-dependencies:
     strategy:
       matrix:

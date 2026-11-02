@@ -75,6 +75,11 @@ built-in list, path comparison only, documented as best-effort, escapable with o
 behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
 ones are resolved). Each would have been baked into stored data by the first commit.
 
+The review and the brief were merged as `c0c575a`. On that pull request the macOS `deny` job was **never acquired by a
+runner** — GitHub's arm64 capacity — and was cancelled after fifteen minutes; a rerun was refused, and the same job ran
+green on the merge commit. Recorded as [R-27](docs/manager/RISK-REGISTER.md), because a cancelled job is `not-run` and
+`not-run` is never `passed`, even when the pull request changes only Markdown.
+
 Two documents were also corrected: `config.md` still called the `min_free_bytes` exit code "pending" though D-03 and
 AC-11 had answered it, and `dependencies.md` still said the pin checker had no test — it does, and I had watched it go
 red the same afternoon. The decision index had silently lost six rows; it now has 45 against 45 sections, in order.

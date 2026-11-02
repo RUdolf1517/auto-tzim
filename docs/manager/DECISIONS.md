@@ -54,6 +54,8 @@ invent it; the owner may change it without cost), **superseded**.
 | D-46 | **The path comes first**: `auto-tzim PATH [--time HOURS] [--auto]` is one complete instruction; the plan is still always built, and `folder add` is a convenience, not a prerequisite | **adopted (owner, 2026-11-02)** | owner's CLI sketch; `cli.md` §0 | AT-02, AT-03, AT-05, AT-06, `README`, `cli.md` |
 | D-47 | **`--time <HOURS>` is a cooldown, not a schedule and not an age filter**: compress the same folder at most once in that window, keyed by canonical root, consumed when processing starts, overridable with `--force`, refused with exit `6` `too_soon` | **adopted (owner, 2026-11-02)** — *"раз в 24 часа производится сжатие"* | owner's CLI sketch; `cli.md` §0.1 | AT-05, AT-06, `state.md` |
 | D-48 | **`--auto` shows nothing at all** — no plan, no question, one summary line; without it the plan is printed and one answer is required | **adopted (owner, 2026-11-02)** — *"пользователь не видит даже плана и не соглашается"* | D-29; owner's answer | AT-06, `cli.md` |
+| D-49 | **Several paths at once**: `auto-tzim PATH [PATH…] [--time H] [--auto]` runs a **batch** — all paths validated before anything, overlapping roots refused, one lock, one run record per folder under a shared `batch_id`, one question in `confirm` | **adopted (owner, 2026-11-02)** — *"можно добавлять несколько путей одновременно"* | `cli.md` §0.2; `state.md` §3.1 | AT-05, AT-06 |
+| D-50 | **The cooldown and the exit code are per folder inside a batch**: a folder still inside its window is skipped and named, the others run; `6` only when *no* folder ran because of the clock | **adopted (owner, 2026-11-02)** | D-19, D-47 | AT-05, AT-06 |
 
 ---
 
@@ -1115,3 +1117,59 @@ machinery; a bug in `auto` is a bug in `confirm` too, which is what makes one te
 writes themselves — where a plan printed into a log every hour is noise that hides the one line that mattered. A user who
 wants to see the plan runs the command without `--auto`; that is one keystroke, and it is the mode whose whole purpose is
 to be read.
+
+## D-49 · Several paths at once are one batch
+
+**Status: adopted (owner, 2026-11-02).** *"учти что можно добавлять несколько путей одновременно"* — one invocation may name
+several folders:
+
+```sh
+auto-tzim ~/downloads ~/Pictures/raw ~/tmp/incoming --time 24 --auto
+```
+
+That is the whole change, and it forces six answers that a single-path tool never has to give. Each one is decided here so
+that the coder is not inventing batch semantics in a for-loop.
+
+| Question | Answer, and why |
+| --- | --- |
+| Is one bad path forgiven? | **No.** Every path is validated before any file is touched — forbidden root, symlink, cloud sync, `AUTO_TZIM_HOME` containment. One refusal ⇒ exit `2`, message naming the path, **nothing processed anywhere**. The alternative is a run that did half the job and reported failure, which is the worst of both |
+| Two paths where one contains the other | exit `2`, `overlapping_roots`, naming both. A file inside both would be planned twice and could be processed twice; a containment check is cheap and this is exactly what it is for |
+| The same path twice | de-duplicated on the canonical path and recorded once. Refusing would be pedantic; processing twice would be a bug |
+| Locking | **one** global run lock for the whole batch ([state](../state.md) §5). A per-folder lock would let two batches interleave on the same tree |
+| State | one `run.json` + `files.jsonl` **per folder**, each with its own `run_id`, all carrying the same `batch_id` ([state](../state.md) §3.1). A single record with several folders would make the per-folder history queries — `history --folder NAME`, "last run of this folder" — into scans over a multi-folder blob |
+| Order | the order typed on the command line. Not alphabetical, not the config order: a deterministic order the user chose is the one they can reason about |
+| Approval (`confirm`) | **one** proposal listing every folder with its file count and totals, and **one** question. Declining installs nothing anywhere and exits `0`. Per-folder prompts would break the one-prompt invariant ([D-21](DECISIONS.md)) and make an unattended `confirm` impossible to reason about |
+
+**What does not change.** Every folder gets its own plan, hashed and recorded before its first file is touched; every file is
+re-checked against that plan immediately before install; `tzim` still runs on staged copies; `--auto` still prints nothing.
+A batch is a sequence of ordinary runs that share a lock and a summary — not a new engine.
+
+**One failure stops the batch.** If `tzim` exits `4` (verification failure) for a file in the second folder, the batch is
+aborted: the remaining folders are recorded `interrupted` and are not started ([D-02](DECISIONS.md)). A verification failure
+means the assumptions about `tzim` are wrong, and continuing to touch more files on wrong assumptions is the one thing this
+project must never do.
+
+**`folder add` takes several paths too.** `auto-tzim folder add ~/Pictures/a ~/Pictures/b` adds both or, if one is invalid,
+neither — the same all-or-nothing rule, for the same reason.
+
+## D-50 · Inside a batch, the clock and the exit code are per folder
+
+**Status: adopted (owner, 2026-11-02)**, implied by D-47 plus D-49 and decided here rather than left to the coder.
+
+A batch of five folders where one was compressed three hours ago must still compress the other four. So the cooldown is
+evaluated **per canonical root**, and its outcome is decided per folder:
+
+| Situation | What happens | Exit code |
+| --- | --- | --- |
+| every folder eligible | all run | `0`, or `1` if a file failed |
+| some folders inside their window | those are skipped and **named in the summary**; the rest run | `0` (or `1`), **not** `6` |
+| **no** folder eligible | nothing runs, message says when each becomes eligible | `6` `too_soon` |
+| `--force` | applies to every folder in the batch, and every window restarts from now | as above, minus the skips |
+| `--dry-run` | every folder's plan is printed; no window is consumed | `0` |
+
+**This is a deliberate refinement of precedence ([D-19](DECISIONS.md)), and it is written down rather than implied.** The
+precedence table orders **whole-run** refusals; a folder skipped by the clock is not a refusal of the run, it is a result
+of the run, recorded in that folder's row. Without this rule the numbers lie in the expensive direction: `6` outranks `1`,
+so one folder's clock would mask a failed file in another folder, and a scheduler reading `$status` would see "not now"
+for a run that actually broke something. `6` therefore means exactly what it always meant — *nothing was processed* — and a
+mixed batch is never silent about the skips: they appear in the summary line and in `history`.

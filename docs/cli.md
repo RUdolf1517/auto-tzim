@@ -6,16 +6,17 @@
 > Related: [config](config.md) · [safety](safety.md) · [state](state.md) · [conflicts between the two specifications](spec/CONFLICTS.md)
 
 ```text
-auto-tzim <PATH> [OPTIONS]        # the normal use: one folder, one run
-auto-tzim <COMMAND> [OPTIONS]     # management verbs: folder, config, status, history, logs, pause, resume, doctor
+auto-tzim <PATH> [<PATH>…] [OPTIONS]   # the normal use: one or more folders, one run
+auto-tzim <COMMAND> [OPTIONS]          # management verbs: folder, config, status, history, logs, pause, resume, doctor
 auto-tzim --help
 auto-tzim --version
 ```
 
-**The path comes first.** The ordinary invocation names a folder and nothing else:
+**The path comes first, and there may be several.** The ordinary invocation names folders and nothing else:
 
 ```sh
 auto-tzim /home/user/downloads --time 24 --auto
+auto-tzim ~/downloads ~/Pictures/raw ~/tmp/incoming --time 24 --auto
 ```
 
 That is a complete instruction: *compress this folder at most once every 24 hours, and do not ask me anything.* No config
@@ -30,10 +31,10 @@ subcommand; otherwise it is a path, and it must be a directory that exists (anyt
 
 | Invocation | What the user sees | What it does |
 | --- | --- | --- |
-| `auto-tzim PATH --dry-run` | the plan | nothing else: no `tzim` is started on a file, the folder is not written, the cooldown is not consumed |
-| `auto-tzim PATH` | the plan, then one question | installs only on `y`; anything else — including an empty line, EOF or no terminal — installs nothing |
-| `auto-tzim PATH --auto` | **nothing** — no plan, no question, one summary line | installs every file the plan selected |
-| `auto-tzim PATH --auto --time 24` | nothing until a summary line | as above, but only if the last compression of this folder was **24 hours ago or more**; otherwise it does nothing and exits `6` |
+| `auto-tzim PATH… --dry-run` | the plan of each folder | nothing else: no `tzim` is started on a file, no folder is written, no cooldown is consumed |
+| `auto-tzim PATH…` | the plans, then **one** question | installs only on `y`; anything else — including an empty line, EOF or no terminal — installs nothing, anywhere |
+| `auto-tzim PATH… --auto` | **nothing** — no plan, no question, one summary line | installs every file the plans selected |
+| `auto-tzim PATH… --auto --time 24` | nothing until a summary line | as above, but only for folders whose last compression was **24 hours ago or more**; the others are skipped and named ([D-50](manager/DECISIONS.md)) |
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -43,6 +44,33 @@ subcommand; otherwise it is a path, and it must be a directory that exists (anyt
 | `--dry-run` | off | plan only. This is **our** flag; `tzim --dry-run` stays forbidden (D-04) |
 | `--name`, `--recursive`, `--formats`, `--exclude` | the profile's values | per-run overrides; they are used for this run and **not** written back to the config |
 | `--plan <ID>` | — | bind this run to an earlier plan record; if the tree no longer matches it, exit `6` before anything is installed |
+
+### 0.2 Several paths are one batch
+
+`auto-tzim a b c --auto` is a **batch** ([D-49](manager/DECISIONS.md)), not three commands typed at once:
+
+| Rule | Detail |
+| --- | --- |
+| Validation | every path first, before any file is touched. One refusal ⇒ exit `2`, the reason names the path, **nothing is processed anywhere** |
+| Overlap | a path inside another path of the same batch ⇒ exit `2` `overlapping_roots`, both named; a file in both would be planned twice |
+| Duplicates | the same canonical root twice is de-duplicated, recorded once |
+| Order | the order typed on the command line |
+| Lock | one run lock for the whole batch |
+| State | one run record per folder, sharing a `batch_id` ([state](state.md) §3.1) |
+| `confirm` | one proposal listing every folder, one question; declining installs nothing anywhere and exits `0` |
+| A verification failure | aborts the batch: the remaining folders are `interrupted` and are not started |
+
+```text
+3 folders, 212 files, 1.9 GiB → 1.5 GiB (21.4% smaller)   [mode: confirm]
+
+  downloads        /home/user/downloads            96 files   1.1 GiB → 0.9 GiB
+  raw              /home/user/Pictures/raw         88 files   712 MiB → 548 MiB
+  incoming         /tmp/incoming                   28 files    94 MiB → 77 MiB
+  … two files and a total per folder, then one line per file
+
+Originals will be deleted after each replacement is verified. There is no undo.
+Continue? [y/N]
+```
 
 **A path that is not in the config is allowed and normal.** It is validated exactly as `folder add` would validate it
 (forbidden root, symlink, cloud sync, `AUTO_TZIM_HOME` containment — `config.md` §5), and it is recorded in history
@@ -78,7 +106,8 @@ as often as it likes without consequence.
 | Situation | Result |
 | --- | --- |
 | never compressed, or compressed ≥ 24 h ago | the run proceeds; the window restarts now |
-| compressed 3 hours ago | exit `6`, reason `too_soon`, the next eligible time printed; **nothing is read for processing** |
+| compressed 3 hours ago — **the only folder** | exit `6`, reason `too_soon`, the next eligible time printed; **nothing is read for processing** |
+| compressed 3 hours ago — **one of several** | that folder is skipped and named in the summary, the rest run, exit `0` ([D-50](manager/DECISIONS.md)) |
 | `--force` | proceeds regardless, and the window restarts from now |
 | `--dry-run` | proceeds and prints the plan; the window is **not** consumed, because nothing was compressed |
 | no `--time` | no cooldown at all: every invocation is allowed to compress |
@@ -124,14 +153,15 @@ adapter contract, `2` invalid config, `7` unreadable state.
 Parses and validates without touching state. Exit `0` valid, `2` invalid with **every** error listed (not just the
 first), each naming the field, the rule and a suggested correction.
 
-### 2.3 `folder add PATH [--name NAME] [--recursive] [--formats LIST] [--exclude GLOB]...`
+### 2.3 `folder add PATH [PATH…] [--name NAME] [--recursive] [--formats LIST] [--exclude GLOB]...`
 
 **Optional.** Remembering a folder is a convenience, not a prerequisite: `auto-tzim PATH` works on a folder the config has
 never seen ([D-46](manager/DECISIONS.md)). What `add` buys is a stored name and stored defaults, so the path stops being
 retyped.
 
-Validates and canonicalises `PATH`, creates a profile, processes nothing, prints the resulting profile including the
-canonical root. `NAME` defaults to the basename of the canonical root; it is the folder's identifier from then on
+Validates and canonicalises every `PATH`, creates one profile each, processes nothing, prints the resulting profiles
+including the canonical roots. **All or nothing**: if one path is invalid, none is added ([D-49](manager/DECISIONS.md)).
+`--name` applies only to a single path — with several, each takes its own basename. `NAME` defaults to the basename of the canonical root; it is the folder's identifier from then on
 ([config](config.md) §4). Exit `2` for a forbidden, relative, missing or symlinked root, a duplicate root or name, a
 path inside `AUTO_TZIM_HOME`, or a non-empty `transforms` requirement it cannot satisfy.
 
@@ -160,7 +190,9 @@ Builds the plan and **starts no file-processing `tzim`**. Specifically:
 Each scan stores a plan record with an id and a hash over its ordered rows (D-20). That record is what authorises an
 apply.
 
-### 2.6 `run [PATH | --folder NAME] [--auto | --mode auto|confirm] [--time HOURS] [--force] [--plan ID] [--dry-run]`
+### 2.6 `run [PATH… | --folder NAME] [--auto | --mode auto|confirm] [--time HOURS] [--force] [--plan ID] [--dry-run]`
+
+Several paths make a batch (§0.2). `--plan` binds **one** folder, so it is refused together with more than one path (`2`).
 
 The processing entry point as a verb; `auto-tzim PATH` is the same run with the path first (§0). `--dry-run` is an alias
 for `scan`: it produces the read-only plan and processes nothing (D-04). `--mode auto` and `--auto` mean the same thing;
@@ -273,7 +305,7 @@ Rules:
 | `3` | `tzim` absent, unreadable, or outside the adapter contract (`incompatible_tzim`) | `doctor`, `scan`, `run` |
 | `4` | **never produced by `auto-tzim`.** Reserved out of every path so a `tzim` verification failure can never be confused with our lock — the lock is `8` | — |
 | `5` | **reserved, not produced in v0.1** (D-28): it belongs to `update-check`, which ships in v0.2 | — |
-| `6` | refused before processing: the cooldown is still running, a stale `--plan`, `pause`, `min_free_bytes`, disabled folder, a `confirm` run with no terminal, whole-run policy refusal | `run --once` |
+| `6` | refused before processing: **every** folder still inside its cooldown, a stale `--plan`, `pause`, `min_free_bytes`, disabled folder, a `confirm` run with no terminal, whole-run policy refusal | `run --once` |
 | `7` | internal error: unreadable/corrupt state, unexpected exception, child output our guard cannot attribute to a file | any |
 | `8` | another run holds the lock, or the lock cannot be taken | `run --once` |
 | `130` / `143` | interrupted by `SIGINT` / `SIGTERM`; in-flight file and remaining plan recorded `interrupted` | `run --once` |

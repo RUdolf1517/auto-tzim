@@ -24,6 +24,11 @@ no longer matches the folder, a `pause` is active, free space is below `min_free
 asked for a run without `--auto` and there is no terminal to confirm on. Nothing was read for processing and nothing
 changed. To compress now regardless of the clock, add `--force`.
 
+**Can I give several folders at once?**
+Yes: `auto-tzim ~/downloads ~/Pictures/raw --time 24 --auto`. Every path is validated before anything runs, so one bad path
+means nothing happens anywhere (exit `2`); inside the run each folder gets its own plan, its own history record and its own
+clock, and a folder still in its `--time` window is skipped while the others proceed ([D-49](manager/DECISIONS.md)).
+
 **What does `--time 24` do?**
 It is a cooldown, not a schedule: the same folder is compressed at most once every 24 hours, so an hourly cron job is
 harmless. Nothing runs by itself — `auto-tzim` has no daemon ([D-47](manager/DECISIONS.md)).

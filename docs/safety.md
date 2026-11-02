@@ -92,7 +92,8 @@ A file that fails any layer is finished: no lower layer is tried, no upper layer
 | `tzim` absent / unreadable / out of contract | run does not start | `3` | no |
 | Another run holds the lock | run does not start | `8` | no |
 | `--plan` names a record that no longer matches the folder | run does not start | `6` | no |
-| The cooldown window is still running (`--time`, [D-47](manager/DECISIONS.md)) | run does not start; `--force` overrides the clock only | `6` | no |
+| The cooldown window is still running for **every** folder of the run (`--time`, [D-47](manager/DECISIONS.md)) | run does not start; a single folder inside its window is skipped and the others run ([D-50](manager/DECISIONS.md)); `--force` overrides the clock only | `6` | no |
+| One path of a batch is refused, or two paths overlap | run does not start; nothing is processed in any folder ([D-49](manager/DECISIONS.md)) | `2` | no |
 | `pause` active | run does not start | `6` | no |
 | Free space below `min_free_bytes` | run does not start | `6` | no |
 | Corrupt state file (unparseable record, not a truncated tail) | run does not start | `7` | no |

@@ -82,6 +82,7 @@ Written at the start with `state: "running"`, replaced atomically at the end wit
 | `state` | `running` \| `completed` \| `aborted` \| `interrupted` |
 | `mode` | `confirm` \| `auto` (D-29); `declined` when the proposal was refused |
 | `folder`, `plan_id`, `plan_hash` | the binding this run acted on; `folder` is the folder's **name as it was when the run started** ([D-43](manager/DECISIONS.md)) |
+| `batch_id` | present when this run was one folder of a multi-path invocation ([D-49](manager/DECISIONS.md)); every record from that command shares it, and a single-path run has none |
 | `tzim` | `path`, `sha256`, `version`, `capabilities_schema`, `result_schema`, `adapter` |
 | `config_hash` | SHA-256 of the config file as read |
 | `counts`, `exit_code` | derived from `files.jsonl` at finalisation, then frozen |
@@ -173,7 +174,7 @@ lock, so it cannot create a second writer either.
 
 | Lock | Scope | Taken by | Released |
 | --- | --- | --- | --- |
-| global run lock | one `run --once` at a time per `AUTO_TZIM_HOME` | `run`, and later the scheduler | on exit, including on signal |
+| global run lock | one run at a time per `AUTO_TZIM_HOME` **including every folder of a batch** ([D-49](manager/DECISIONS.md)) | `run`, and later the scheduler | on exit, including on signal |
 | update lock | no run during an update and no update during a run (v0.3) | `update` | on exit |
 
 `locks/run.lock` contains `{"pid":…, "start_time":…, "host":…, "run_id":…}`. `start_time` is the process start time from

@@ -75,6 +75,25 @@ built-in list, path comparison only, documented as best-effort, escapable with o
 behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
 ones are resolved). Each would have been baked into stored data by the first commit.
 
+### Changed before the code — a folder is identified by its name
+
+The owner rejected my ULID proposal with one sentence: *"у каждой папки будет свое название"* — each folder has its own
+name. That is the better answer, and [D-43](docs/manager/DECISIONS.md) now says so: `name` **is** the identifier, there
+is no `id`, the default is the root's basename, it must be unique case-insensitively, every subcommand takes `NAME`, and
+a rename is an edit that does not rewrite history already written.
+
+I argued from durability and missed what the user does all day: type the thing. An opaque handle turns every command into
+copy-paste out of `config.toml`, and the first support question of the project would have been "which `01J…` is my photos
+folder". The one thing a name costs — history keeps the name it was written with — is the correct behaviour anyway.
+
+[D-44](docs/manager/DECISIONS.md) and [D-45](docs/manager/DECISIONS.md) were confirmed in the same breath: a folder under
+a known cloud-sync root is **refused** (best-effort path comparison, one documented flag to override), and a root that is
+itself a symlink is refused while intermediate components are resolved.
+
+Propagated rather than left as a paragraph: `config.md` §4 lost its `id` field and its example line, `cli.md` §2.3–2.5
+take `NAME`, `state.md` records `folder` as a snapshot, and the AT-02 brief gained acceptance point 7a — a duplicate name
+in a different case must be refused.
+
 The review and the brief were merged as `c0c575a`. On that pull request the macOS `deny` job was **never acquired by a
 runner** — GitHub's arm64 capacity — and was cancelled after fifteen minutes; a rerun was refused, and the same job ran
 green on the merge commit. Recorded as [R-27](docs/manager/RISK-REGISTER.md), because a cancelled job is `not-run` and

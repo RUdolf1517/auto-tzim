@@ -47,8 +47,7 @@ Every field is listed; nothing is implicit.
 
 | Field | Type | Default | Rules |
 | --- | --- | --- | --- |
-| `id` | string | generated | opaque, immutable, unique; not derived from the path (a renamed folder keeps its history) |
-| `name` | string | equal to the folder's basename at add time | free text, 1–120 characters, no control characters |
+| `name` | string | the folder's basename at add time | **the folder's identifier**, and the only handle any command takes ([D-43](manager/DECISIONS.md)). 1–120 characters after trimming, no control characters, no leading or trailing space. Must be unique — compared case-insensitively, stored as typed. `folder edit OLD --name NEW` renames; see §7 |
 | `root` | string | required | absolute, existing directory; canonicalised; must not be `/`, `$HOME` itself, or a system directory; must not contain `AUTO_TZIM_HOME` (D-08) |
 | `enabled` | bool | `true` | a disabled folder is not scanned and not run |
 | `recursive` | bool | `false` | `false` means the top level only |
@@ -77,7 +76,7 @@ Every field is listed; nothing is implicit.
 | a root that is a file, a symlink, or missing | error `root_not_a_directory` / `root_is_symlink` / `root_missing` | canonicalisation must not launder a link |
 | a root containing `AUTO_TZIM_HOME`, or inside it | error `state_inside_root` | the program must not plan its own state directory or logs (D-08) |
 | a known cloud-sync root without `allow_cloud_sync = true` | error `cloud_sync_root` | conflicts with a sync client are silent data races |
-| a NUL byte, a control character, a duplicate `id`, a duplicate `root` | error | ambiguity is not a feature |
+| a NUL byte, a control character, a duplicate `name`, a duplicate `root` | error `duplicate_name` / `duplicate_root` | ambiguity is not a feature: two folders that print the same cannot be told apart by the user typing a command |
 | `follow_symlinks = true`, `allow_hard_links = true`, `jobs > 1`, `[folder.schedule]` | error `not_in_v01` | each names the reason and the stage that will look at it again |
 | `transforms = [...]` | error `transforms_forbidden` | charter §6-11: confirmation-required transformations do not run in the MVP. The field exists so the opt-in has a home; it must be empty (D-05) |
 
@@ -92,7 +91,6 @@ mode = "confirm"
 allowed_major_versions = [0]
 
 [[folder]]
-id = "01JEXAMPLE000000000000000000"
 name = "Project images"
 root = "/Users/example/Pictures/project"
 enabled = true
@@ -111,13 +109,16 @@ min_free_bytes = 268435456
 timeout_seconds = 900
 ```
 
-A folder added with `auto-tzim folder add ~/Pictures/project` produces the same block with a generated `id` and
-`name`, and **does not process anything**: adding a folder arms a plan, nothing more.
+A folder added with `auto-tzim folder add ~/Pictures/project` produces the same block with `name = "project"` — the
+basename, unless `--name` says otherwise — and **does not process anything**: adding a folder arms a plan, nothing more.
 
 ## 7. Editing rules
 
 - `folder edit` takes the same fields as `folder add`; every change is validated before it is written, and an invalid
   change leaves the file byte-identical (AC-7).
+- **Renaming is an edit**, `folder edit OLD --name NEW`. The profile is rewritten and nothing else changes; history rows
+  already written keep the name the folder had when they were written, because a name is a label, not a key into the
+  past ([D-43](manager/DECISIONS.md)). Renaming to a name another folder holds is `duplicate_name`.
 - Removing a folder removes its profile and its cached eligibility records. It never deletes, moves or modifies a
   user file, and it never rewrites history that already happened.
 - Disabling a folder keeps its history and its cache; enabling it again does not re-process files whose identity and

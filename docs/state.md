@@ -80,7 +80,7 @@ Written at the start with `state: "running"`, replaced atomically at the end wit
 | `schema`, `run_id`, `started_at`, `finished_at` | UTC, ISO 8601 with microseconds |
 | `state` | `running` \| `completed` \| `aborted` \| `interrupted` |
 | `mode` | `confirm` \| `auto` (D-29); `declined` when the proposal was refused |
-| `folder_id`, `plan_id`, `plan_hash` | the binding this run acted on |
+| `folder`, `plan_id`, `plan_hash` | the binding this run acted on; `folder` is the folder's **name as it was when the run started** ([D-43](manager/DECISIONS.md)) |
 | `tzim` | `path`, `sha256`, `version`, `capabilities_schema`, `result_schema`, `adapter` |
 | `config_hash` | SHA-256 of the config file as read |
 | `counts`, `exit_code` | derived from `files.jsonl` at finalisation, then frozen |
@@ -89,7 +89,7 @@ A run that never finished keeps `state: "running"` on disk — that is the signa
 
 ### 3.2 `runs/<run_id>/files.jsonl`
 
-One line per file outcome, in plan order. Fields: `v`, `ts`, `folder_id`, `relative_path`, `status`, `reason`
+One line per file outcome, in plan order. Fields: `v`, `ts`, `folder`, `relative_path`, `status`, `reason`
 (`tzim`'s stable code, D-27), `before`, `after`, `saved`, `identity_before`, `identity_after`, `sha256_before`,
 `sha256_after`, `tzim_status`, `tzim_note`, `tzim_error_kind`, `tzim_error_message`, `duration_ms`, `argv`.
 
@@ -128,7 +128,7 @@ still on disk, byte for byte, next to the hash it was compared against.
 The "do not re-examine" cache (D-06), as an append-only log of (identity, `tzim_sha256`, `adapter`, `policy_hash`, verdict,
 `decided_at`). A lookup matches on **all** of those; a stale line simply never matches, which is a cheaper and safer
 invalidator than deleting anything. When the file exceeds the documented size it is compacted: latest entry per
-`(folder_id, relative_path)` into a temp file, `fsync`, rename. Compaction is the only place that rewrites it, and it
+`(folder, relative_path)` into a temp file, `fsync`, rename. Compaction is the only place that rewrites it, and it
 rewrites nothing that a reader could still match.
 
 ## 4. Replacing what a database gave us

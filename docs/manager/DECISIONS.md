@@ -48,9 +48,9 @@ invent it; the owner may change it without cost), **superseded**.
 | D-40 | The **MSRV is the toolchain CI actually runs** (1.82), not `tzim`'s 1.88: `auto-tzim` does not build `tzim` | adopted (manager default, 2026-11-02) | `rust-toolchain.toml`; review F-03 | every manifest, CI |
 | D-41 | **CI-only tooling may be Python; the product may not** — with a self-test, a mention in `dependencies.md`, and folding into the Rust harness at AT-08 | adopted (manager default, 2026-11-02) | `scripts/check-pins.py`; review F-06 | AT-01, AT-08 |
 | D-42 | **Packaging is not a CI gate** and nothing is published in AT-01; "publishable" means the manifest metadata, and the tarballs are verified at release, core first | adopted (owner's question, 2026-11-02) | three review rounds on an unpassable check | AT-01, `releases.md` §2 |
-| D-43 | A folder `id` is a **ULID** — 26 uppercase Crockford characters, sortable by creation, generated once and never derived from the path | proposed (manager default, 2026-11-02) | `config.md` §4; no prior rule for the format | AT-02 |
-| D-44 | The cloud-sync check is a **built-in list of well-known sync directories**, matched on the canonical path, best-effort and bypassable with `allow_cloud_sync = true` | proposed (manager default, 2026-11-02) | `config.md` §5 `cloud_sync_root`; charter §6-8 | AT-02 |
-| D-45 | A root that is **itself a symlink is rejected**; intermediate components are resolved and the canonical path is stored, so `/tmp/x` on macOS is recorded as `/private/tmp/x` | proposed (manager default, 2026-11-02) | `config.md` §5 `root_is_symlink`; D-08 | AT-02, AT-03 |
+| D-43 | **A folder is identified by its own name** — no generated id: unique case-insensitively, the handle every command takes, renameable in place, and history rows keep the name they were written with | **adopted (owner, 2026-11-02)** — the manager's ULID proposal was rejected | `config.md` §4; owner's answer to the AT-02 question | AT-02, AT-05, `cli.md`, `state.md` |
+| D-44 | The cloud-sync check is a **built-in list of well-known sync directories**, matched on the canonical path; such a folder is **rejected**, best-effort, bypassable only by the documented `allow_cloud_sync = true` | **adopted (owner, 2026-11-02)** | `config.md` §5 `cloud_sync_root`; charter §6-8 | AT-02 |
+| D-45 | A root that is **itself a symlink is rejected**; intermediate components are resolved and the canonical path is stored, so `/tmp/x` on macOS is recorded as `/private/tmp/x` | **adopted (owner, 2026-11-02)** | `config.md` §5 `root_is_symlink`; D-08 | AT-02, AT-03 |
 
 ---
 
@@ -217,7 +217,7 @@ added in code without that page changing is a review finding.
 
 ## D-17 · Logs
 
-Local JSONL under `AUTO_TZIM_HOME`: timestamp, level, event, run id, folder id, relative path, binary identity, status.
+Local JSONL under `AUTO_TZIM_HOME`: timestamp, level, event, run id, folder name, relative path, binary identity, status.
 No environment variables, no absolute path outside the root, nothing uploaded. Retention 30 days and a size cap.
 
 ## D-18 · The exit-code contract
@@ -267,7 +267,7 @@ Putting the lock before the binary check is deliberate: two runs must not both p
 ## D-20 · Plan binding
 
 `scan` writes a plan record: `plan_id`, a SHA-256 over the ordered `(relative path, size, mtime_ns, dev, ino, policy
-hash, binary hash)` tuples, the folder id, and the timestamp. `run --once` accepts `--plan ID`; without a plan that is
+hash, binary hash)` tuples, the folder name, and the timestamp. `run --once` accepts `--plan ID`; without a plan that is
 `complete`, belongs to the same folder, and has the same plan hash as the tree it is about to process, it exits `6` and
 does nothing. A plan that changed even by one file is not "close enough": it is re-scanned.
 
@@ -928,28 +928,44 @@ which is a release-time tool, not a branch gate.
 **Reversal:** when the core is published, the release checklist verifies packaging for real — and if someone wants that
 in CI afterwards, it goes in as a **release-branch** workflow, not on every pull request.
 
-## D-43 · A folder id is a ULID
+## D-43 · A folder is identified by its own name
 
-**Status: proposed** (manager default, 2026-11-02). `config.md` says the id is "opaque, immutable, unique; not derived
-from the path", and an example shows `01JEXAMPLE000000000000000000` — 26 characters, which is a ULID — but no rule said
-what a coder must generate. Left alone, the answer would have been "whatever the first coder picked", and it would have
-been baked into every stored profile and every history row.
+**Status: adopted (owner, 2026-11-02).** The manager proposed a ULID — 26 Crockford characters, generated once, opaque.
+The owner rejected it with one sentence: *"нет у каждой папки будет свое название"* — each folder has its own name. That
+is the better answer, and the proposal was worse for a reason worth writing down.
 
-**Decision.** 26 uppercase Crockford base32 characters: the first 10 encode a 48-bit millisecond timestamp, the last 16
-encode 80 random bits from the operating system. Generated in `auto-tzim-core` by hand — the alphabet and the encoder
-are twenty lines and need no dependency. Validated on load: an id that is not 26 characters of the alphabet is a
-`config` error, so a hand-edited file fails loudly instead of producing two rows that look alike.
+**Decision.** The `name` field *is* the identifier. There is no `id`.
 
-**Why not a UUID v4.** It is equally unique and equally opaque, but not sortable, so `folder list` would need a separate
-creation time to be stable, and stability of the listing is an acceptance point. **Why not the `ulid` crate**: one more
-dependency, two commits, an allowlist entry and a review, to replace twenty lines that have one job.
+| Rule | Detail |
+| --- | --- |
+| Default | the basename of the canonical root at `folder add` time, `--name` to override |
+| Shape | 1–120 characters after trimming; no control characters; no leading or trailing space |
+| Uniqueness | compared case-insensitively, stored exactly as typed; a second folder with the same name is `duplicate_name`, and so is a rename onto an existing name |
+| Commands | every subcommand takes `NAME` — `folder remove project`, not `folder remove 01J9Z…` |
+| Rename | `folder edit OLD --name NEW`: the profile is rewritten, nothing else changes |
+| History | rows written before a rename keep the name they were written with (AT-05). A name is a label, not a key into the past |
 
-**Reversal is cheap now and expensive later.** Once a profile exists, its id is the key that history hangs on; changing
-the format means a migration. This is why the decision is made here rather than in AT-05.
+**Why my ULID proposal was wrong.** I argued from durability — a stable key survives a rename — and missed what the user
+actually has to do all day: type the thing. An opaque id means every file operation becomes copy-paste out of
+`config.toml`, and the first support question of the project would have been "which of these `01J…` strings is my
+photos folder". A name the user chose is self-documenting, and the one thing it costs — a rename does not follow into
+rows already written — is the *correct* behaviour: a history entry describes a run, and at that moment the folder was
+called what it was called.
 
-## D-44 · The cloud-sync check is a built-in list
+**Consequences, binding on AT-02 and later:**
 
-**Status: proposed** (manager default, 2026-11-02). `config.md` §5 refuses a root that matches a "known cloud-sync root"
+1. `config.md` §4 no longer has an `id` row, and the example lost its `id = "01JEXAMPLE…"` line.
+2. `cli.md` §2.3–2.5 take `NAME`; there is no id to quote.
+3. `state.md` records `folder`, not `folder_id`, and says it is a snapshot.
+4. A duplicate **root** is still an error on its own — two names for one directory would put two plans on the same files.
+
+**Reversal:** this is the kind of change that becomes expensive the moment a user has a config file, because it changes
+the handle they type. If a rename ever has to preserve identity across rows — the reason I reached for a ULID — the fix
+is an optional `--keep-history` on `edit`, not a second identifier.
+
+## D-44 · The cloud-sync check is a built-in list, and it rejects
+
+**Status: adopted (owner, 2026-11-02)** — the owner confirmed the refusal: *"отменять такие папки"*. `config.md` §5 refuses a root that matches a "known cloud-sync root"
 unless `allow_cloud_sync = true`, and `config.md` §4 calls the check "best-effort and documented as such" — but no
 document listed the roots. A coder would have invented six paths and called them the list.
 
@@ -965,6 +981,10 @@ case-insensitively:
 | Yandex | `Yandex.Disk`, `Яндекс.Диск` |
 | Other | `pCloud Drive`, `MEGAsync`, `Nextcloud`, `ownCloud`, `Sync` |
 
+**A match is a refusal, not a warning.** `folder add ~/Dropbox/photos` exits `2` with `cloud_sync_root` and names the
+flag that overrides it. The default is the safe one because the failure it prevents is silent: two programs writing the
+same file, no error, no message, a file that is neither the old nor the new version.
+
 **The semantics are the important half.** It is *best-effort*: a sync folder somewhere else is simply not detected, and
 that is documented rather than solved, because the alternatives are reading another program's database (fragile, and a
 privacy question of its own) or opening a network connection (forbidden by D-28). It is a **path comparison only** — no
@@ -973,7 +993,7 @@ costs them a silent conflict between two writers, which is why the list exists a
 
 ## D-45 · Symlinked roots, and how far canonicalisation goes
 
-**Status: proposed** (manager default, 2026-11-02). `config.md` §5 has both `root_is_symlink` ("canonicalisation must
+**Status: adopted (owner, 2026-11-02)** — *"да"*. `config.md` §5 has both `root_is_symlink` ("canonicalisation must
 not launder a link") and a requirement to store the canonical path, and those two pull in opposite directions on macOS,
 where `/tmp` is a symlink to `/private/tmp` and every path under it has a symlinked component.
 

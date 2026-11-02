@@ -62,6 +62,23 @@ Verified from this session rather than accepted: `pulls/16` answers `mergeable_s
 AT-01 lands CI, required checks come back with the context the workflow actually reports — a check nobody reports protects
 nothing, which is exactly what this rule demonstrated.
 
+### Accepted — AT-01 passes, and it is the first merge through a real gate
+
+[REVIEW-017ae80](docs/manager/reviews/REVIEW-017ae80.md): **PASS**. Six acceptance points reproduced — the installed
+binary is named `auto-tzim`, `--help`/`--version` exit `0` on Linux and macOS, an unknown argument exits `2` with an empty
+stdout, both manifests carry the registry metadata, an unpinned dependency still fails CI, and nothing beyond help and
+version exists. No file, socket or process API appears anywhere in `src/`.
+
+The one control this environment allowed, I ran: broke `scripts/check-pins.py` on purpose and watched its self-test go red
+with `'*': expected 1, got 0`, then restored it. A checker with an untested control is a checker nobody has seen work.
+
+The review is **post-merge** and says so: the owner merged #21 at 12:19:03Z, thirty-five seconds after the run finished
+green at 12:18:32Z. The order was right; the report simply cannot gate a merge that already happened, and its value is
+that AT-01's evidence is now pinned to a SHA anyone can re-check.
+
+Also fixed by the codebase existing: the branch protection that had to lose its placeholder `test` context ([D-24](docs/manager/DECISIONS.md))
+can now require the **real** contexts this workflow produces.
+
 ### Withdrawn — the packaging gate, and the day it cost
 
 Three review rounds chased a check that cannot pass. `cargo package` does not merely build a tarball: it resolves the

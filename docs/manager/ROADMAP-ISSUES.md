@@ -57,7 +57,11 @@ same `run --once` and has no eligibility rules of its own, and the mode gate of 
 
 ## Stage 1 — MVP / v0.1 (assigned as one set, #1…#10)
 
-### AT-01 · Repository and package bootstrap
+### AT-01 · Repository and package bootstrap — **accepted 2026-11-02** at `017ae80`
+
+> Merged as `fc17b9b`; verdict and evidence in [REVIEW-017ae80](reviews/REVIEW-017ae80.md). Six acceptance points
+> reproduced by the reviewer, three Low follow-ups named (help subcommand, the Python pin checker, a deprecated checkout
+> action). AT-02 has not started: each stage begins on the owner's word.
 
 **Scope.** A Rust workspace (D-33) with two crates, `auto-tzim-core` (library) and `auto-tzim` (binary) — the names are
 fixed by D-36 because they are published and a crate name is forever; the `tui` and `qt` crates are *not* created.

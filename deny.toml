@@ -21,6 +21,8 @@ allow = [
     "once_cell_polyfill",
     "proc-macro2",
     "quote",
+    "serde",
+    "serde_derive",
     "strsim",
     "syn",
     "unicode-ident",

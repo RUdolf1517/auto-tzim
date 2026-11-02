@@ -14,10 +14,9 @@ jobs:
         with:
           toolchain: 1.82.0
       - run: cargo build --workspace
-      - uses: actions/upload-artifact@v4
-        with:
-          name: lock-${{ matrix.os }}
-          path: Cargo.lock
+      - name: Report lockfile for bootstrap
+        run: |
+          python3 -c 'import base64; print("::notice title=Lockfile::" + base64.b64encode(open("Cargo.lock", "rb").read()).decode())'
   test:
     strategy:
       matrix:
@@ -52,7 +51,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.82.0
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: taiki-e/install-action@cargo-deny
+      - run: cargo deny check
   pinned-dependencies:
     strategy:
       matrix:

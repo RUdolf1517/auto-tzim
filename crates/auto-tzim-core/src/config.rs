@@ -1,6 +1,7 @@
 //! Configuration data model. Validation and persistence are not implemented yet.
 
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Schema-one settings; a missing installation section is invalid.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,31 +36,64 @@ impl Default for Installation {
 
 /// One named folder profile, with the schema defaults applied.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct Folder {
     pub name: String,
-    pub root: String,
+    pub root: PathBuf,
+    #[serde(default = "enabled_by_default")]
     pub enabled: bool,
+    #[serde(default)]
     pub recursive: bool,
+    #[serde(default)]
     pub include_hidden: bool,
+    #[serde(default)]
     pub cross_filesystems: bool,
+    #[serde(default)]
     pub follow_symlinks: bool,
+    #[serde(default)]
     pub allow_hard_links: bool,
+    #[serde(default)]
     pub allow_cloud_sync: bool,
+    #[serde(default)]
     pub formats: Vec<String>,
+    #[serde(default)]
     pub transforms: Vec<String>,
+    #[serde(default = "default_excludes")]
     pub exclude_globs: Vec<String>,
+    #[serde(default = "default_min_age")]
     pub min_file_age_seconds: u64,
+    #[serde(default = "default_jobs")]
     pub jobs: u32,
+    #[serde(default = "default_min_free")]
     pub min_free_bytes: u64,
+    #[serde(default = "default_timeout")]
     pub timeout_seconds: u32,
+}
+
+fn enabled_by_default() -> bool {
+    true
+}
+fn default_excludes() -> Vec<String> {
+    vec![".git/**".into(), ".hg/**".into(), ".svn/**".into()]
+}
+fn default_min_age() -> u64 {
+    60
+}
+fn default_jobs() -> u32 {
+    1
+}
+fn default_min_free() -> u64 {
+    268_435_456
+}
+fn default_timeout() -> u32 {
+    900
 }
 
 impl Default for Folder {
     fn default() -> Self {
         Self {
             name: String::new(),
-            root: String::new(),
+            root: PathBuf::new(),
             enabled: true,
             recursive: false,
             include_hidden: false,

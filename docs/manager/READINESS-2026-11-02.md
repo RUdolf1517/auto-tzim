@@ -100,7 +100,13 @@ gh issue view 1 --repo RUdolf1517/auto-tzim --json updatedAt --jq .updatedAt
 
 The negative control is the part that gets skipped, so it is named here: a CI job that cannot fail is decoration.
 
-## 6. What this pass did not do
+## 6. The brief exists, so the start is a handover rather than a conversation
+
+[HANDOFF-AT-01](HANDOFF-AT-01.md) is written and ready: what to build, what not to, the six acceptance points with the
+evidence each needs, and the negative control (an unpinned dependency must turn CI red, with the run ID recorded) as a
+deliverable rather than a footnote. A coder can be pointed at it without reading this file first.
+
+## 7. What this pass did not do
 
 - No code, no `Cargo.toml`, no workflow — the manager does not write product code or CI, ever.
 - No verification of anything at runtime: there is nothing to run.

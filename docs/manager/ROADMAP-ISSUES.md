@@ -75,6 +75,9 @@ version pin fails CI; the installed binary's name is `auto-tzim` and its `--vers
 
 **Out of scope.** Config, discovery, planner, runner, state, scheduler, TUI, Qt, network.
 
+**Brief.** [HANDOFF-AT-01](HANDOFF-AT-01.md) — the six acceptance points, the negative control that is part of the
+deliverable, and the two traps already present in the documents.
+
 ### AT-02 · Config and atomic storage
 
 **Scope.** TOML schema `1`; strict validation (unknown fields, empty/relative roots, NUL, control characters, duplicate

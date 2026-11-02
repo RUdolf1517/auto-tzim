@@ -63,7 +63,8 @@ assertions. Every fixture that is committed carries its SHA-256 in the test that
 
 For every skip, refusal, unsupported file, failure and dry run:
 
-0. (scan and dry-run) the invocation counter shows one `--version` and zero path invocations, and the target root's
+0. (scan and dry-run) the invocation counter shows two flag-only probes (`--version`, `--capabilities`) and zero path
+   invocations, and the target root's
    recursive listing and checksums are identical;
 1. the bytes are identical before and after (`SHA-256`);
 2. the `mtime` is unchanged (unless the platform cannot express it — then it is asserted as "unchanged or explained");

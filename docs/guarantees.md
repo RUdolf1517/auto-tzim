@@ -70,8 +70,8 @@ A user reading `optimized` should know exactly who said it:
 
 Per the evidence standard, these are the assertions a reviewer will demand, not a list of good intentions:
 
-- a scan or dry run makes zero `tzim` invocations with a path argument, one `--version` call, and leaves the target root
-  byte-identical — with the apply path as the positive control (AC-2);
+- a scan or dry run makes zero `tzim` invocations with a path argument, exactly two flag-only probes (`--version`,
+  `--capabilities`), and leaves the target root byte-identical — with the apply path as the positive control (AC-2);
 - every non-optimizing outcome has a before/after SHA-256 proving the bytes are identical (AC-4);
 - every documented exit code is produced by a real command, `4` is never produced, and a fake `tzim` exit `4` becomes our
   exit `1` (AC-8);

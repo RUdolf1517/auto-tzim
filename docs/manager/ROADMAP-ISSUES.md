@@ -59,17 +59,24 @@ same `run --once` and has no eligibility rules of its own, and the mode gate of 
 
 ### AT-01 · Repository and package bootstrap
 
-**Scope.** A Rust workspace (D-33) with `auto-tzim-core` and `auto-tzim-cli` only (the `tui` and `qt` crates are *not*
-created), a `[[bin]]` named `auto-tzim`, `Cargo.toml` + committed `Cargo.lock` + `rust-toolchain.toml`, `cargo-deny`
-configuration, CI on `ubuntu-latest` and `macos-latest` on the pinned toolchain, and
-3.13, and a `lockfile` job that fails on an unpinned dependency.
+**Scope.** A Rust workspace (D-33) with two crates, `auto-tzim-core` (library) and `auto-tzim` (binary) — the names are
+fixed by D-36 because they are published and a crate name is forever; the `tui` and `qt` crates are *not* created.
+`Cargo.toml` with `[[bin]] name = "auto-tzim"`, committed `Cargo.lock`, `rust-toolchain.toml` pinning the MSRV,
+`deny.toml`, CI on `ubuntu-latest` and `macos-latest` on the pinned toolchain, and a job that fails on an unpinned
+dependency.
 
-**Acceptance.** Clean checkout installs; `--help` and `--version` run on both platforms with exit `0`; an unknown
-command exits `2`; CI green at a recorded head SHA; no behaviour beyond help/version exists yet.
+**Acceptance.** A clean checkout builds and runs; `--help` and `--version` exit `0` on both platforms; an unknown command
+exits `2`; `cargo package` succeeds for both crates (they must be *publishable*, which is a metadata property — actual
+publication is a release action, D-36); `cargo install --path crates/auto-tzim` produces a binary named `auto-tzim`; CI
+green at a recorded head SHA; no behaviour beyond help/version exists yet.
 
-**Tests.** Import smoke; `--help` exit `0`; unknown command exit `2`; unpinned dependency fails CI.
+**Tests.** Build and run smoke on both platforms; `--help` exit `0`; unknown command exit `2`; a dependency without a
+version pin fails CI; the installed binary's name is `auto-tzim` and its `--version` prints one line.
 
 **Out of scope.** Config, discovery, planner, runner, state, scheduler, TUI, Qt, network.
+
+**Brief.** [HANDOFF-AT-01](HANDOFF-AT-01.md) — the six acceptance points, the negative control that is part of the
+deliverable, and the two traps already present in the documents.
 
 ### AT-02 · Config and atomic storage
 
@@ -138,10 +145,11 @@ discriminator; stale-run recovery to `interrupted` and install recovery from the
 malformed JSON is `failed`, never `optimized`; a child that exits `0` after mutating a file is caught; **no `tzim`
 invocation ever receives a path inside the user's folder**; a `SIGKILL` at any journal step leaves the file restorable
 (AC-15); a file changed after planning is never installed over (AC-16); concurrent run exits `8`; no row stays
-`running`; recovery never yields `optimized`; a second run makes zero invocations.
+`running`; recovery never yields `optimized`; a second run makes zero **per-file** spawns, with only the two flag-only
+probes at start.
 
 **Tests.** Cases `R-01`…`R-15`, `M-01`…`M-14` and `L-01`…`L-06` of [FIXTURE-CORPUS.md](FIXTURE-CORPUS.md): each status; exits
-`0/1/2/3/4`; death by signal; truncated JSON; wrong `type`; two summaries; no summary; huge stdout; 10 MiB stderr;
+our exits `0/1/2/3/7/130/143` and a fake `tzim` exit `4` arriving as our `1`; death by signal; truncated JSON; wrong `type`; two summaries; no summary; huge stdout; 10 MiB stderr;
 stdin-blocking child; `SIGTERM`-ignoring child; mutating child; lock held; crash before and after commit; `SIGINT`.
 
 ### AT-06 · CLI and the exit-code contract
@@ -153,7 +161,7 @@ and (in v0.1) `5` unused; fixed preflight order extended with the staging free-s
 
 **Acceptance.** Every code produced by a real invocation, including `6` for no-plan / `pause` / `min_free_bytes` /
 non-TTY `confirm` and `8` for a held lock; `4` and `5` never produced; precedence pairs asserted; a raw `tzim` code never
-becomes `$?`; refusals return `6`, never `0/1/2`; **a declined proposal returns `0` with zero installs** (a refusal by the
+becomes our exit status; refusals return `6`, never `0/1/2`; **a declined proposal returns `0` with zero installs** (a refusal by the
 user is an outcome, not an error); `--json` stdout stays parseable with warnings and the proposal on stderr.
 
 **Tests.** Command × code matrix; precedence matrix; unknown `--status` ⇒ `2`; corrupt state ⇒ `7`; corrupt config ⇒ `2`;
@@ -181,8 +189,8 @@ real suite against a pinned release artifact verified against `SHA256SUMS`, with
 counter; before/after checksums for every non-candidate outcome; the traceability table filled in.
 
 **Acceptance.** T1–T10 green on macOS and Linux against `tzim v0.16.1`; a mismatch fails with the observed JSON attached;
-every skip/refusal/failure has an equal-checksum proof; the counter shows one `--version` and zero path invocations for
-scan/dry-run, ≥1 path invocation for apply; a deliberately broken expectation fails the suite; `docs/testing.md` §6
+every skip/refusal/failure has an equal-checksum proof; the counter shows two flag-only probes and zero path invocations
+for scan/dry-run, and ≥1 path invocation naming a staged copy for apply; a deliberately broken expectation fails the suite; `docs/testing.md` §6
 moves from `planned` to `exists`.
 
 ### AT-09 · Safety documentation and release readiness
@@ -193,7 +201,9 @@ of eligibility or gain.
 
 **Acceptance.** Every documented default equals the schema default by reflection; every documented exit code appears in
 the AC-8 table; the limitations list is complete for the MVP (no undo, no Windows, untested platforms named, apply
-leaves temporary files, no `transforms`, capabilities only as version + binary hash, `skipped_by_tzim` is generic); no
+leaves temporary files only in staging, no `transforms`, capabilities read from the document and recorded as version +
+hash + both schema numbers per D-26, and a `tzim` skip carrying **both** the stable `reason` and the verbatim `note` per
+D-27); no
 document claims `tzim --dry-run` behaviour or predicted savings.
 
 ---

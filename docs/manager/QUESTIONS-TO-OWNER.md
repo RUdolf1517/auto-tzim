@@ -148,8 +148,7 @@ Recommended: **rewritten files only, up to 64 MiB, `null` recorded above the cap
 
 ### Q8 — Test matrix: which macOS, which Linux?
 
-Recommended: `ubuntu-latest` (x86_64) + `macos-latest` (arm64) on the pinned Rust toolchain, plus one job per stage on
-3.12 only. Intel macOS and ARM Linux are documented as untested until someone asks for them. Windows is out of the
+Recommended: `ubuntu-latest` (x86_64) + `macos-latest` (arm64) on the pinned Rust toolchain, plus one job per stage on the pinned toolchain only. Intel macOS and ARM Linux are documented as untested until someone asks for them. Windows is out of the
 MVP (spec §3 is macOS/Linux).
 
 ### Q9 — Where is the canonical copy of the specification?

@@ -5,12 +5,8 @@ files `tzim` is allowed to touch, and records what happened. It contains no code
 replacer: every eligibility, refusal, verification and replacement decision belongs to `tzim`, and `auto-tzim`
 never routes a refused file anywhere else.
 
-> **Status: pre-MVP — documentation only.**
-> There is no package, no CLI, no release and no CI in this repository yet. Nothing here is installable or
-> usable, and no implementation has been assigned. On 2026-10-29 the owner decided that the complete documentation
-> set comes first; the state of every launch precondition is recorded in
-> [docs/manager/PREFLIGHT-2026-10-29.md](docs/manager/PREFLIGHT-2026-10-29.md). This README describes the
-> *contracted* product, not an existing one.
+> **Status: AT-01 skeleton.** Only `--help` and `--version` exist; the product below is not implemented.
+> Build with the pinned Rust toolchain **1.82.0**: `cargo build --workspace`.
 
 ## What it will do (MVP / v0.1)
 

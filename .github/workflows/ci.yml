@@ -1,0 +1,63 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.82.0
+      - run: cargo build --workspace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lock-${{ matrix.os }}
+          path: Cargo.lock
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.82.0
+      - run: cargo test --workspace
+      - name: CLI contract
+        shell: bash
+        run: |
+          cargo build --bin auto-tzim
+          target/debug/auto-tzim --help
+          target/debug/auto-tzim --version
+          for arg in unknown --unknown; do
+            status=0
+            target/debug/auto-tzim "$arg" >stdout.txt 2>stderr.txt || status=$?
+            test "$status" -eq 2
+            test ! -s stdout.txt
+            test -s stderr.txt
+          done
+  deny:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.82.0
+      - uses: EmbarkStudios/cargo-deny-action@v2
+  pinned-dependencies:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/check-pins.py

@@ -1,0 +1,14 @@
+[package]
+name = "auto-tzim"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Companion orchestration tool for tzim"
+repository = "https://github.com/RUdolf1517/auto-tzim"
+
+[[bin]]
+name = "auto-tzim"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "=4.5.20", features = ["derive"] }

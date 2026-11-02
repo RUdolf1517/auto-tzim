@@ -32,9 +32,9 @@ Release notes state: the version, the supported `tzim` versions, the platforms a
 and any change to the network surface.
 
 **Publication order is mandatory.** `auto-tzim` depends on `auto-tzim-core` by version, so the core is published
-**first** and the CLI second. This is not a preference: before the core exists on the registry, `cargo package -p
-auto-tzim` fails with `no matching package named auto-tzim-core found` ([D-39](manager/DECISIONS.md)), which is why the
-pre-publication verification below differs from the release-time one.
+**first** and the CLI second. This is not a preference: before the core exists on the registry, packaging the CLI fails
+with `no matching package named auto-tzim-core found`, which is why packaging is a release step and not a CI gate
+([D-42](manager/DECISIONS.md)).
 
 **Toolchain and MSRV.** The crate declares `rust-version` in both manifests, and it equals the channel pinned in
 `rust-toolchain.toml` at release time — the version CI actually runs, never a guess about what might work. A `cargo install` on a toolchain below it fails in the compiler rather than in the
@@ -43,18 +43,20 @@ product — which is the honest failure, and it is written in the README next to
 (D-36). Tags and artifacts are immutable: a bad artifact is superseded, never silently
 rebuilt under the same tag.
 
-**How packaging is verified before and after publication.** The difference is deliberate and it is recorded rather than
-smoothed over:
+**How packaging is verified.** At release, and only at release
+([D-42](manager/DECISIONS.md)). Nothing in CI runs `cargo package`: in a workspace whose CLI depends on the core by
+version, packaging the CLI fails until the core is on the registry, so a branch gate would be permanently red and
+permanently ignored.
 
-| When | Command | What it proves |
+| When | Step | Proves |
 | --- | --- | --- |
-| any time (core) | `cargo package -p auto-tzim-core` | the tarball builds on its own — the core is a leaf crate |
-| before core is published (CLI) | `cargo package --no-verify -p auto-tzim` **plus** a grep of the normalised manifest in the `.crate` | the tarball is produced and its manifest is registry-correct: `auto-tzim-core` present, `path` removed. It does **not** prove the tarball builds |
-| before core is published (guard) | run `cargo package -p auto-tzim` and assert it fails with the exact message | the failure is *expected*, so a change in it is noticed instead of being confused with a regression |
-| after core is published (CLI) | `cargo package -p auto-tzim` | full verification: the tarball builds against the registry version of the core |
+| every CI run | manifest metadata: `name`, `version`, `edition`, `license`, `description`, `repository`, `rust-version` present in both crates | the crates carry what a registry requires — the part of "publishable" that is true before publication |
+| release, step 1 | `cargo publish -p auto-tzim-core` | the core tarball builds, verifies and uploads |
+| release, step 2 | `cargo package -p auto-tzim` | the CLI tarball builds against the **published** core |
+| release, step 3 | `cargo publish -p auto-tzim` | the CLI uploads; `cargo install auto-tzim` now works |
 
-The guard row is the one that usually rots. A permanently red step is ignored within a week; a step that asserts the red
-is *this* red stays honest, and it flips on the day the core is published — which is the day someone must look at it.
+The order is not negotiable: until the core is on the registry the CLI has nothing to resolve against, and that is
+exactly why a pre-publication packaging check was a bad idea and is gone.
 
 ## 3. Definition of done for a release
 

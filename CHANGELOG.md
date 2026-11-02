@@ -62,6 +62,21 @@ Verified from this session rather than accepted: `pulls/16` answers `mergeable_s
 AT-01 lands CI, required checks come back with the context the workflow actually reports — a check nobody reports protects
 nothing, which is exactly what this rule demonstrated.
 
+### Withdrawn — the packaging gate, and the day it cost
+
+Three review rounds chased a check that cannot pass. `cargo package` does not merely build a tarball: it resolves the
+crate's dependencies **against the registry**, so in a workspace whose CLI depends on an unpublished sibling it fails by
+construction. On Cargo 1.82 `--no-verify` does not help — it skips the build, not the resolution — and the "guard step
+that asserts the expected failure" I invented existed only to be red.
+
+[D-42](docs/manager/DECISIONS.md) withdraws [D-39](docs/manager/DECISIONS.md) and states what should have been obvious:
+**nothing in this project publishes.** Publication is a release action (D-36) and AT-01 needs none of it. "Publishable"
+means the manifests carry what a registry requires — a property, checkable in one line — while packaging itself is
+verified at release, core first, by the owner, once.
+
+Cost, recorded rather than smoothed over: two red CI runs, one useless step, three review rounds, and a week of telling
+people that a check which cannot fail is decoration — before writing one that could only fail.
+
 ### Reviewed — AT-01 round two: four fixed, the red explained, two decisions
 
 [REVIEW-ebfae55](docs/manager/reviews/REVIEW-ebfae55.md). F-01 (fmt + clippy), F-02 (a real integration test), F-04

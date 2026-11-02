@@ -56,6 +56,7 @@ dependencies = [
 name = "auto-tzim"
 version = "0.1.0"
 dependencies = [
+ "auto-tzim-core",
  "clap",
 ]
 

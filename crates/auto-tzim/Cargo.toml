@@ -11,4 +11,5 @@ name = "auto-tzim"
 path = "src/main.rs"
 
 [dependencies]
+auto-tzim-core = { path = "../auto-tzim-core", version = "=0.1.0" }
 clap = { version = "=4.5.20", features = ["derive"] }

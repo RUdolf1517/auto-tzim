@@ -37,8 +37,9 @@ jobs:
         shell: bash
         run: |
           cargo build --locked --bin auto-tzim
-          target/debug/auto-tzim --help
-          target/debug/auto-tzim --version
+          target/debug/auto-tzim --help | tee "$RUNNER_TEMP/help.txt"
+          target/debug/auto-tzim --version | tee "$RUNNER_TEMP/version.txt"
+          python3 -c 'import pathlib, os; p=pathlib.Path(os.environ["RUNNER_TEMP"]); s=(p/"help.txt").read_text() + (p/"version.txt").read_text(); print("::notice title=CLI output::" + s.replace("%", "%25").replace("\n", "%0A"))'
           for arg in unknown --unknown; do
             status=0
             target/debug/auto-tzim "$arg" >stdout.txt 2>stderr.txt || status=$?
@@ -47,6 +48,7 @@ jobs:
             test -s stderr.txt
             printf "argument=%s exit=%s stdout=<empty> stderr:\n" "$arg" "$status"
             cat stderr.txt
+            python3 -c 'import pathlib, sys; s=pathlib.Path("stderr.txt").read_text(); print("::notice title=Unknown argument " + sys.argv[1] + "::exit=2 stdout=<empty> stderr=" + s.replace("%", "%25").replace("\n", "%0A"))' "$arg"
           done
   deny:
     strategy:

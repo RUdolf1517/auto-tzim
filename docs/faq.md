@@ -18,9 +18,10 @@ An `already_optimal`, a refusal and an unsupported format are all normal outcome
 Adding a folder arms a plan; it does not process anything (invariant 1). Run `auto-tzim scan` to see the candidate plan,
 then apply it.
 
-**Why does `run --once` refuse with exit code `6`?**
-Six means "refused before processing": there is no matching plan yet (first run of a folder), a `pause` is active, free
-space is below `min_free_bytes`, or the folder is disabled. Nothing was read for processing and nothing changed.
+**Why does a run refuse with exit code `6`?**
+Six means "refused before processing": a `--plan` you named no longer matches the folder, a `pause` is active, free
+space is below `min_free_bytes`, the folder is disabled — or you asked for a run without `--auto` and there is no terminal
+to confirm on. Nothing was read for processing and nothing changed.
 
 **Does it change files during a preview?**
 No. `scan` (and `run --dry-run`, which is the same operation) never runs `tzim` on a file, never passes `--dry-run`, and

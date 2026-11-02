@@ -6,13 +6,50 @@
 > Related: [config](config.md) · [safety](safety.md) · [state](state.md) · [conflicts between the two specifications](spec/CONFLICTS.md)
 
 ```text
-auto-tzim [OPTIONS] <COMMAND> ...
+auto-tzim <PATH> [OPTIONS]        # the normal use: one folder, one run
+auto-tzim <COMMAND> [OPTIONS]     # management verbs: folder, config, status, history, logs, pause, resume, doctor
 auto-tzim --help
 auto-tzim --version
 ```
 
-`auto-tzim` is a subcommand tool, unlike `tzim`: an orchestrator has several verbs, and a path is an argument to one of
-them. Everything that decides what happens to a file lives in the config or in an explicit flag.
+**The path comes first.** The ordinary invocation names a folder and nothing else:
+
+```sh
+auto-tzim /home/user/downloads --time 24 --auto
+```
+
+That is a complete instruction: *optimise this folder, touch only files that have not changed in 24 hours, and do not
+ask me anything.* No config entry, no subcommand, no second step. `folder add` exists so that a folder can be remembered
+and repeated, not so that it can be used at all ([D-46](manager/DECISIONS.md)).
+
+Disambiguation is mechanical, because a path and a verb start the same way: if the first argument is one of the fixed
+subcommand words — `folder`, `config`, `status`, `history`, `logs`, `pause`, `resume`, `doctor`, `scan`, `run` — it is a
+subcommand; otherwise it is a path, and it must be a directory that exists (anything else is exit `2`).
+
+## 0. The one-shot form
+
+| Invocation | Plan | What it does |
+| --- | --- | --- |
+| `auto-tzim PATH --dry-run` | built, hashed, recorded, printed | nothing else: no `tzim` is started on a file, the folder is not written |
+| `auto-tzim PATH` | built | prints the proposal, asks once on a terminal, installs only on `y` |
+| `auto-tzim PATH --auto` | built inside the run | installs without asking |
+| `auto-tzim PATH --auto --time 24` | built | as above, restricted to files untouched for 24 hours |
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--auto` | off | install without asking (`auto` mode, [D-29](manager/DECISIONS.md)). Without it the run is `confirm` |
+| `--time <HOURS>` | the profile's `min_file_age_seconds` (60 s for a folder that is not in the config) | only files whose last modification is **at least** this old. `0` disables the age filter. Integer, 0–24 000 000 |
+| `--dry-run` | off | plan only. This is **our** flag; `tzim --dry-run` stays forbidden (D-04) |
+| `--name`, `--recursive`, `--formats`, `--exclude` | the profile's values | per-run overrides; they are used for this run and **not** written back to the config |
+| `--plan <ID>` | — | bind this run to an earlier plan record; if the tree no longer matches it, exit `6` before anything is installed |
+
+**A path that is not in the config is allowed and normal.** It is validated exactly as `folder add` would validate it
+(forbidden root, symlink, cloud sync, `AUTO_TZIM_HOME` containment — `config.md` §5), and it is recorded in history
+under its basename. `folder add` is how you stop typing the path, not a prerequisite.
+
+**The plan is always built.** Even with `--auto` there is a plan: a record with an id and a hash over its ordered rows,
+written before the first file is touched. What `--auto` removes is the *conversation*, never the plan — it is what makes
+"the file changed between planning and install" detectable ([AC-16](manager/GATES.md)).
 
 ## 1. Global options
 
@@ -47,6 +84,10 @@ first), each naming the field, the rule and a suggested correction.
 
 ### 2.3 `folder add PATH [--name NAME] [--recursive] [--formats LIST] [--exclude GLOB]...`
 
+**Optional.** Remembering a folder is a convenience, not a prerequisite: `auto-tzim PATH` works on a folder the config has
+never seen ([D-46](manager/DECISIONS.md)). What `add` buys is a stored name and stored defaults, so the path stops being
+retyped.
+
 Validates and canonicalises `PATH`, creates a profile, processes nothing, prints the resulting profile including the
 canonical root. `NAME` defaults to the basename of the canonical root; it is the folder's identifier from then on
 ([config](config.md) §4). Exit `2` for a forbidden, relative, missing or symlinked root, a duplicate root or name, a
@@ -60,7 +101,9 @@ refuses a name another folder already holds. `show` prints the profile plus its 
 the whole result before writing, so a rejected edit leaves the file byte-identical. `remove` deletes the profile and its cached eligibility records — never a user file
 — and prints what was removed.
 
-### 2.5 `scan [--folder NAME]` — the read-only candidate plan
+### 2.5 `scan [PATH | --folder NAME]` — the read-only candidate plan
+
+`auto-tzim PATH --dry-run` is the same thing with the path first; `scan` stays for scripts that prefer a verb.
 
 Builds the plan and **starts no file-processing `tzim`**. Specifically:
 
@@ -75,19 +118,20 @@ Builds the plan and **starts no file-processing `tzim`**. Specifically:
 Each scan stores a plan record with an id and a hash over its ordered rows (D-20). That record is what authorises an
 apply.
 
-### 2.6 `run --once [--plan ID] [--folder ID] [--mode auto|confirm] [--dry-run]`
+### 2.6 `run [PATH | --folder NAME] [--auto | --mode auto|confirm] [--time HOURS] [--plan ID] [--dry-run]`
 
-The only processing entry point in v0.1. `--dry-run` is an alias for `scan`: it produces the read-only plan and processes
-nothing (D-04).
+The processing entry point as a verb; `auto-tzim PATH` is the same run with the path first (§0). `--dry-run` is an alias
+for `scan`: it produces the read-only plan and processes nothing (D-04). `--mode auto` and `--auto` mean the same thing;
+the long form is kept because the mode also appears in the config.
 
 **Two modes, one install path (D-29).** The mode gates exactly one thing: whether a proposal is shown and accepted.
 
-| | `confirm` (default) | `auto` |
+| | `confirm` (default) | `auto` (`--auto`) |
 | --- | --- | --- |
-| Plan | must exist and match: same folder, complete, same plan hash as the tree | computed inside the run |
-| Without a matching plan | exit `6` | not applicable |
+| Plan | built by this run, then shown; the run installs what it showed | built inside the run, never shown |
+| `--plan ID` given | the tree must still match that plan, else exit `6` | same |
 | Approval | proposal on stderr, one line on stdin | none |
-| Without a terminal, or with `--json` | **exit `6`**, nothing processed, message points at `--mode auto` | works |
+| Without a terminal, or with `--json` | **exit `6`**, nothing processed, message points at `--auto` | works |
 
 The proposal is the last moment at which refusing costs nothing, so it is written to be read:
 
@@ -120,13 +164,13 @@ its verified replacement is in place, and prove that every non-candidate file is
 Paused state, whether a run is active (and since when), the last run per folder, the counts of that run, and whether a
 plan is pending (id, age, number of rows).
 
-### 2.8 `history [--folder ID] [--status STATUS] [--limit N]`
+### 2.8 `history [--folder NAME] [--status STATUS] [--limit N]`
 
 Recorded outcomes, newest first, `--limit` default 50. A row shows the relative path, the normalized status, sizes when
 known, the `tzim` version and binary hash, and — for `skipped_by_tzim` and `failed` — the raw `tzim` status, `note` and
 `error` verbatim, plus the stable `reason` code in its own field (D-27). An unknown `--status` value is exit `2`.
 
-### 2.9 `logs [--folder ID] [--limit N]`
+### 2.9 `logs [--folder NAME] [--limit N]`
 
 The structured local log, rendered for humans; with `--json`, the raw JSONL objects.
 
@@ -185,7 +229,7 @@ Rules:
 | `3` | `tzim` absent, unreadable, or outside the adapter contract (`incompatible_tzim`) | `doctor`, `scan`, `run` |
 | `4` | **never produced by `auto-tzim`.** Reserved out of every path so a `tzim` verification failure can never be confused with our lock — the lock is `8` | — |
 | `5` | **reserved, not produced in v0.1** (D-28): it belongs to `update-check`, which ships in v0.2 | — |
-| `6` | refused before processing: no matching plan (first-run gate), `pause`, `min_free_bytes`, disabled folder, whole-run policy refusal | `run --once` |
+| `6` | refused before processing: a stale `--plan`, `pause`, `min_free_bytes`, disabled folder, a `confirm` run with no terminal, whole-run policy refusal | `run --once` |
 | `7` | internal error: unreadable/corrupt state, unexpected exception, child output our guard cannot attribute to a file | any |
 | `8` | another run holds the lock, or the lock cannot be taken | `run --once` |
 | `130` / `143` | interrupted by `SIGINT` / `SIGTERM`; in-flight file and remaining plan recorded `interrupted` | `run --once` |

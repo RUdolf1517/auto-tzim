@@ -14,7 +14,7 @@ path — or the right path at the wrong time — to a program that rewrites file
 | # | Invariant (charter §6, v0.2) | Enforced by | Test |
 | --- | --- | --- | --- |
 | 1 | Nothing processed before the user adds the folder | config gate; empty config ⇒ empty plan | INV-1 |
-| 2 | Before a folder's first apply there must be a **read-only candidate plan**; scan/dry-run runs no file-processing `tzim`, passes no `--dry-run`, writes nothing in the target root; only `tzim --version` and, for identity, `tzim --capabilities` are allowed (D-26) | planner never spawns the runner; runner is reachable only from apply | AC-2, AC-11, AC-12 |
+| 2 | Every run builds a **read-only candidate plan** first — `--auto` removes the question, never the plan ([D-46](manager/DECISIONS.md)); planning runs no file-processing `tzim`, passes no `--dry-run`, writes nothing in the target root; only `tzim --version` and, for identity, `tzim --capabilities` are allowed (D-26) | planner never spawns the runner; runner is reachable only from apply | AC-2, AC-11, AC-12 |
 | 3 | No root/sudo, no hidden background activity | no privileged call; the process ends with the command | INV-3 |
 | 4 | No shell; filenames stay argv data | one `Command::arg` per item, argv arrays only, `--` for leading dashes | INV-4 |
 | 5 | No symlink following, no special files | `lstat`, mode checks, canonical containment | INV-5 |
@@ -52,7 +52,8 @@ dry run during a preview and did not fix an exit code for refusals. Where the tw
    after the process exits.
 4. **Policy.** Format allowlist, `transforms` (must be empty), limits and opt-in gates. Excluded here ⇒ `skipped_policy`
    and no process.
-5. **Plan.** A record with an id and a hash over the ordered rows (D-20). Nothing runs without a matching plan.
+5. **Plan.** A record with an id and a hash over the ordered rows (D-20), built by this run and — in `confirm` mode — shown
+   to the user before anything is installed. A file that no longer matches it is skipped, never overwritten.
 6. **Runner.** `Command::arg` per item, no shell, stdin on `/dev/null`, no PTY, captured output with a size cap, per-file timeout,
    `TERM` then `KILL`.
 7. **State.** One `append_line` per file with identity, argv, binary identity and the raw result, plus the journal for
@@ -90,7 +91,7 @@ A file that fails any layer is finished: no lower layer is tried, no upper layer
 | `tzim` hung | `failed` (`internal`, `timeout`) | `1` | no |
 | `tzim` absent / unreadable / out of contract | run does not start | `3` | no |
 | Another run holds the lock | run does not start | `8` | no |
-| No matching plan (first apply of the folder) | run does not start | `6` | no |
+| `--plan` names a record that no longer matches the folder | run does not start | `6` | no |
 | `pause` active | run does not start | `6` | no |
 | Free space below `min_free_bytes` | run does not start | `6` | no |
 | Corrupt state file (unparseable record, not a truncated tail) | run does not start | `7` | no |

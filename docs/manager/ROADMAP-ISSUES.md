@@ -93,7 +93,7 @@ ids and roots); canonicalisation; forbidden-root, `AUTO_TZIM_HOME` containment (
 `0600`/`0700`; atomic write with `fsync` of file and directory; corrupt config never overwritten; `config validate` and
 `folder add|list|show|edit|enable|disable|remove`.
 
-**Acceptance.** Unknown field ⇒ error naming the field, exit `2`; a folder is identified by its own name ([D-43](DECISIONS.md)); a rejected edit leaves the file byte-identical;
+**Acceptance.** Unknown field ⇒ error naming the field, exit `2`; a folder is identified by its own name ([D-43](DECISIONS.md)); **`config.toml` with zero folders is valid and the program still runs a path given on the command line ([D-46](DECISIONS.md))**; a rejected edit leaves the file byte-identical;
 removal deletes no user file; `AUTO_TZIM_HOME` relocates everything; `transforms` non-empty is rejected (D-05);
 `follow_symlinks = true`, `allow_hard_links = true`, `jobs > 1` and `[folder.schedule]` are rejected with the stage that
 will own them.
@@ -162,12 +162,13 @@ stdin-blocking child; `SIGTERM`-ignoring child; mutating child; lock held; crash
 
 ### AT-06 · CLI and the exit-code contract
 
-**Scope.** Every MVP command with `--json`; **`--mode auto|confirm`** and the proposal gate (D-29), including the
+**Scope.** The path-first one-shot form `auto-tzim PATH [--time HOURS] [--auto]` ([D-46](DECISIONS.md)), every MVP command
+with `--json`; **`--auto` / `--mode auto|confirm`** and the proposal gate (D-29), including the
 fail-closed rules for a missing terminal, `--json`, EOF and a closed stdin; own codes `0/1/2/3/5/6/7/8/130/143` with `4`
 and (in v0.1) `5` unused; fixed preflight order extended with the staging free-space check; precedence
-`130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0`; stdout/stderr separation; first-run gate by plan id and hash.
+`130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0`; stdout/stderr separation; the plan a `confirm` run showed is the plan it executes, and `--plan <ID>` still binds an earlier one.
 
-**Acceptance.** Every code produced by a real invocation, including `6` for no-plan / `pause` / `min_free_bytes` /
+**Acceptance.** Every code produced by a real invocation, including `6` for a stale `--plan` / `pause` / `min_free_bytes` /
 non-TTY `confirm` and `8` for a held lock; `4` and `5` never produced; precedence pairs asserted; a raw `tzim` code never
 becomes our exit status; refusals return `6`, never `0/1/2`; **a declined proposal returns `0` with zero installs** (a refusal by the
 user is an outcome, not an error); `--json` stdout stays parseable with warnings and the proposal on stderr.

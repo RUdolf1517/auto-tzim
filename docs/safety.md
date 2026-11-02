@@ -92,6 +92,7 @@ A file that fails any layer is finished: no lower layer is tried, no upper layer
 | `tzim` absent / unreadable / out of contract | run does not start | `3` | no |
 | Another run holds the lock | run does not start | `8` | no |
 | `--plan` names a record that no longer matches the folder | run does not start | `6` | no |
+| The cooldown window is still running (`--time`, [D-47](manager/DECISIONS.md)) | run does not start; `--force` overrides the clock only | `6` | no |
 | `pause` active | run does not start | `6` | no |
 | Free space below `min_free_bytes` | run does not start | `6` | no |
 | Corrupt state file (unparseable record, not a truncated tail) | run does not start | `7` | no |

@@ -29,6 +29,7 @@ $AUTO_TZIM_HOME/
       <plan_id>.json             # immutable once written
       log.jsonl                  # append-only: plan lifecycle (used / superseded)
     eligibility.jsonl            # append-only cache with periodic compaction
+    last-compression.json        # atomic replace: canonical root → when it was last compressed
     locks/
       run.lock                   # created exclusively; holds pid + start-time discriminator
   logs/
@@ -123,7 +124,30 @@ A plan file is written once and **never modified**; its lifecycle is a row in `l
 what makes D-20's "any difference is exit `6`, never close enough" auditable after the fact: the plan the user approved is
 still on disk, byte for byte, next to the hash it was compared against.
 
-### 3.5 `eligibility.jsonl`
+### 3.5 `last-compression.json` — the cooldown
+
+One small object, atomically replaced, keyed by **canonical root** so that a rename does not hand a folder a second
+compression ([D-47](manager/DECISIONS.md)):
+
+```json
+{"schema": 1,
+ "roots": {
+   "/home/user/downloads": {"at": "2026-11-02T03:00:04.120391Z", "run_id": "01J…", "hours": 24}
+ }}
+```
+
+- **read** during the preflight, before anything is planned;
+- **written** once, right before the first file is staged — a run that crashes still consumed its window, so an hourly
+  cron cannot loop on a folder that keeps failing;
+- **not written** by `--dry-run` (nothing was compressed) and **not written** by a run refused with `6` (nothing started);
+- **`--force`** bypasses the comparison and then rewrites the entry from now.
+
+The file is a cache of a fact that is also derivable from `runs/*/run.json`; if it is missing or unreadable, the tool
+treats the folder as never compressed (a run may happen) and logs the fact, because refusing to work is a worse failure
+than doing the work once more. `hours` records the window the entry was written under, so lowering `--time` from 24 to 6
+takes effect immediately rather than after the old window expires.
+
+### 3.6 `eligibility.jsonl`
 
 The "do not re-examine" cache (D-06), as an append-only log of (identity, `tzim_sha256`, `adapter`, `policy_hash`, verdict,
 `decided_at`). A lookup matches on **all** of those; a stale line simply never matches, which is a cheaper and safer

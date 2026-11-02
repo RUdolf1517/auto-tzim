@@ -49,8 +49,9 @@ stage is judged less on features than on **the five ways it is allowed to refuse
 | `folder remove` | removes the profile and prints what was removed. It never touches a user file, never recurses, and never rewrites history |
 
 **Not in this task, at all:** discovery, the walk, the plan, the `tzim` adapter, the runner, state or history files,
-`--json`, `--mode`, `scan`, `run`, the scheduler, `update-check`, `doctor`, and anything that spawns a process or opens
-a socket. `auto-tzim` remains a program that cannot touch a user file.
+`--json`, `scan`, `run`, `--auto`, `--time`, `--force`, the scheduler, `update-check`, `doctor`, and anything that spawns a
+process or opens a socket. The one-shot form and the cooldown are AT-05 and AT-06 ([D-46](DECISIONS.md), [D-47](DECISIONS.md),
+[D-48](DECISIONS.md)); building them here is scope, and the config file is all this stage needs to be right. `auto-tzim` remains a program that cannot touch a user file.
 
 ## 3. Acceptance points
 

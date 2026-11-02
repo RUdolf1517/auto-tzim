@@ -12,8 +12,9 @@ never routes a refused file anywhere else.
 ## What it will do (MVP / v0.1)
 
 - You name **one narrow folder at a time**, explicitly; nothing is scanned before that.
-- `auto-tzim /home/user/downloads --time 24 --auto` is the whole interface: optimise this folder, only files untouched for
-  24 hours, no questions. Without `--auto` it shows the plan and asks; with `--dry-run` it only plans.
+- `auto-tzim /home/user/downloads --time 24 --auto` is the whole interface: compress this folder at most once every
+  24 hours, and show nothing. Without `--auto` it prints the plan and asks; with `--dry-run` it only plans. `--time` is a
+  cooldown, not a scheduler — nothing in `auto-tzim` runs by itself, so an hourly cron job is safe.
 - The plan is **deterministic and read-only**: which files our policy would hand over, with the exact argv. Planning never
   invokes `tzim` on a file and writes nothing in the folder, and a file that changes between planning and install is
   skipped rather than overwritten.

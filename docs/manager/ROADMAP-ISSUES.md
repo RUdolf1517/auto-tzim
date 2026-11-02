@@ -141,6 +141,9 @@ the source check.
 
 ### AT-05 · JSON runner, state, history and cancellation
 
+> Also owns `state/last-compression.json` and the `--time` cooldown it feeds ([D-47](DECISIONS.md)): consumed when
+> processing starts, keyed by canonical root, never consumed by `--dry-run`.
+
 **Scope.** **Staging and install** (D-29): copy into `AUTO_TZIM_HOME/staging/<run_id>/`, `tzim` runs on the copy,
 journaled install (`rename`-away → `rename`-in → `fsync` → `unlink`), identity re-check immediately before each file;
 per-file subprocess (one `Command::arg` per item, no shell, stdin on `/dev/null`, captured output with a size cap, minimal env, **no PTY**, D-21);
@@ -162,13 +165,13 @@ stdin-blocking child; `SIGTERM`-ignoring child; mutating child; lock held; crash
 
 ### AT-06 · CLI and the exit-code contract
 
-**Scope.** The path-first one-shot form `auto-tzim PATH [--time HOURS] [--auto]` ([D-46](DECISIONS.md)), every MVP command
+**Scope.** The path-first one-shot form `auto-tzim PATH [--time HOURS] [--auto] [--force]` ([D-46](DECISIONS.md), [D-47](DECISIONS.md)), the two visible modes ([D-48](DECISIONS.md): `confirm` prints the plan and asks, `auto` prints nothing), every MVP command
 with `--json`; **`--auto` / `--mode auto|confirm`** and the proposal gate (D-29), including the
 fail-closed rules for a missing terminal, `--json`, EOF and a closed stdin; own codes `0/1/2/3/5/6/7/8/130/143` with `4`
 and (in v0.1) `5` unused; fixed preflight order extended with the staging free-space check; precedence
 `130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0`; stdout/stderr separation; the plan a `confirm` run showed is the plan it executes, and `--plan <ID>` still binds an earlier one.
 
-**Acceptance.** Every code produced by a real invocation, including `6` for a stale `--plan` / `pause` / `min_free_bytes` /
+**Acceptance.** Every code produced by a real invocation, including `6` for the cooldown `too_soon` / a stale `--plan` / `pause` / `min_free_bytes` /
 non-TTY `confirm` and `8` for a held lock; `4` and `5` never produced; precedence pairs asserted; a raw `tzim` code never
 becomes our exit status; refusals return `6`, never `0/1/2`; **a declined proposal returns `0` with zero installs** (a refusal by the
 user is an outcome, not an error); `--json` stdout stays parseable with warnings and the proposal on stderr.

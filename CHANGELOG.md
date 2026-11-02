@@ -75,6 +75,22 @@ built-in list, path comparison only, documented as best-effort, escapable with o
 behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
 ones are resolved). Each would have been baked into stored data by the first commit.
 
+### Changed before the code — `--time` is a cooldown, and `--auto` is silent
+
+Two corrections from the owner, both of which change behaviour rather than wording.
+
+**`--time 24` is an interval, not an age filter** ([D-47](docs/manager/DECISIONS.md)). I had written it as "only files that
+have not changed in 24 hours"; the owner meant *compress this folder once every 24 hours*. A cooldown is the feature that
+makes `0 * * * * auto-tzim /path --time 24 --auto` safe to run hourly, so the flag now does that: keyed by canonical root,
+consumed when processing starts (a crashing run cannot loop), never consumed by `--dry-run`, refused with exit `6`
+\`too_soon\`, and \`--force\` overrides the clock and nothing else. It lives in \`state/last-compression.json\`.
+
+**`--auto` shows nothing** ([D-48](docs/manager/DECISIONS.md)): no plan, no question, one summary line. Without it the plan
+is printed and one answer is required. The plan is still built in both modes, still hashed, still re-checked per file — the
+mode deletes the conversation, not the machinery.
+
+Still not a scheduler: `[folder.schedule]` remains rejected in v0.1 because it describes a daemon, and `auto-tzim` has none.
+
 ### Changed before the code — the path comes first
 
 The owner wrote the CLI he wants in one line and it was not in the specification:

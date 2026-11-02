@@ -63,7 +63,7 @@ Every field is listed; nothing is implicit.
 | `jobs` | integer | `1` | v0.1 accepts only `1`; any other value is rejected with a message that parallel files are a later stage |
 | `min_free_bytes` | integer | `268435456` | checked before the run starts; below it the run refuses with exit `6` ([D-03](manager/DECISIONS.md), AC-11) — the code is no longer pending |
 | `timeout_seconds` | integer | `900` | per file, 1–21600 (D-10) |
-| `[folder.schedule]` | table | — | v0.2; **rejected in v0.1** with a message rather than silently ignored |
+| `[folder.schedule]` | table | — | v0.2; **rejected in v0.1** with a message rather than silently ignored. It describes a *daemon*, which v0.1 does not have; the cooldown that does exist is the `--time` flag on the command line ([D-47](manager/DECISIONS.md)) |
 | `[folder.schedule].enabled` | bool | `false` | manual-only default |
 | `[folder.schedule].interval_minutes` | integer | `60` | — |
 

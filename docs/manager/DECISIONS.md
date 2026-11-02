@@ -56,6 +56,7 @@ invent it; the owner may change it without cost), **superseded**.
 | D-48 | **`--auto` shows nothing at all** — no plan, no question, one summary line; without it the plan is printed and one answer is required | **adopted (owner, 2026-11-02)** — *"пользователь не видит даже плана и не соглашается"* | D-29; owner's answer | AT-06, `cli.md` |
 | D-49 | **Several paths at once**: `auto-tzim PATH [PATH…] [--time H] [--auto]` runs a **batch** — all paths validated before anything, overlapping roots refused, one lock, one run record per folder under a shared `batch_id`, one question in `confirm` | **adopted (owner, 2026-11-02)** — *"можно добавлять несколько путей одновременно"* | `cli.md` §0.2; `state.md` §3.1 | AT-05, AT-06 |
 | D-50 | **The cooldown and the exit code are per folder inside a batch**: a folder still inside its window is skipped and named, the others run; `6` only when *no* folder ran because of the clock | **adopted (owner, 2026-11-02)** | D-19, D-47 | AT-05, AT-06 |
+| D-51 | **A check that reads manifests runs once, on Linux; macOS exists for platform behaviour.** Target shape: `build` (Linux), `test` (Linux + macOS), `deny` (Linux), `pinned-dependencies` (Linux) — 5 jobs, one macOS slot instead of four — plus `concurrency` and `timeout-minutes` | **adopted (owner, 2026-11-02)** — *"пусть кодер решит проблему macos jobs заодно"* | R-27; `ci.yml`; AT-02 | AT-02, every later stage |
 
 ---
 
@@ -1173,3 +1174,60 @@ of the run, recorded in that folder's row. Without this rule the numbers lie in 
 so one folder's clock would mask a failed file in another folder, and a scheduler reading `$status` would see "not now"
 for a run that actually broke something. `6` therefore means exactly what it always meant — *nothing was processed* — and a
 mixed batch is never silent about the skips: they appear in the summary line and in `history`.
+
+## D-51 · The macOS queue: fewer slots, same coverage
+
+**Status: adopted (owner, 2026-11-02).** *"пусть кодер решит проблему macos jobs заодно"* — the coder fixes it as part of
+AT-02. This decision sets what "fixed" means, because the obvious fixes are all wrong.
+
+**The facts, measured today.** Four incidents in one day, and — more useful — the timings on runs that *succeeded*:
+
+| Run | Result | Ubuntu jobs started | macOS jobs started |
+| --- | --- | --- | --- |
+| #25 (`c0c575a`, push) | 8/8 | +3 s | +10 min |
+| #26 (`8bd8f56`, push) | 8/8 | +3 s | +10 min |
+| #29 (`8c162e1`, push) | 8/8 | +3 s | +11 min |
+| PR #30 (`297e32f6`) | 6 green, 2 cancelled | +3 s | **never acquired**, cancelled at 15 min |
+
+So the macOS jobs are not slow; they wait ten minutes for a runner and are killed if the wait passes GitHub's window. The
+queue is the product of **four simultaneous requests for an arm64 macOS runner on every push and every pull request**, and
+two of those four have no business being on macOS at all.
+
+**Decision — the target shape for `ci.yml`:**
+
+| Job | Runs on | Why |
+| --- | --- | --- |
+| `build` | **Linux only** | a macOS `cargo test` compiles the whole workspace anyway, and the `Install CLI` step compiles the binary; a second macOS job proving `cargo build` adds a queue slot, not coverage |
+| `test` | **Linux + macOS** | the one job that tests platform behaviour: fmt, clippy, the workspace tests, the CLI contract, the install. This is the macOS coverage [R-20](RISK-REGISTER.md) requires |
+| `deny` | **Linux only** | it reads manifests, licences and the advisory database. None of those have an operating system |
+| `pinned-dependencies` | **Linux only** | it reads manifests with a Python script. Same argument |
+
+Eight jobs become five, and the demand for the scarce resource drops from four slots to one. Plus two hygiene items that
+cost nothing and remove queue pressure:
+
+- **`concurrency`** with `cancel-in-progress: true`, keyed on workflow + ref: a second push to the same branch cancels the
+  first run instead of leaving it queued behind a runner it will never get.
+- **`timeout-minutes`** on every job, so a wedged job fails in twenty minutes instead of holding a slot for hours.
+
+**What "fixed" does not mean, and these are forbidden:**
+
+| Shortcut | Why it is not a fix |
+| --- | --- |
+| `continue-on-error: true` on macOS | the job would report green while testing nothing; the first real macOS regression ships |
+| `\|\| true`, `set +e`, or a wrapper that swallows the exit code | same thing with more steps |
+| marking a cancelled job as passed | a cancelled job is `not-run`, and `not-run` is never `passed` ([R-27](RISK-REGISTER.md)) |
+| dropping macOS entirely | `cargo install auto-tzim` on a Mac is a supported path; untested platforms are where the bugs live |
+| switching to `macos-15-intel` silently | a different architecture is a different platform. Allowed **only** with measured evidence in the pull request — queue time and a green run on both — and recorded here |
+| a third-party retry action | a new dependency in the trust path for a scheduling problem ([D-38](DECISIONS.md)) |
+
+**Acceptance.** Five consecutive runs — at least two pull requests and two pushes to `main` — with a table of
+`run id · job · queued → started · conclusion`, showing the macOS job acquired within five minutes each time. Acquisition
+failures are reported, not hidden: if macOS still misses the window after the change, that is a measured result, and the
+next step is the platform decision above, not a `continue-on-error`.
+
+**And one unresolved question the coder must answer or escalate.** `gh run rerun 41444874714 --failed` returned *"run
+41444874714 cannot be rerun; its workflow file may be broken"*. The run is a `pull_request` run of `.github/workflows/ci.yml`,
+the branch still exists, and the same command works on a push run. I do not know why, and I am not going to guess in a
+document. The coder either finds the cause with evidence — the API response, the run's `workflow_id`, a reproduction — or
+reports it as unexplained and documents the remedy that does work. What must not happen is a documented "just rerun it" that
+fails when someone tries.

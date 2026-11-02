@@ -75,6 +75,22 @@ built-in list, path comparison only, documented as best-effort, escapable with o
 behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
 ones are resolved). Each would have been baked into stored data by the first commit.
 
+### Planned — the macOS queue, assigned to the coder
+
+Four incidents in one day, and the timings say why: on every green run today the macOS jobs started **10–11 minutes** after
+the run was created while Ubuntu started in **3 seconds**; on PR #30 two of them were never acquired at all and were
+cancelled at fifteen minutes. The jobs are not slow, they are queueing — four simultaneous requests for a scarce arm64
+runner on every push.
+
+[D-51](docs/manager/DECISIONS.md): a check that reads manifests runs once, on Linux, because a licence database has no
+operating system; macOS keeps the job that actually tests the platform. Eight jobs become five and the scarce slot is asked
+for once instead of four times, with `concurrency` to cancel superseded runs and `timeout-minutes` so nothing wedges.
+
+Also written down, because they are the tempting fixes: `continue-on-error`, `|| true`, calling a cancelled job passed, and
+dropping macOS are all forbidden. `macos-15-intel` is allowed only with measured evidence on both architectures. Part B of
+the AT-02 brief carries seven acceptance points, including five consecutive runs with queue times — a workflow change whose
+evidence is "it should be faster now" has not been tested.
+
 ### Changed before the code — several folders in one command
 
 `auto-tzim ~/downloads ~/Pictures/raw ~/tmp/incoming --time 24 --auto` ([D-49](docs/manager/DECISIONS.md)). One command is a

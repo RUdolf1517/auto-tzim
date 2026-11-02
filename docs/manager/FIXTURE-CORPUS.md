@@ -131,7 +131,7 @@ create anything.
 | R-11 | exits `2` on the second file | `failed` (`internal`), run aborted, exit `1` |
 | R-12 | exits `1` on the second file | `failed`, run **continues**, exit `1` |
 | R-13 | dies by signal (`SIGSEGV`) | `failed` (`internal`), exit `1`, no crash of our process |
-| R-14 | never invoked: second run over the unchanged corpus | zero invocations, identical statuses, exit `0` |
+| R-14 | never invoked: second run over the unchanged corpus | zero **per-file** spawns — the two flag-only probes still happen and are counted separately — identical statuses, exit `0` |
 | R-15 | a `failed` file, unchanged, second run | no invocation (invariant 13) |
 
 ## 7. State — locks and recovery (`L-*`, AC-7, INV-19)

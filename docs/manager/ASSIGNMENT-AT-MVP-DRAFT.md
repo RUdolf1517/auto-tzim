@@ -10,11 +10,25 @@
 > enforced. Statements below written against `tzim` 0.14 that assume no capability document, an untyped
 > refusal or an older pin are stale: see the [2026-11-01 audit](../audits/2026-11-01-tzim-v0.16.1.md).
 
-**Status: prepared, not started.** The text below is issued as
-[issue #10](https://github.com/RUdolf1517/auto-tzim/issues/10) and is the single consolidated assignment for the MVP
-(charter §5.1, §11). Starting implementation is blocked by charter §3.2 — the previously assigned `tzim` set is still
-unfinished ([pre-flight P2](PREFLIGHT-2026-10-29.md), blocker B-01 in the issue). Nothing in this document authorises a
-coder to begin before the owner comments "start" on #10.
+**Status: authorised and started, 2026-11-02.** The text below is the single consolidated assignment for the MVP
+(charter §5.1, §11) and is issued as [issue #10](https://github.com/RUdolf1517/auto-tzim/issues/10), which now carries this
+file's current text (verified: one trailing blank line of difference).
+
+Two gates that used to block the start are gone, and the record says how:
+
+- **charter §3.2 / blocker B-01 — cleared 2026-10-30** (the `tzim` set finished; PR #84 merged). The blocker block at the
+  end of this file is kept as history, not as a live gate.
+- **D-25 — satisfied 2026-11-02**: every severity-A finding of the [2026-11-01 audit](../audits/2026-11-01-tzim-v0.16.1.md)
+  is closed and the audit itself is closed with all ten findings mapped.
+
+The start was authorised by the owner on 2026-11-02 ([STATUS-LOG](STATUS-LOG.md)), and the assignment was re-read
+line by line against D-01…D-36 the same day — the twelve discrepancies that read found are listed in
+[READINESS-2026-11-02](READINESS-2026-11-02.md), with what was fixed and what the coder must not follow.
+
+**Start here: AT-01 (#1) only.** It is a skeleton — workspace, two crates, pinned toolchain, CI, `--help`/`--version`,
+unknown command ⇒ `2` — and nothing else. No config, no discovery, no runner. The purpose is to settle the shape and the
+pipelines on a change that cannot damage a user's file, so the first review is about structure and evidence rather than
+about behaviour. AT-02 begins only after AT-01 is reviewed at a final SHA.
 
 Issues in scope: #1, #2, #3, #4, #5, #6, #7, #8, #9. One pull request, commits labelled by issue id.
 
@@ -38,9 +52,11 @@ and the exit-code contract of D-18/D-19 proven by real invocations. No network, 
    `Cargo.lock` committed, `rust-toolchain.toml` pinned, `deny.toml` present, and both crates publishable
    (`cargo install auto-tzim` must work, D-36) (#1).
 2. TOML config v1 with strict validation, canonical roots, forbidden-root / `AUTO_TZIM_HOME` / cloud-sync checks,
-   permissions, atomic write, corrupt-config safety, `config validate` and the `folder` commands — and the **file-based
-   state layer** (D-35): run directories with append-only `files.jsonl`, atomic `run.json` replacement, exclusive-create
-   lock with a start-time discriminator, no C dependency anywhere (#2).
+   permissions, atomic write, corrupt-config safety, `config validate` and the `folder` commands — plus the **three state
+   primitives** of D-35 that everything after this point sits on: `atomic_write` (temp → write → `fsync` → `rename` →
+   `fsync` of the directory), `append_line`, and `create_exclusive` with a start-time discriminator. No C dependency
+   anywhere (#2). The run, plan, journal and history *records* built out of those primitives are #5; #2 owns the machine,
+   #5 owns what it stores.
 3. `lstat` discovery and stability per [`docs/safety.md`](../safety.md) §2, and the candidate plan of D-04 with a plan
    id and a plan hash (D-20) (#3).
 4. Restricted adapter: `tzim --version` **and `tzim --capabilities`**, the accepted window `>=0.16.0, <0.17` with
@@ -88,11 +104,11 @@ not discussed.
 - hostile filenames never interpreted (`$(touch /tmp/pwned)` must not appear); a symlink out of the root aborts; a file
   changed mid-run ends `skipped_unstable`; a blocked stdin is killed by the timeout; a second concurrent run exits `8`
   with nothing processed; malformed JSON never becomes `optimized`; a child that exits `0` after mutating a file is
-  caught by our identity check; `run`/`scan` open no socket; a second run makes no new invocation; no test sleeps for
+  caught by our identity check; `run`/`scan` open no socket; a second run makes no new **per-file** spawn (the two flag-only probes are expected); no test sleeps for
   `min_file_age_seconds`.
 
 **Required raw artifacts:** CI run IDs per platform at the final head with logs; the command/exit-code matrix with raw
-stdout/stderr and `$?`; per-file rows for the fixture corpus including skips and failures; before/after SHA-256 for every
+stdout/stderr and the exit status; per-file rows for the fixture corpus including skips and failures; before/after SHA-256 for every
 corpus file; the invocation counter for every scan and apply case; the pinned artifact's SHA-256 and the matching
 `SHA256SUMS` line; the state files for each recovery scenario; fake-`tzim` invocation logs; `rustc --version` and the pinned
 toolchain,
@@ -144,12 +160,16 @@ Merge/Release performed by coder: no
   kill can therefore leave `.tzim-<pid>-<ns>-<attempt>.tmp` or a staged copy inside `AUTO_TZIM_HOME/staging/<run_id>/`;
   the next start removes them and says so. Nothing of `tzim`'s ever lands in the user's folder.
 
-**Review order:** dependency and safety first — #2 → #3 → #4 → #5 → #6 → #7 → #8 → #9 — against [GATES.md](GATES.md) and
-the source, not against the summary.
+**Review order:** dependency and safety first — #1 → #2 → #3 → #4 → #5 → #6 → #8 → #9, with #7 struck by D-28 — against
+[GATES.md](GATES.md) and the source, not against the summary.
 
 ---
 
-## Blocker B-01 (charter §10 format)
+## Blocker B-01 — cleared 2026-10-30 (kept as the record, charter §10 format)
+
+**Cleared.** `tzim` PR #84 merged on 2026-10-30T14:55:59Z; the upstream tracker has no open pull requests and no open
+issues; v0.16.1 is the current release. Nothing in this block is a live instruction — it is what the start was waiting
+for in October, preserved because a blocker that disappears without a trace teaches nobody anything.
 
 ```text
 Blocker ID: B-01

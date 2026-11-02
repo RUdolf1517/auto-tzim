@@ -36,8 +36,8 @@ Gates: GATES.md (17 acceptance rows, 23 invariants) · Corpus: FIXTURE-CORPUS.md
 
 | Job | Platform | Toolchain | Status | Run id | Head SHA |
 | --- | --- | --- | --- | --- | --- |
-| test | ubuntu-latest | 3.12 | | | |
-| test | macos-latest | 3.12 | | | |
+| test | ubuntu-latest | rust-toolchain.toml (pinned) | | | |
+| test | macos-latest | rust-toolchain.toml (pinned) | | | |
 | … | | | | | |
 
 Skipped / cancelled / neutral jobs: <none | list — each is a failed row>

@@ -675,7 +675,7 @@ need is a second execution model to test), any HTTP crate in v0.1, any crate tha
 
 | Artifact | Crate | Installed by | Contains |
 | --- | --- | --- | --- |
-| `auto-tzim` | `auto-tzim-cli` + `auto-tzim-core` | the release tarball, Homebrew | the CLI, the runner, the state |
+| `auto-tzim` | `auto-tzim` + `auto-tzim-core` | the release tarball, Homebrew, `cargo install` (D-36) | the CLI, the runner, the state |
 | `auto-tzim-tui` | `auto-tzim-tui` + `auto-tzim-core` | optional, from v0.2 | the terminal interface only |
 | `auto-tzim-qt` | `auto-tzim-qt` + `auto-tzim-core` | optional, from v0.4, its own package | the Qt interface only |
 

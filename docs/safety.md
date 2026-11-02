@@ -70,7 +70,7 @@ A file that fails any layer is finished: no lower layer is tried, no upper layer
 | During the apply of one file | another program writes the file while `tzim` works | `tzim` refuses concurrent modification; we re-read identity after exit and record any difference |
 | During an apply, in the directory | `tzim` creates `.tzim-<pid>-<ns>-<attempt>.tmp` and removes it; a hard kill leaves it | documented; never planned; never deleted by us (R-13) |
 | Between exit and state write | our process dies; the run looks unfinished | heartbeat plus one closing transaction; a stale run becomes `interrupted` |
-| During scan/dry-run | *nothing may happen* — this is the invariant that changed in v0.2 | planner cannot reach the runner; invocation counter asserts zero path invocations and an unchanged root (AC-2) |
+| During scan/dry-run | *nothing may happen* — this is the invariant that changed in v0.2 | planner cannot reach the runner; invocation counter asserts two flag-only probes, zero path invocations and an unchanged root (AC-2) |
 | During `update-check` | one request discloses the client IP | one request, one command, documented ([privacy](privacy.md)) |
 | At config write | a crash mid-write truncates the config | temp file + `fsync` + rename + directory `fsync` |
 

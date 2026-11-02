@@ -97,7 +97,7 @@ This is the row a plausible-looking implementation most often gets wrong, so it 
 the summary:
 
 ```sh
-# a) the invocation log must show one --version and zero path invocations for scan
+# a) the invocation log must show two flag-only probes (--version, --capabilities) and zero path invocations for scan
 jq -r 'select(.event=="spawn") | [.argv[1:], .cwd] | @json' < invocation-log.jsonl
 
 # b) the target root must be identical before and after a scan

@@ -62,6 +62,31 @@ Verified from this session rather than accepted: `pulls/16` answers `mergeable_s
 AT-01 lands CI, required checks come back with the context the workflow actually reports — a check nobody reports protects
 nothing, which is exactly what this rule demonstrated.
 
+### Started — the assignment was re-read against every decision first
+
+The owner authorised the start on 2026-11-02. Before any coder was pointed at it, the assignment and AT-01…AT-09 were
+read line by line against D-01…D-36, and the pass found **twelve discrepancies**, five of them severity A — each of the
+kind that would have cost a rewrite rather than a review:
+
+- the status block still said the start was blocked by a gate that closed on 2026-10-30;
+- the **invocation counter contradicted the capability probe** in six documents: D-26 makes a scan spawn `--version` and
+  `--capabilities`, the gates still demanded "exactly one `--version`", and a coder satisfying one row would fail the
+  other. [GATES](docs/manager/GATES.md) AC-2 now defines two buckets — flag-only probes and path invocations — and every
+  other document uses those words;
+- AC-2's positive control implied an apply's path invocations name files in the user's folder, which INV-20 forbids: they
+  name **staged copies**;
+- AT-01 named `auto-tzim-cli` (renamed by D-36) and carried a fragment of the Python text;
+- AT-09's acceptance still described capabilities as "version + binary hash" and `skipped_by_tzim` as generic, both
+  superseded by D-26/D-27.
+
+All twelve are fixed in the repository and listed with their evidence in
+[READINESS-2026-11-02](docs/manager/READINESS-2026-11-02.md). The assignment now says what "AT-01 done" means, and the
+start is scope-limited to that skeleton.
+
+**One thing is still stale and it is the copy a coder reads:** issues #1…#9 have not been edited since 2026-10-29 and
+still describe a Python package, `SQLite state` and a version window starting at `0.13.9`. Issue writes return `403` to
+this session; the regeneration loop is in READINESS §4.
+
 ### Closed — the assignment issue now matches the file
 
 Issue #10 was refreshed on 2026-11-02: `updatedAt` moved off 2026-10-29 for the first time, the body is 171 lines against

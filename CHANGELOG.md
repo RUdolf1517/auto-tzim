@@ -75,6 +75,23 @@ built-in list, path comparison only, documented as best-effort, escapable with o
 behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
 ones are resolved). Each would have been baked into stored data by the first commit.
 
+### Prepared — a full queue for the coder, and the language said once more
+
+The owner asked for maximum work, so the coder now has a schedule instead of one brief: [CODER-QUEUE](docs/manager/CODER-QUEUE.md).
+It opens with the rules that keep getting argued — **it is Rust**, toolchain 1.82.0, no Python in the product
+([D-33](docs/manager/DECISIONS.md), [D-41](docs/manager/DECISIONS.md)), no crate that compiles C or opens a socket — and
+then says how to work: one stage, one pull request, a negative control shown red, no self-merge, never touch the gate
+documents. The queue is AT-02 → AT-03 → AT-04 → AT-05 → AT-06 → AT-08, each gated on the **review saying PASS**, not on a
+merge.
+
+[HANDOFF-AT-03](docs/manager/HANDOFF-AT-03.md) is written and waiting: 13 acceptance points, five negative controls, the
+corpus cases it must satisfy by ID, and one seam worth the whole page — the planner produces `argv` and never runs it, which
+is what keeps AT-04 from becoming a rewrite.
+
+[D-52](docs/manager/DECISIONS.md) answers the four questions AT-03 would otherwise have answered by accident: what a plan id
+is, what exactly gets hashed, in what order, and how deep a walk may go. A plan is an event, so its id is random and its hash
+is content; the hash carries the identity tuple and the argv, and deliberately not the clock, the mode or the id.
+
 ### Planned — the macOS queue, assigned to the coder
 
 Four incidents in one day, and the timings say why: on every green run today the macOS jobs started **10–11 minutes** after

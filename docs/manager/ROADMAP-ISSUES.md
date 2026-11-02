@@ -103,7 +103,10 @@ will own them.
 symlink, inside/containing `AUTO_TZIM_HOME`; atomic write interrupted at write/fsync/rename; corrupt file intact;
 permissions under `umask 000`; read-only directory fails without a partial file.
 
-### AT-03 · Safe discovery, stability and the read-only candidate plan
+### AT-03 · Safe discovery, stability and the read-only candidate plan — **brief ready, queued behind AT-02**
+
+> Coder brief: [HANDOFF-AT-03](HANDOFF-AT-03.md) — 13 acceptance points, five negative controls, and the four numbers that
+> make a plan reproducible ([D-52](DECISIONS.md): id, hash, order, depth). The stage begins when AT-02 is accepted.
 
 **Scope.** `lstat` walk over one approved root; sorted relative POSIX paths; depth limit; hidden files, mount
 boundaries, `exclude_globs`; regular files only; identity `(st_dev, st_ino, size, mtime_ns)`; `st_nlink > 1` ⇒

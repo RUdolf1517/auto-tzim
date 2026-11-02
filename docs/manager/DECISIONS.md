@@ -57,6 +57,7 @@ invent it; the owner may change it without cost), **superseded**.
 | D-49 | **Several paths at once**: `auto-tzim PATH [PATH…] [--time H] [--auto]` runs a **batch** — all paths validated before anything, overlapping roots refused, one lock, one run record per folder under a shared `batch_id`, one question in `confirm` | **adopted (owner, 2026-11-02)** — *"можно добавлять несколько путей одновременно"* | `cli.md` §0.2; `state.md` §3.1 | AT-05, AT-06 |
 | D-50 | **The cooldown and the exit code are per folder inside a batch**: a folder still inside its window is skipped and named, the others run; `6` only when *no* folder ran because of the clock | **adopted (owner, 2026-11-02)** | D-19, D-47 | AT-05, AT-06 |
 | D-51 | **A check that reads manifests runs once, on Linux; macOS exists for platform behaviour.** Target shape: `build` (Linux), `test` (Linux + macOS), `deny` (Linux), `pinned-dependencies` (Linux) — 5 jobs, one macOS slot instead of four — plus `concurrency` and `timeout-minutes` | **adopted (owner, 2026-11-02)** — *"пусть кодер решит проблему macos jobs заодно"* | R-27; `ci.yml`; AT-02 | AT-02, every later stage |
+| D-52 | **The plan is deterministic by construction**: id is 32 hex chars from OS randomness, the hash is SHA-256 over an ordered canonical row list (paths as bytes, argv included, ids and timestamps excluded), discovery is byte-wise sorted, depth is capped at 64 | **adopted (manager default, 2026-11-02)** — AT-03 cannot start without these four numbers | `state.md` §3.4; AC-1; corpus `K-14` | AT-03, AT-05 |
 
 ---
 
@@ -1231,3 +1232,46 @@ the branch still exists, and the same command works on a push run. I do not know
 document. The coder either finds the cause with evidence — the API response, the run's `workflow_id`, a reproduction — or
 reports it as unexplained and documents the remedy that does work. What must not happen is a documented "just rerun it" that
 fails when someone tries.
+
+## D-52 · What makes two plans the same plan
+
+**Status: adopted (manager default, 2026-11-02).** AT-03 has to produce a plan with an id and a hash (D-20) and assert that
+two scans of an unchanged tree are byte-identical (AC-1). Four things were never written down, and all four are the kind a
+coder answers by accident: what an id looks like, what exactly is hashed, in what order, and how deep a walk may go.
+
+| Question | Answer |
+| --- | --- |
+| **Plan id** | 32 lowercase hex characters — 128 bits read from `/dev/urandom` at plan creation. Never derived from the tree, never reused, and not sortable: a plan is an event, not a sequence |
+| **Plan hash** | SHA-256 over the canonical serialisation described below. Excludes the plan id, every timestamp, and the config hash; includes only what a comparison must react to |
+| **Order** | Discovery walks each directory in **byte-wise sorted** order of the entry name, and rows are sorted byte-wise by the relative POSIX path. Not locale, not case-insensitive: two machines must agree on an unchanged tree |
+| **Depth** | **64 levels** below the root. Level 65 is refused with `depth_exceeded`, recorded **once per directory**, not once per file. Corpus `K-14` builds a 65-deep tree and expects exactly this |
+| **Paths** | Relative, POSIX separators, no leading `./`. Kept as bytes (`OsStr`); the row carries `path` (lossy, for display) and `path_raw_b64` (exact — the corpus already names it that way) so a non-UTF-8 name is representable without panicking (corpus `N-17`) |
+| **Excluded names** | `.tzim-<pid>-<nanos>-<attempt>.tmp` — matched as prefix `.tzim-` and suffix `.tmp`, at any depth, **even when** `include_hidden = true` (corpus `K-12`) |
+
+**The canonical row, and why it is exactly this.** One line of JSON per candidate, keys in a fixed order, no whitespace:
+
+```text
+{"path_raw_b64":"<base64 of the relative path bytes>","size":12345,"dev":…,"ino":…,"mtime_ns":…,"argv":["--zopfli","--", "x.png"]}
+```
+
+The hash is taken over the concatenation of those lines, in the sorted order, with `\n` after each — nothing else. So it
+changes when a file is added, removed, renamed, resized, touched, or when the argv a run would use changes; and it does
+**not** change when the plan id, the clock, the mode, the config path or the order of discovery attempts differ.
+
+| In the hash | Deliberately out |
+| --- | --- |
+| relative path bytes, size, `dev`, `ino`, `mtime_ns`, the exact argv | plan id, created-at, run id, mode, config hash, `tzim` version |
+
+**Why the identity tuple is in it.** A file that is touched between plan and install is `skipped_changed` at the per-file
+check (AC-16), but a file that is *replaced* with the same name and size would otherwise leave the plan looking valid. Hashing
+the inode and mtime makes that a hash mismatch, which is exit `6` before anything is installed — the cheapest place to
+refuse.
+
+**Why SHA-256 is written in the core instead of pulled in.** A hash is one of the few things where a hand implementation is
+defensible: it is deterministic, it is compared against published FIPS 180-4 vectors in a test, and it has no key material to
+leak. The alternative is `sha2` and its transitive tree, an allowlist entry and a review, for eighty lines we can test
+exhaustively. The test **must** assert the empty-input and `abc` vectors and a 1 MiB input against a recorded digest; if a
+dependency becomes preferable later, that is a decision, not a refactor.
+
+**Reversal.** If a second hash is ever needed (the eligibility cache, D-06), the same module serves it, and swapping in
+`sha2` is a one-file change behind the same trait.

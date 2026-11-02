@@ -53,6 +53,30 @@ stage is judged less on features than on **the five ways it is allowed to refuse
 process or opens a socket. The one-shot form and the cooldown are AT-05 and AT-06 ([D-46](DECISIONS.md), [D-47](DECISIONS.md),
 [D-48](DECISIONS.md)); building them here is scope, and the config file is all this stage needs to be right. `auto-tzim` remains a program that cannot touch a user file.
 
+## 2b. Part B — the macOS queue (CI, not product code)
+
+The owner asked for this "along the way", and it belongs here because it is small: the four macOS jobs on every push are the
+reason [R-27](RISK-REGISTER.md) exists, and the fix is a dozen lines of `ci.yml`. **The target shape and the forbidden
+shortcuts are [D-51](DECISIONS.md)** — read it before touching the workflow; the reasoning matters more than the YAML.
+
+In one sentence: `build`, `deny` and `pinned-dependencies` read source, manifests and a licence database, none of which has
+an operating system, so they run on Linux only; `test` keeps its macOS slot because that is the job that actually tests the
+platform. Eight jobs become five and the scarce runner is asked for once instead of four times.
+
+| # | Point | Evidence required |
+| --- | --- | --- |
+| B1 | The shape is the one in D-51 | `ci.yml` read against the table: `build` (Linux), `test` (both), `deny` (Linux), `pinned-dependencies` (Linux). Any deviation is a decision, not a preference |
+| B2 | No shortcut was taken | `grep -nE "continue-on-error|\|\| true|set \+e" .github/workflows/ci.yml` prints nothing; no job is marked as tolerated, no step swallows an exit code |
+| B3 | Superseded runs are cancelled | `concurrency` with `cancel-in-progress: true`; evidence: push twice in a row and link **both** runs, showing the first cancelled by the second |
+| B4 | Every job has a bound | `timeout-minutes` on all five jobs |
+| B5 | The macOS job is acquired, repeatedly | five consecutive runs (≥2 PR, ≥2 push) in a table: `run id · job · queued → started · conclusion`. Every macOS job must start within **5 minutes**. If it does not, say so with the numbers — a measured failure is a result, a hidden one is not |
+| B6 | The rerun question is answered or escalated | `gh run rerun <id> --failed` on `41444874714` returns *"cannot be rerun; its workflow file may be broken"*. Find out why with evidence, or report it unexplained and document a remedy that actually works. Do not document "just rerun it" without having rerun it |
+| B7 | macOS coverage is still there | R-20 stands: at least one macOS job, and every report names the platform. This part removes redundant slots, not the platform |
+
+**Part B changes CI, so the pull request is not documentation-only** ([D-37](DECISIONS.md)): it is merged by the owner, not
+by the manager, and the merge waits for the `test (macos-15)` job to have actually run — not for a cancelled one to be
+explained away.
+
 ## 3. Acceptance points
 
 Each needs its evidence in the handoff. `not-run` is not `passed`, and a summary number the reviewer cannot recompute
@@ -113,10 +137,11 @@ reason is the same: a future reader has to be able to tell a live rule from a de
 ## 6. What the pull request must contain
 
 The [handoff block](HANDOFF-TEMPLATE.md) with every line filled, `remaining blocker: none`, and
-`Merge/Release performed by coder: no`. Commits labelled `AT-02: …`, dependencies as their own commits, one pull
+`Merge/Release performed by coder: no`. Part B's five runs go in the same block, under "CI runs and artifacts" — a
+workflow change whose evidence is only "it should be faster now" has not been tested. Commits labelled `AT-02: …`, dependencies as their own commits, one pull
 request. Nothing is published, and no `cargo package` returns to CI ([D-42](DECISIONS.md)).
 
-**Plus one line CI is missing.** [D-42](DECISIONS.md) promised that the manifests' registry metadata would be asserted
+**Plus Part B (§2b) in the same pull request**, and **plus one line CI is missing.** [D-42](DECISIONS.md) promised that the manifests' registry metadata would be asserted
 rather than eyeballed, and it is not: AT-01's fourth acceptance point passed because I read the four manifests, which
 means nothing stops that metadata from being deleted. Add the one-line check — `cargo metadata --no-deps` and an
 assertion on the seven fields for both crates — so the promise becomes a gate. It is two lines and it closes F-18.

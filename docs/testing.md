@@ -96,6 +96,7 @@ For every skip, refusal, unsupported file, failure and dry run:
 | T-CLI-02 | precedence pairs: `130/143 > 7 > 2 > 8 > 3 > 6 > 5 > 1 > 0` | planned |
 | T-CLI-03 | preflight order: pause, disabled folder, cooldown `too_soon`, stale `--plan`, low disk, non-TTY `confirm` ⇒ `6`; held lock ⇒ `8`; bad config ⇒ `2` | planned |
 | T-CLI-04 | cooldown: two runs inside the window ⇒ second exits `6` `too_soon`, processes nothing; `--force` ⇒ both run and the window restarts; `--dry-run` inside the window ⇒ plan printed, window **not** consumed | planned |
+| T-CI-01 | the workflow's job shape matches [D-51](manager/DECISIONS.md): one macOS slot (`test`), manifest checks on Linux, `concurrency` with cancel-in-progress, `timeout-minutes` everywhere, and no `continue-on-error` anywhere | planned |
 | T-CLI-05 | batch: three paths, one invalid ⇒ `2` and **no** folder processed; `a b` where `b` is inside `a` ⇒ `2` `overlapping_roots`; the same path twice ⇒ one record; one folder inside its window ⇒ the others run, exit `0`, the skip named; every folder inside its window ⇒ `6`; `tzim` exit `4` in the second folder ⇒ the third is `interrupted`, not started | planned |
 | T-PLAN-01 | plan hash binding: fabricated id, stale hash, other folder ⇒ `6`; matching plan ⇒ `0` | planned |
 | T-PLAN-02 | scan leaves the target root byte-identical and works without write access; apply is the positive control | planned |

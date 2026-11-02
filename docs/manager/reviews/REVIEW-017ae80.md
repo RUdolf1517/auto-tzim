@@ -70,6 +70,7 @@ second attempt replaced the condition outright and the test went red.
 | F-01…F-14 | — | **closed** — all fixed and verified across the three rounds; F-11 withdrawn with [D-42](../DECISIONS.md) |
 | F-15 | Low, follow-up for AT-02…AT-06 | `disable_help_subcommand = true` stays until subcommands exist; re-check when they do |
 | F-16 | Low, follow-up for AT-08 | the pin checker is Python by [D-41](../DECISIONS.md), with a self-test; fold it into the Rust harness when the harness exists |
+| F-18 | Low, fixed in AT-02's scope | [D-42](../DECISIONS.md) promised that the manifests' registry metadata would be **asserted** — "by the pin checker's companion script, or by `cargo metadata --no-deps` in one line" — and no such step exists in `ci.yml`. Acceptance point 4 passed because I read the four manifests, so nothing prevents the next commit from deleting `repository`. The brief for AT-02 makes the two-line check part of that stage |
 | F-17 | Low, housekeeping | `actions/checkout@v4` still emits a Node.js 20 deprecation warning in every run; harmless now, will break eventually |
 
 None of the three blocks acceptance: they are named so the next stage does not rediscover them.

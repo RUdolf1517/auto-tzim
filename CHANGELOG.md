@@ -62,6 +62,23 @@ Verified from this session rather than accepted: `pulls/16` answers `mergeable_s
 AT-01 lands CI, required checks come back with the context the workflow actually reports — a check nobody reports protects
 nothing, which is exactly what this rule demonstrated.
 
+### Prepared — the brief for AT-02, and three gaps it would have let a coder invent
+
+[HANDOFF-AT-02](docs/manager/HANDOFF-AT-02.md) is written, ready and **not started**: twelve acceptance points, five
+negative controls that have to be shown red on purpose, six traps, and one line of CI that AT-01 promised and never got
+(F-18).
+
+Writing the brief found three questions the documents did not answer, and a coder would have answered them by accident:
+the format of a folder id ([D-43](docs/manager/DECISIONS.md) — a ULID, hand-rolled, because twenty lines beat a
+dependency and sorting beats a UUID), what "known cloud-sync root" actually means ([D-44](docs/manager/DECISIONS.md) — a
+built-in list, path comparison only, documented as best-effort, escapable with one flag), and how a symlinked root
+behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
+ones are resolved). Each would have been baked into stored data by the first commit.
+
+Two documents were also corrected: `config.md` still called the `min_free_bytes` exit code "pending" though D-03 and
+AC-11 had answered it, and `dependencies.md` still said the pin checker had no test — it does, and I had watched it go
+red the same afternoon. The decision index had silently lost six rows; it now has 45 against 45 sections, in order.
+
 ### Accepted — AT-01 passes, and it is the first merge through a real gate
 
 [REVIEW-017ae80](docs/manager/reviews/REVIEW-017ae80.md): **PASS**. Six acceptance points reproduced — the installed

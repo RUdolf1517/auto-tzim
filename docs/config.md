@@ -62,7 +62,7 @@ Every field is listed; nothing is implicit.
 | `exclude_globs` | array of strings | `[".git/**", ".hg/**", ".svn/**"]` | matched against the POSIX relative path; `**` spans directories; no brace expansion, no negation |
 | `min_file_age_seconds` | integer | `60` | 0–86400; a file younger than this is `skipped_unstable` |
 | `jobs` | integer | `1` | v0.1 accepts only `1`; any other value is rejected with a message that parallel files are a later stage |
-| `min_free_bytes` | integer | `268435456` | checked before the run starts; below it the run refuses (exit code pending, see [P-03](manager/problems/P-03-exit-codes.md)) |
+| `min_free_bytes` | integer | `268435456` | checked before the run starts; below it the run refuses with exit `6` ([D-03](manager/DECISIONS.md), AC-11) — the code is no longer pending |
 | `timeout_seconds` | integer | `900` | per file, 1–21600 (D-10) |
 | `[folder.schedule]` | table | — | v0.2; **rejected in v0.1** with a message rather than silently ignored |
 | `[folder.schedule].enabled` | bool | `false` | manual-only default |

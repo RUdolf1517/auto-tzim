@@ -82,7 +82,11 @@ version pin fails CI; the installed binary's name is `auto-tzim` and its `--vers
 **Brief.** [HANDOFF-AT-01](HANDOFF-AT-01.md) — the six acceptance points, the negative control that is part of the
 deliverable, and the two traps already present in the documents.
 
-### AT-02 · Config and atomic storage
+### AT-02 · Config and atomic storage — **brief ready, not started**
+
+> Coder brief: [HANDOFF-AT-02](HANDOFF-AT-02.md) — 12 acceptance points, five negative controls, the F-18 metadata check
+> folded in, and the three decisions the documents were missing (D-43/D-44/D-45). The stage begins when the owner says so
+> in #2.
 
 **Scope.** TOML schema `1`; strict validation (unknown fields, empty/relative roots, NUL, control characters, duplicate
 ids and roots); canonicalisation; forbidden-root, `AUTO_TZIM_HOME` containment (D-08) and cloud-sync checks; permissions

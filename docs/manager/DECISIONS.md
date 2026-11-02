@@ -724,6 +724,31 @@ rules, and the exit code for a corrupt state (`7`). Those were properties of the
 (hundreds of thousands of files in one folder), in which case the answer is still not a C database — it is an index file
 written with the same primitives.
 
+## D-36 · Distribution: `cargo install`, releases and Homebrew
+
+The owner's instruction, 2026-11-01: *`cargo install` is planned; the binary keeps the hyphen.*
+
+| Channel | Artifact | Who builds | What we record |
+| --- | --- | --- | --- |
+| GitHub releases | prebuilt static binaries (`x86_64`/`aarch64`, musl and macOS) + `SHA256SUMS` | our release workflow | the exact artifact hash |
+| `cargo install auto-tzim` | built from source on the user's machine | the user's toolchain | `provenance: "cargo"`, plus the reported version |
+| Homebrew tap | formula over the release tarball | Homebrew | `provenance: "brew"` |
+
+Consequences that had to be written down rather than discovered:
+
+1. **Two crates are published**: `auto-tzim-core` (the library) and `auto-tzim` (the CLI crate, which produces the
+   `auto-tzim` binary). The workspace keeps its `[[bin]]`/package naming so that `cargo install auto-tzim` yields
+   `auto-tzim` and not `auto-tzim-cli` — a published crate name is forever, so it is decided now (this is why the crate
+   was renamed from `auto-tzim-cli`).
+2. **The name keeps its hyphen** in the crate, the binary, the formula and every document. One spelling, everywhere.
+3. **A `cargo install` build is not byte-identical to a release artifact**, and we do not pretend otherwise: same source,
+   same lockfile, different compiler and flags. It passes the same checks (`--version`, `doctor`, adapter probe, smoke
+   run) and its provenance is recorded, so an update can pick the right mechanism.
+4. **`cargo install` needs a toolchain on the user's machine**, with at least the MSRV documented in
+   [releases](../releases.md). A user without one uses the tarball.
+5. **Updating a `cargo`-installed binary is delegated to `cargo`**, because cargo keeps its own bookkeeping in
+   `.crates.toml`: replacing the file behind its back would make `cargo install --list` lie. `cargo install --force
+   auto-tzim --version <v>` recompiles — slower, and true ([update](../update.md) §2.2).
 ## D-37 · Documentation merges do not need a round trip
 
 **Decision (owner, 2026-11-02):** a pull request that touches **only** documentation — no `.rs`, no `Cargo.toml`, no
@@ -750,28 +775,103 @@ explicitly.
 **Reversal:** if a documentation merge is ever found to have carried a substantive change nobody approved, this rule is
 withdrawn the same day and the reason recorded here.
 
-## D-36 · Distribution: `cargo install`, releases and Homebrew
+## D-38 · How "no C, no network" is enforced, now that it is code
 
-The owner's instruction, 2026-11-01: *`cargo install` is planned; the binary keeps the hyphen.*
+**Decision (manager default, 2026-11-02, answering AT-01's third question):** the dependency policy of D-35 is enforced by
+four mechanisms together, and no one of them alone is the gate.
 
-| Channel | Artifact | Who builds | What we record |
-| --- | --- | --- | --- |
-| GitHub releases | prebuilt static binaries (`x86_64`/`aarch64`, musl and macOS) + `SHA256SUMS` | our release workflow | the exact artifact hash |
-| `cargo install auto-tzim` | built from source on the user's machine | the user's toolchain | `provenance: "cargo"`, plus the reported version |
-| Homebrew tap | formula over the release tarball | Homebrew | `provenance: "brew"` |
+| Mechanism | What it catches | What it cannot catch |
+| --- | --- | --- |
+| **exact pins** (`=X.Y.Z`) in every manifest, checked in CI | a range that silently resolves to a new version | a transitive dependency nobody declared |
+| **deny-by-default allowlist** in `deny.toml` | any crate that was never reviewed, including transitive ones | whether the crate is *behaviourally* safe |
+| **explicit deny list** (`cc`, `rusqlite`, `libsqlite3-sys`, `openssl-sys`, `libz-sys`, `reqwest`, `ureq`, `hyper`, `curl`, `tokio`, `mio`, `socket2`) | the named families, with a message that says why | a C or network crate nobody thought of |
+| **review at PR time** — the allowlist entry is a reviewed line | everything above, as long as the review is real | a **feature** flip on an already-allowed crate |
 
-Consequences that had to be written down rather than discovered:
+**Why this is a decision and not an implementation detail.** `cargo-deny` reads manifests, licences and advisory data; it
+cannot tell whether a crate compiles C or opens a socket. So the allowlist is not a classifier — it is a *forcing
+function* for review, and the review is the policy. Saying otherwise would be the same mistake as claiming a green check
+proves a behaviour.
 
-1. **Two crates are published**: `auto-tzim-core` (the library) and `auto-tzim` (the CLI crate, which produces the
-   `auto-tzim` binary). The workspace keeps its `[[bin]]`/package naming so that `cargo install auto-tzim` yields
-   `auto-tzim` and not `auto-tzim-cli` — a published crate name is forever, so it is decided now (this is why the crate
-   was renamed from `auto-tzim-cli`).
-2. **The name keeps its hyphen** in the crate, the binary, the formula and every document. One spelling, everywhere.
-3. **A `cargo install` build is not byte-identical to a release artifact**, and we do not pretend otherwise: same source,
-   same lockfile, different compiler and flags. It passes the same checks (`--version`, `doctor`, adapter probe, smoke
-   run) and its provenance is recorded, so an update can pick the right mechanism.
-4. **`cargo install` needs a toolchain on the user's machine**, with at least the MSRV documented in
-   [releases](../releases.md). A user without one uses the tarball.
-5. **Updating a `cargo`-installed binary is delegated to `cargo`**, because cargo keeps its own bookkeeping in
-   `.crates.toml`: replacing the file behind its back would make `cargo install --list` lie. `cargo install --force
-   auto-tzim --version <v>` recompiles — slower, and true ([update](../update.md) §2.2).
+**Consequences, binding on later issues:**
+
+1. A new dependency is deliberately **two steps** — add it, then add it to the allowlist — and the second step is where a
+   human says yes. That friction is the feature.
+2. A dependency change also gets `cargo tree -e features` in the pull request, because flipping a feature on an allowed
+   crate is the one hole the allowlist has.
+3. `docs/dependencies.md` describes this mechanism, so a contributor knows why their build fails and what to do.
+4. The deny list is a safety net for the obvious families, never the argument. If a crate is not on the list, that is not
+   permission.
+
+**Reversal:** if a C-compiling or socket-opening crate ever reaches `main`, this policy failed, and the failure is recorded
+here with the hole that allowed it — not patched by adding one more name to the deny list.
+
+
+## D-39 · How a package is verified before anything is published
+
+**The problem, stated exactly.** `auto-tzim` depends on `auto-tzim-core` by version (D-36, and F-05 of the first review).
+Cargo strips the `path` when packaging and resolves the dependency from the registry, so before the core exists on
+crates.io, `cargo package -p auto-tzim` fails with:
+
+```text
+error: failed to prepare local package for uploading
+Caused by: no matching package named `auto-tzim-core` found
+  location searched: registry `crates-io`
+```
+
+That is correct behaviour, not a defect. It does mean the acceptance point "both crates are packagable" cannot be
+satisfied in full before the release — and the two ways of forcing it would both be wrong: publishing early is
+irreversible, and dropping the dependency contradicts D-34.
+
+**Decision — four checks, each labelled with what it actually proves:**
+
+| When | Check | Proves |
+| --- | --- | --- |
+| always | `cargo package -p auto-tzim-core` | the core tarball builds on its own; the core is a leaf |
+| always | `cargo package --no-verify -p auto-tzim`, then assert the normalised manifest inside the `.crate` names `auto-tzim-core` and contains no `path` | the tarball is produced and the manifest a user would download is registry-correct — **not** that it builds |
+| always | run `cargo package -p auto-tzim` and assert it fails with the exact message above | the failure is *this* failure. A red step nobody reads is dead within a week; a step that asserts red stays honest and flips on the day the core is published |
+| at release | `cargo package -p auto-tzim` | full verification against the published core |
+
+**Publication order is mandatory:** core first, CLI second, recorded in [releases](../releases.md) §2. A release that
+publishes the CLI first is a release that cannot be installed.
+
+**Reversal:** if cargo gains a way to verify an unpublished sibling dependency offline without a local registry, this
+table shrinks — recorded here with the cargo version that made it possible, not silently relaxed.
+
+## D-40 · The MSRV is the toolchain CI actually runs
+
+**Decision:** `rust-version` is declared in both manifests and equals the channel pinned in `rust-toolchain.toml` — today
+`1.82`, which is what every green job ran on. The number is raised deliberately, with a line here, never as a side effect
+of a dependency bump.
+
+**Why not `tzim`'s 1.88.** I recommended 1.88 in the first review and I withdraw that. `auto-tzim` does not build, link
+or vendor `tzim`; it drives a binary at runtime. Matching `tzim`'s MSRV buys a user nothing and would invalidate every
+piece of green evidence collected on 1.82 — in exchange for a number nobody asked for. What matters is that the declared
+version is the tested one: `cargo install` on an older toolchain must fail in the compiler with a clear refusal, and
+`cargo install` on the declared one must work.
+
+**Why not the true minimum (1.74, given `clap`):** advertising a version CI never runs is a claim without evidence. If
+someone needs an older toolchain, the honest way to learn how far back it works is to add that job and measure.
+
+**Reversal:** an owner decision to support an older toolchain means adding a CI job that builds on it, and then lowering
+the declared number. Not the other way round.
+
+## D-41 · CI-only tooling may be Python; the product may not
+
+**Decision:** scripts that run **only** in CI to judge the repository — today `scripts/check-pins.py` — may be written in
+whatever the runners already provide. The product, the harness and anything a user installs stay Rust (D-33). The line is
+"does this ship, or does it only judge what ships".
+
+**Why it is worth a decision.** [testing-harness](../testing-harness.md) says the project's tooling is a Rust binary, and
+F-06 pointed at the inconsistency. The harness is a different animal: the coder and the reviewer run it on their own
+machines to reproduce a corpus case, so it must work without a language runtime. A pin check runs in CI, reads manifests
+and exits.
+
+**Conditions, all three binding:**
+
+1. The script carries the same standard as code: a **self-test in CI** that asserts it fails on `"*"` and passes on
+   `"=1.2.3"`. A checker with no control is a checker nobody has seen work.
+2. It is named in [dependencies](../dependencies.md) §2a, so nobody has to discover it from a red build.
+3. At AT-08, when the Rust harness exists, folding it in is a roadmap item rather than an ambition. If it is not folded
+   in, this decision is the reason it is allowed to stay.
+
+**Reversal:** anything a user, a packager or a release needs on their own machine may not be Python.

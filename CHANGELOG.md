@@ -62,7 +62,46 @@ Verified from this session rather than accepted: `pulls/16` answers `mergeable_s
 AT-01 lands CI, required checks come back with the context the workflow actually reports — a check nobody reports protects
 nothing, which is exactly what this rule demonstrated.
 
-### Changed — a documentation merge is not a governance event any more
+### Reviewed — AT-01 round two: four fixed, the red explained, two decisions
+
+[REVIEW-ebfae55](docs/manager/reviews/REVIEW-ebfae55.md). F-01 (fmt + clippy), F-02 (a real integration test), F-04
+(actions pinned to full SHAs) and F-05 (the binary now depends on the core and takes its version from it) are fixed and
+verified from the job that ran past them — not from the handoff.
+
+The head is red, and the coder was right not to call it green: `cargo package -p auto-tzim` fails because cargo strips
+the `path` and looks for `auto-tzim-core` on crates.io, where it does not exist yet. That is not a defect, it is the
+dependency D-34 asks for meeting a registry that has nothing in it. [D-39](docs/manager/DECISIONS.md) fixes what the
+accepted evidence is: full verification for the core, `--no-verify` plus an assertion on the packaged manifest for the
+CLI, and a **guard that asserts the expected failure** — because a permanently red step is ignored within a week, while a
+step that asserts red stays honest and flips on the day the core is published.
+
+Two more decisions, both answering questions that were waiting on the manager rather than the owner: [D-40](docs/manager/DECISIONS.md)
+withdraws my own recommendation to match `tzim`'s 1.88 — `auto-tzim` does not build `tzim`, so the MSRV is simply the
+toolchain CI runs — and [D-41](docs/manager/DECISIONS.md) allows CI-only tooling to be Python while the product stays
+Rust, on condition that the pin checker gets a self-test.
+
+### Reviewed — AT-01, six acceptance points pass, ten findings### Reviewed — AT-01, six acceptance points pass, ten findings
+
+First code review of the project: [REVIEW-514b06f](docs/manager/reviews/REVIEW-514b06f.md). The skeleton arrived with
+the six AT-01 points met and verifiable — installed binary named `auto-tzim`, `--help`/`--version` at `0` on both
+platforms, an unknown argument at `2` with an empty stdout, both crates packagable, and a negative control that actually
+goes red (an unpinned dependency failed CI at `7149d7c`; a C dependency failed it at `dcb9190`, rejected by both the
+deny list and the allowlist).
+
+**Verdict: NOT READY**, on ten findings, one High. The High one is that the CI executes `dtolnay/rust-toolchain@master` —
+whatever that branch points at, on every run, with the job's token. In a project that refuses a C library it cannot
+audit, an unpinned action is the same objection with worse consequences. The others are cheap and belong in the skeleton:
+`cargo test` runs **zero tests**; two CI gates promised by `docs/dependencies.md` and `CONTRIBUTING.md` (fmt, clippy) do
+not exist; the MSRV is not declared in any manifest, so `cargo install` users get an opaque error instead of a clean
+refusal, and the chosen `1.82.0` is older than `tzim`'s own `1.88`; and the two crates do not depend on each other, which
+makes "publishable" trivially true today.
+
+Also new: [D-38](docs/manager/DECISIONS.md), because "no C, no network" is now enforced by code and the mechanism needed
+saying — exact pins, a deny-by-default allowlist, an explicit deny list, and review as the only step that can judge a
+crate's behaviour. `cargo-deny` cannot classify C or sockets; the allowlist is a forcing function for review, not a
+classifier.
+
+### Changed — a documentation merge is not a governance event any more### Changed — a documentation merge is not a governance event any more
 
 [D-37](docs/manager/DECISIONS.md): a pull request that touches only Markdown is merged by the manager without a round
 trip, with a STATUS-LOG line like every other merge. The opposite rule made sense while every merge needed `--admin`;

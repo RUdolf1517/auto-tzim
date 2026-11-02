@@ -106,7 +106,13 @@ The negative control is the part that gets skipped, so it is named here: a CI jo
 evidence each needs, and the negative control (an unpinned dependency must turn CI red, with the run ID recorded) as a
 deliverable rather than a footnote. A coder can be pointed at it without reading this file first.
 
-## 7. What this pass did not do
+## 7. The handover channel
+
+The coder is a separate session; the owner is the only channel. [CODER-KICKOFF](CODER-KICKOFF.md) carries the message to
+send it verbatim, the precondition it must check first (the brief has to be on `main`, not on a branch), the three
+possible verdicts and what the owner should and should not forward. A review round is one message and one verdict.
+
+## 8. What this pass did not do
 
 - No code, no `Cargo.toml`, no workflow — the manager does not write product code or CI, ever.
 - No verification of anything at runtime: there is nothing to run.

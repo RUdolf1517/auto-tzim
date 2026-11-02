@@ -18,6 +18,11 @@ jobs:
         with:
           toolchain: 1.82.0
           components: rustfmt, clippy
+      - name: Bootstrap lockfile for AT-02
+        run: |
+          cargo generate-lockfile
+          cargo update -p indexmap --precise 2.7.1
+          python3 -c 'import base64; s=base64.b64encode(open("Cargo.lock", "rb").read()).decode(); [print(f"::notice title=Lockfile{i//2000:03d}::{s[i:i+2000]}") for i in range(0,len(s),2000)]'
       - run: cargo build --workspace --locked
       - name: Check package metadata
         shell: bash

@@ -18,9 +18,9 @@ auto-tzim --version
 auto-tzim /home/user/downloads --time 24 --auto
 ```
 
-That is a complete instruction: *optimise this folder, touch only files that have not changed in 24 hours, and do not
-ask me anything.* No config entry, no subcommand, no second step. `folder add` exists so that a folder can be remembered
-and repeated, not so that it can be used at all ([D-46](manager/DECISIONS.md)).
+That is a complete instruction: *compress this folder at most once every 24 hours, and do not ask me anything.* No config
+entry, no subcommand, no second step. `folder add` exists so that a folder can be remembered and repeated, not so that it
+can be used at all ([D-46](manager/DECISIONS.md)).
 
 Disambiguation is mechanical, because a path and a verb start the same way: if the first argument is one of the fixed
 subcommand words — `folder`, `config`, `status`, `history`, `logs`, `pause`, `resume`, `doctor`, `scan`, `run` — it is a
@@ -28,17 +28,18 @@ subcommand; otherwise it is a path, and it must be a directory that exists (anyt
 
 ## 0. The one-shot form
 
-| Invocation | Plan | What it does |
+| Invocation | What the user sees | What it does |
 | --- | --- | --- |
-| `auto-tzim PATH --dry-run` | built, hashed, recorded, printed | nothing else: no `tzim` is started on a file, the folder is not written |
-| `auto-tzim PATH` | built | prints the proposal, asks once on a terminal, installs only on `y` |
-| `auto-tzim PATH --auto` | built inside the run | installs without asking |
-| `auto-tzim PATH --auto --time 24` | built | as above, restricted to files untouched for 24 hours |
+| `auto-tzim PATH --dry-run` | the plan | nothing else: no `tzim` is started on a file, the folder is not written, the cooldown is not consumed |
+| `auto-tzim PATH` | the plan, then one question | installs only on `y`; anything else — including an empty line, EOF or no terminal — installs nothing |
+| `auto-tzim PATH --auto` | **nothing** — no plan, no question, one summary line | installs every file the plan selected |
+| `auto-tzim PATH --auto --time 24` | nothing until a summary line | as above, but only if the last compression of this folder was **24 hours ago or more**; otherwise it does nothing and exits `6` |
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `--auto` | off | install without asking (`auto` mode, [D-29](manager/DECISIONS.md)). Without it the run is `confirm` |
-| `--time <HOURS>` | the profile's `min_file_age_seconds` (60 s for a folder that is not in the config) | only files whose last modification is **at least** this old. `0` disables the age filter. Integer, 0–24 000 000 |
+| `--auto` | off | `auto` mode ([D-29](manager/DECISIONS.md), [D-48](manager/DECISIONS.md)): the plan is **not shown** and nothing is asked. Without it the run is `confirm`: the plan is shown and one answer is required |
+| `--time <HOURS>` | `0` — every invocation may compress | the **cooldown** ([D-47](manager/DECISIONS.md)): compress this folder at most once in this many hours. `0` disables it. Integer, 0–100 000 |
+| `--force` | off | ignore the cooldown for this run; the cooldown is then restarted from now |
 | `--dry-run` | off | plan only. This is **our** flag; `tzim --dry-run` stays forbidden (D-04) |
 | `--name`, `--recursive`, `--formats`, `--exclude` | the profile's values | per-run overrides; they are used for this run and **not** written back to the config |
 | `--plan <ID>` | — | bind this run to an earlier plan record; if the tree no longer matches it, exit `6` before anything is installed |
@@ -48,8 +49,49 @@ subcommand; otherwise it is a path, and it must be a directory that exists (anyt
 under its basename. `folder add` is how you stop typing the path, not a prerequisite.
 
 **The plan is always built.** Even with `--auto` there is a plan: a record with an id and a hash over its ordered rows,
-written before the first file is touched. What `--auto` removes is the *conversation*, never the plan — it is what makes
-"the file changed between planning and install" detectable ([AC-16](manager/GATES.md)).
+written before the first file is touched. What `--auto` removes is the *conversation* — the plan is not printed and
+nothing is asked — never the plan itself, which is what makes "the file changed between planning and install"
+detectable ([AC-16](manager/GATES.md)).
+
+### 0.1 The cooldown is not a scheduler
+
+`--time 24` does not make anything happen at 3 a.m.; nothing in `auto-tzim` runs by itself, ever ([D-47](manager/DECISIONS.md)).
+It is a **cooldown**: the tool refuses to compress the same folder twice inside the window, so an outside timer can call it
+as often as it likes without consequence.
+
+```sh
+# cron: try every hour; the cooldown decides whether anything happens
+0 * * * *  auto-tzim /home/user/downloads --time 24 --auto
+```
+
+```xml
+<!-- launchd, ~/Library/LaunchAgents/auto-tzim.downloads.plist, start interval 3600 -->
+<key>ProgramArguments</key>
+<array>
+  <string>/usr/local/bin/auto-tzim</string>
+  <string>/home/user/downloads</string>
+  <string>--time</string><string>24</string>
+  <string>--auto</string>
+</array>
+```
+
+| Situation | Result |
+| --- | --- |
+| never compressed, or compressed ≥ 24 h ago | the run proceeds; the window restarts now |
+| compressed 3 hours ago | exit `6`, reason `too_soon`, the next eligible time printed; **nothing is read for processing** |
+| `--force` | proceeds regardless, and the window restarts from now |
+| `--dry-run` | proceeds and prints the plan; the window is **not** consumed, because nothing was compressed |
+| no `--time` | no cooldown at all: every invocation is allowed to compress |
+
+The window is consumed **when processing starts**, not when it ends: a run that crashes half-way still used its window,
+so a cron job cannot loop on a folder that keeps failing. Recovering from that is `--force`, which is a human decision.
+
+The window is keyed by the folder's **canonical root**, not by its name, so renaming a folder does not hand it a second
+compression, and a path typed on the command line shares the window with the same folder added to the config.
+
+**Not the same thing as the age filter.** `min_file_age_seconds` in the config ([config](config.md) §4, default 60) skips
+files that were modified too recently — it protects a download that is still being written. `--time` throttles whole runs.
+Both exist; they are unrelated, and neither implies the other.
 
 ## 1. Global options
 
@@ -118,7 +160,7 @@ Builds the plan and **starts no file-processing `tzim`**. Specifically:
 Each scan stores a plan record with an id and a hash over its ordered rows (D-20). That record is what authorises an
 apply.
 
-### 2.6 `run [PATH | --folder NAME] [--auto | --mode auto|confirm] [--time HOURS] [--plan ID] [--dry-run]`
+### 2.6 `run [PATH | --folder NAME] [--auto | --mode auto|confirm] [--time HOURS] [--force] [--plan ID] [--dry-run]`
 
 The processing entry point as a verb; `auto-tzim PATH` is the same run with the path first (§0). `--dry-run` is an alias
 for `scan`: it produces the read-only plan and processes nothing (D-04). `--mode auto` and `--auto` mean the same thing;
@@ -128,10 +170,12 @@ the long form is kept because the mode also appears in the config.
 
 | | `confirm` (default) | `auto` (`--auto`) |
 | --- | --- | --- |
-| Plan | built by this run, then shown; the run installs what it showed | built inside the run, never shown |
+| Plan | built by this run, then **printed**; the run installs exactly what it printed | built inside the run, never printed ([D-48](manager/DECISIONS.md)) |
 | `--plan ID` given | the tree must still match that plan, else exit `6` | same |
 | Approval | proposal on stderr, one line on stdin | none |
+| Output | proposal, progress on a terminal, summary | **one** summary line, and the exit code |
 | Without a terminal, or with `--json` | **exit `6`**, nothing processed, message points at `--auto` | works |
+| Cooldown (`--time`) | checked in both modes | checked in both modes |
 
 The proposal is the last moment at which refusing costs nothing, so it is written to be read:
 
@@ -229,7 +273,7 @@ Rules:
 | `3` | `tzim` absent, unreadable, or outside the adapter contract (`incompatible_tzim`) | `doctor`, `scan`, `run` |
 | `4` | **never produced by `auto-tzim`.** Reserved out of every path so a `tzim` verification failure can never be confused with our lock — the lock is `8` | — |
 | `5` | **reserved, not produced in v0.1** (D-28): it belongs to `update-check`, which ships in v0.2 | — |
-| `6` | refused before processing: a stale `--plan`, `pause`, `min_free_bytes`, disabled folder, a `confirm` run with no terminal, whole-run policy refusal | `run --once` |
+| `6` | refused before processing: the cooldown is still running, a stale `--plan`, `pause`, `min_free_bytes`, disabled folder, a `confirm` run with no terminal, whole-run policy refusal | `run --once` |
 | `7` | internal error: unreadable/corrupt state, unexpected exception, child output our guard cannot attribute to a file | any |
 | `8` | another run holds the lock, or the lock cannot be taken | `run --once` |
 | `130` / `143` | interrupted by `SIGINT` / `SIGTERM`; in-flight file and remaining plan recorded `interrupted` | `run --once` |
@@ -270,11 +314,16 @@ notes.txt        skip  unsupported format        ← known only after an apply, 
 
 Deliberate choices, recorded so they are not "fixed" later:
 
-- **No `--force`** and no "ignore errors": a refusal is information; the way to change eligibility is the folder policy.
+- **`--force` overrides exactly one thing: the clock.** It does not override `pause`, a forbidden root, the lock, a
+  missing `tzim` or any refusal that protects a file — those are not schedules, they are safety. There is still no
+  "ignore errors": a refusal is information, and the way to change eligibility is the folder policy.
 - **One prompt, and only one.** The `confirm` approval gate (D-29) is the product's single interaction: one line on
   stderr, one line on stdin, `n` by default, refused when stdin is not a terminal. There is no `--yes` to skip it — the way
-  to run unattended is `--mode auto`, which is a different mode with the same install path, not a silenced prompt. No
-  pager, no TUI, no PTY anywhere.
+  to run unattended is `--auto`, which is a different mode with the same install path, not a silenced prompt. No pager, no
+  TUI, no PTY anywhere.
+- **`--auto` says nothing.** No plan, no per-file lines, no question: one summary line and the exit code
+  ([D-48](manager/DECISIONS.md)). A user who wants to see what happened reads `history`, or omits `--auto` and answers the
+  question. `--quiet` suppresses even the summary.
 - **No `--jobs` in v0.1**: it exists in the config for v0.2 and is rejected today.
 - **`-` is not stdin**: the program acts on files it must be able to re-read.
 - **No glob patterns on the command line**: `exclude_globs` in the config is the only pattern language.

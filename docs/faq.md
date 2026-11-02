@@ -19,9 +19,18 @@ Adding a folder arms a plan; it does not process anything (invariant 1). Run `au
 then apply it.
 
 **Why does a run refuse with exit code `6`?**
-Six means "refused before processing": a `--plan` you named no longer matches the folder, a `pause` is active, free
-space is below `min_free_bytes`, the folder is disabled — or you asked for a run without `--auto` and there is no terminal
-to confirm on. Nothing was read for processing and nothing changed.
+Six means "refused before processing": the folder was already compressed inside its `--time` window, a `--plan` you named
+no longer matches the folder, a `pause` is active, free space is below `min_free_bytes`, the folder is disabled — or you
+asked for a run without `--auto` and there is no terminal to confirm on. Nothing was read for processing and nothing
+changed. To compress now regardless of the clock, add `--force`.
+
+**What does `--time 24` do?**
+It is a cooldown, not a schedule: the same folder is compressed at most once every 24 hours, so an hourly cron job is
+harmless. Nothing runs by itself — `auto-tzim` has no daemon ([D-47](manager/DECISIONS.md)).
+
+**What does `--auto` change?**
+Only what you see: with it, there is no plan and no question, just one summary line. The plan is still built and every file
+is still re-checked before it is replaced ([D-48](manager/DECISIONS.md)).
 
 **Does it change files during a preview?**
 No. `scan` (and `run --dry-run`, which is the same operation) never runs `tzim` on a file, never passes `--dry-run`, and

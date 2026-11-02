@@ -52,6 +52,8 @@ invent it; the owner may change it without cost), **superseded**.
 | D-44 | The cloud-sync check is a **built-in list of well-known sync directories**, matched on the canonical path; such a folder is **rejected**, best-effort, bypassable only by the documented `allow_cloud_sync = true` | **adopted (owner, 2026-11-02)** | `config.md` §5 `cloud_sync_root`; charter §6-8 | AT-02 |
 | D-45 | A root that is **itself a symlink is rejected**; intermediate components are resolved and the canonical path is stored, so `/tmp/x` on macOS is recorded as `/private/tmp/x` | **adopted (owner, 2026-11-02)** | `config.md` §5 `root_is_symlink`; D-08 | AT-02, AT-03 |
 | D-46 | **The path comes first**: `auto-tzim PATH [--time HOURS] [--auto]` is one complete instruction; the plan is still always built, and `folder add` is a convenience, not a prerequisite | **adopted (owner, 2026-11-02)** | owner's CLI sketch; `cli.md` §0 | AT-02, AT-03, AT-05, AT-06, `README`, `cli.md` |
+| D-47 | **`--time <HOURS>` is a cooldown, not a schedule and not an age filter**: compress the same folder at most once in that window, keyed by canonical root, consumed when processing starts, overridable with `--force`, refused with exit `6` `too_soon` | **adopted (owner, 2026-11-02)** — *"раз в 24 часа производится сжатие"* | owner's CLI sketch; `cli.md` §0.1 | AT-05, AT-06, `state.md` |
+| D-48 | **`--auto` shows nothing at all** — no plan, no question, one summary line; without it the plan is printed and one answer is required | **adopted (owner, 2026-11-02)** — *"пользователь не видит даже плана и не соглашается"* | D-29; owner's answer | AT-06, `cli.md` |
 
 ---
 
@@ -1052,3 +1054,64 @@ will type, and everything else in that page is what the one-shot form is made of
 
 **Reversal:** if the owner ever wants the two-step flow back, `--plan` already carries it; the cost is one paragraph of
 documentation, not a redesign.
+
+## D-47 · `--time 24` is a cooldown, not a schedule
+
+**Status: adopted (owner, 2026-11-02).** The owner's words: *"--time 24 это раз в 24 часа производится сжатие"* — the
+compression happens once every 24 hours. My first reading was wrong: I wrote it as an age filter ("only files that have
+not changed in 24 hours"), which is a different feature — it protects an in-progress download rather than throttling the
+tool. The owner's reading is the one that matches `auto-tzim /home/user/downloads --time 24 --auto`, because a cooldown is
+what makes an hourly cron invocation harmless.
+
+**Decision.**
+
+| Question | Answer |
+| --- | --- |
+| What is measured | the interval since this folder's last compression, keyed by **canonical root** |
+| Where it is kept | `state/last-compression.json`, atomic replace ([state](../state.md) §3.5) |
+| When the window is consumed | when processing starts — not when it ends, not on `--dry-run`, not on a run refused with `6` |
+| Too soon | exit `6`, reason `too_soon`, the next eligible time printed; nothing is read for processing |
+| Escape hatch | `--force`, which bypasses the comparison and restarts the window from now |
+| Default | `--time 0`: no cooldown. A manual run does what it says |
+| Nothing runs by itself | there is no daemon, no timer, no scheduler in v0.1; the cooldown only constrains an invocation that happens |
+
+**Why "consumed when processing starts" and not on success.** A folder whose compression keeps crashing would otherwise be
+retried hourly forever by whatever timer calls it, and the log would fill with identical failures. Consuming the window
+turns "something is wrong" into one failure per day plus a `--force` for the human who wants to retry immediately. That is
+the right trade for a tool meant to be called by cron.
+
+**Why keyed by canonical root.** The name is the user-facing handle ([D-43](DECISIONS.md)), and names are meant to be
+changed. Keying the clock on the name would hand a folder a fresh window every time it was renamed — a loophole with no
+upside — and a folder run from the command line (which may have no name at all) would not share the window with the same
+folder added to the config.
+
+**This is not the `[folder.schedule]` feature.** That table stays rejected in v0.1 with `not_in_v01`, because it describes
+a *daemon*: the tool deciding on its own when to run. `--time` is the opposite — a limit on calls the user's own timer
+makes. Both can exist later; only the second exists now, and `config.md` says so rather than leaving a coder to guess.
+
+**Reversal:** if a real scheduler arrives in v0.2, `--time` keeps its meaning and the daemon uses the same file. Nothing
+about this decision is wasted by that.
+
+## D-48 · `--auto` is silent
+
+**Status: adopted (owner, 2026-11-02).** The owner's words: *"--auto означает что пользователь не видит даже плана и не
+соглашается; без пользователя покажется план и он соглашается/отказывается"*. Two modes, and the difference is exactly
+what the user sees:
+
+| | `confirm` — `auto-tzim PATH` | `auto` — `auto-tzim PATH --auto` |
+| --- | --- | --- |
+| The plan | printed, in full: every file, every size, the total | not printed |
+| The question | one line on stdin; `n` by default; no terminal ⇒ exit `6` | none |
+| Per-file output | progress only on a terminal | none |
+| The end | the run summary | **one** summary line, and the exit code |
+| `--json` | NDJSON on stdout, proposal on stderr | NDJSON on stdout, nothing else |
+
+**What stays identical, and it is the whole point of [D-29](DECISIONS.md).** One install path, one plan, one set of safety
+checks: the plan is still built, hashed and recorded before the first file is touched, every file is re-checked against it
+immediately before install, and `tzim` still runs on a staged copy. `--auto` deletes the *conversation*, not the
+machinery; a bug in `auto` is a bug in `confirm` too, which is what makes one test suite cover both.
+
+**Why silence is the right default for `auto`.** It exists for an unattended caller — cron, launchd, a scheduler the user
+writes themselves — where a plan printed into a log every hour is noise that hides the one line that mattered. A user who
+wants to see the plan runs the command without `--auto`; that is one keystroke, and it is the mode whose whole purpose is
+to be read.

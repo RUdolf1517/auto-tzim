@@ -132,9 +132,12 @@ statement of what has been tested.
 
 ## 8a. A run refused before it started (`6`)
 
-What you will see: exit **`6`** with a reason: the folder changed after the `--plan` you named was made, `pause` is
-active, free space is below `min_free_bytes`, the folder is disabled, or a `confirm` run was started without a terminal to
-answer on.
+What you will see: exit **`6`** with a reason: this folder was compressed less than `--time` hours ago (`too_soon`, with
+the next eligible time printed), the folder changed after the `--plan` you named was made, `pause` is active, free space is
+below `min_free_bytes`, the folder is disabled, or a `confirm` run was started without a terminal to answer on.
+
+What to do about `too_soon`: nothing, usually — that is the cooldown doing its job. To compress now, re-run with `--force`;
+the window then restarts from that moment.
 
 What it means: nothing was read for processing and nothing changed. Not an error and not a success — a scheduler must
 read it as "not now", never as "done".

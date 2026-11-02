@@ -75,6 +75,20 @@ built-in list, path comparison only, documented as best-effort, escapable with o
 behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
 ones are resolved). Each would have been baked into stored data by the first commit.
 
+### Changed before the code — several folders in one command
+
+`auto-tzim ~/downloads ~/Pictures/raw ~/tmp/incoming --time 24 --auto` ([D-49](docs/manager/DECISIONS.md)). One command is a
+**batch**, and a single-path tool never has to answer the six questions a batch does — so they are answered here rather
+than invented in a `for` loop: one bad path means **nothing is processed anywhere** (`2`, fail closed); a path inside
+another path of the same batch is refused (`overlapping_roots`, or a file is planned twice); the same path twice is
+de-duplicated; the lock is taken once; each folder gets its **own** run record under a shared `batch_id`, because
+"last run of this folder" must not become a scan over a multi-folder blob; and `confirm` still asks **once**, for all of it.
+
+Inside a batch, the clock and the exit code are per folder ([D-50](docs/manager/DECISIONS.md)): a folder still inside its
+`--time` window is skipped and named while the others proceed, and `6` now means exactly "no folder ran". That refinement
+is written down because `6` outranks `1` — without it, one folder's clock would hide a failed file in another folder and
+hand a scheduler the wrong answer.
+
 ### Changed before the code — `--time` is a cooldown, and `--auto` is silent
 
 Two corrections from the owner, both of which change behaviour rather than wording.

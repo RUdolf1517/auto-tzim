@@ -52,6 +52,22 @@ line rather than an accident of installation.
 `cargo test` is the runner; `cargo fmt --check`, `clippy -D warnings` and `cargo deny check` are CI gates. Nothing in this
 list ships in the binary.
 
+## 2a. How a dependency gets admitted
+
+Four mechanisms, and the review is the one that matters ([D-38](manager/DECISIONS.md)):
+
+1. **exact pins** — every declared version is `=X.Y.Z`; a range fails a CI job (`scripts/check-pins.py`, or whatever
+   replaces it), because a range resolves to something nobody chose;
+2. **deny-by-default allowlist** in `deny.toml` — a crate that is not listed fails the build, transitive ones included;
+3. **explicit deny list** — `cc`, `rusqlite`, `libsqlite3-sys`, `openssl-sys`, `libz-sys` and the network families, with a
+   message that says why;
+4. **review** — adding the allowlist entry is the human step, and it is the only thing that can tell whether a crate
+   compiles C or opens a socket. `cargo-deny` reads manifests and licences; it does not read behaviour.
+
+So a new dependency is deliberately **two commits**: the dependency, then the allowlist entry. A dependency change should
+also carry `cargo tree -e features`, because enabling a feature on an already-allowed crate is the one hole the allowlist
+does not see.
+
 **The harness is part of the workspace**, not an external tool ([testing-harness](testing-harness.md)): the fake `tzim`,
 the case runner and the pinned-binary fetcher are one `auto-tzim-harness` binary, so `run-case <ID>` is a command anyone can
 reproduce without installing a language runtime.

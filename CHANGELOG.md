@@ -62,7 +62,28 @@ Verified from this session rather than accepted: `pulls/16` answers `mergeable_s
 AT-01 lands CI, required checks come back with the context the workflow actually reports — a check nobody reports protects
 nothing, which is exactly what this rule demonstrated.
 
-### Changed — a documentation merge is not a governance event any more
+### Reviewed — AT-01, six acceptance points pass, ten findings
+
+First code review of the project: [REVIEW-514b06f](docs/manager/reviews/REVIEW-514b06f.md). The skeleton arrived with
+the six AT-01 points met and verifiable — installed binary named `auto-tzim`, `--help`/`--version` at `0` on both
+platforms, an unknown argument at `2` with an empty stdout, both crates packagable, and a negative control that actually
+goes red (an unpinned dependency failed CI at `7149d7c`; a C dependency failed it at `dcb9190`, rejected by both the
+deny list and the allowlist).
+
+**Verdict: NOT READY**, on ten findings, one High. The High one is that the CI executes `dtolnay/rust-toolchain@master` —
+whatever that branch points at, on every run, with the job's token. In a project that refuses a C library it cannot
+audit, an unpinned action is the same objection with worse consequences. The others are cheap and belong in the skeleton:
+`cargo test` runs **zero tests**; two CI gates promised by `docs/dependencies.md` and `CONTRIBUTING.md` (fmt, clippy) do
+not exist; the MSRV is not declared in any manifest, so `cargo install` users get an opaque error instead of a clean
+refusal, and the chosen `1.82.0` is older than `tzim`'s own `1.88`; and the two crates do not depend on each other, which
+makes "publishable" trivially true today.
+
+Also new: [D-38](docs/manager/DECISIONS.md), because "no C, no network" is now enforced by code and the mechanism needed
+saying — exact pins, a deny-by-default allowlist, an explicit deny list, and review as the only step that can judge a
+crate's behaviour. `cargo-deny` cannot classify C or sockets; the allowlist is a forcing function for review, not a
+classifier.
+
+### Changed — a documentation merge is not a governance event any more### Changed — a documentation merge is not a governance event any more
 
 [D-37](docs/manager/DECISIONS.md): a pull request that touches only Markdown is merged by the manager without a round
 trip, with a STATUS-LOG line like every other merge. The opposite rule made sense while every merge needed `--admin`;

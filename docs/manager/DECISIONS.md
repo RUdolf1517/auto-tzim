@@ -724,6 +724,36 @@ rules, and the exit code for a corrupt state (`7`). Those were properties of the
 (hundreds of thousands of files in one folder), in which case the answer is still not a C database — it is an index file
 written with the same primitives.
 
+## D-38 · How "no C, no network" is enforced, now that it is code
+
+**Decision (manager default, 2026-11-02, answering AT-01's third question):** the dependency policy of D-35 is enforced by
+four mechanisms together, and no one of them alone is the gate.
+
+| Mechanism | What it catches | What it cannot catch |
+| --- | --- | --- |
+| **exact pins** (`=X.Y.Z`) in every manifest, checked in CI | a range that silently resolves to a new version | a transitive dependency nobody declared |
+| **deny-by-default allowlist** in `deny.toml` | any crate that was never reviewed, including transitive ones | whether the crate is *behaviourally* safe |
+| **explicit deny list** (`cc`, `rusqlite`, `libsqlite3-sys`, `openssl-sys`, `libz-sys`, `reqwest`, `ureq`, `hyper`, `curl`, `tokio`, `mio`, `socket2`) | the named families, with a message that says why | a C or network crate nobody thought of |
+| **review at PR time** — the allowlist entry is a reviewed line | everything above, as long as the review is real | a **feature** flip on an already-allowed crate |
+
+**Why this is a decision and not an implementation detail.** `cargo-deny` reads manifests, licences and advisory data; it
+cannot tell whether a crate compiles C or opens a socket. So the allowlist is not a classifier — it is a *forcing
+function* for review, and the review is the policy. Saying otherwise would be the same mistake as claiming a green check
+proves a behaviour.
+
+**Consequences, binding on later issues:**
+
+1. A new dependency is deliberately **two steps** — add it, then add it to the allowlist — and the second step is where a
+   human says yes. That friction is the feature.
+2. A dependency change also gets `cargo tree -e features` in the pull request, because flipping a feature on an allowed
+   crate is the one hole the allowlist has.
+3. `docs/dependencies.md` describes this mechanism, so a contributor knows why their build fails and what to do.
+4. The deny list is a safety net for the obvious families, never the argument. If a crate is not on the list, that is not
+   permission.
+
+**Reversal:** if a C-compiling or socket-opening crate ever reaches `main`, this policy failed, and the failure is recorded
+here with the hole that allowed it — not patched by adding one more name to the deny list.
+
 ## D-37 · Documentation merges do not need a round trip
 
 **Decision (owner, 2026-11-02):** a pull request that touches **only** documentation — no `.rs`, no `Cargo.toml`, no

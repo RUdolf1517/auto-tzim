@@ -1206,8 +1206,12 @@ two of those four have no business being on macOS at all.
 Eight jobs become five, and the demand for the scarce resource drops from four slots to one. Plus two hygiene items that
 cost nothing and remove queue pressure:
 
-- **`concurrency`** with `cancel-in-progress: true`, keyed on workflow + ref: a second push to the same branch cancels the
-  first run instead of leaving it queued behind a runner it will never get.
+- **`concurrency`** keyed on workflow + ref, so a superseded pull-request run is cancelled instead of queueing — **but not
+  on `main`**. Amended 2026-11-02 after reading the first implementation: with `cancel-in-progress: true` applied to every
+  event, two commits landing on `main` within a couple of minutes leave the first commit with a **cancelled** run and no
+  green one — the exact state [D-24](DECISIONS.md) and [R-27](RISK-REGISTER.md) say must never be assumed to be passed. The
+  condition is `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`: superseded PR runs die, every commit on
+  `main` gets its own completed run.
 - **`timeout-minutes`** on every job, so a wedged job fails in twenty minutes instead of holding a slot for hours.
 
 **What "fixed" does not mean, and these are forbidden:**
@@ -1215,23 +1219,42 @@ cost nothing and remove queue pressure:
 | Shortcut | Why it is not a fix |
 | --- | --- |
 | `continue-on-error: true` on macOS | the job would report green while testing nothing; the first real macOS regression ships |
-| `\|\| true`, `set +e`, or a wrapper that swallows the exit code | same thing with more steps |
+| `\|\| true`, or a wrapper that swallows the exit code | same thing with more steps |
+| `set +e` **used to capture output and then `exit $status`** | *not* a shortcut — amended 2026-11-02, because saying otherwise cost a working diagnostic. The `cargo deny` step captured its output, emitted an annotation with it, and re-exited with the real status. My acceptance line ("`set +e` must not appear") could not tell that apart from swallowing, so the step was removed — and with it the annotation that made a `cargo deny` failure readable. It is restored, and the rule is restated behaviourally: **no step may end with a zero exit when the command it ran failed** |
 | marking a cancelled job as passed | a cancelled job is `not-run`, and `not-run` is never `passed` ([R-27](RISK-REGISTER.md)) |
 | dropping macOS entirely | `cargo install auto-tzim` on a Mac is a supported path; untested platforms are where the bugs live |
 | switching to `macos-15-intel` silently | a different architecture is a different platform. Allowed **only** with measured evidence in the pull request — queue time and a green run on both — and recorded here |
 | a third-party retry action | a new dependency in the trust path for a scheduling problem ([D-38](DECISIONS.md)) |
 
-**Acceptance.** Five consecutive runs — at least two pull requests and two pushes to `main` — with a table of
-`run id · job · queued → started · conclusion`, showing the macOS job acquired within five minutes each time. Acquisition
-failures are reported, not hidden: if macOS still misses the window after the change, that is a measured result, and the
-next step is the platform decision above, not a `continue-on-error`.
+**Acceptance — amended 2026-11-02, because the original was unsatisfiable.** It demanded *two pushes to `main`* before the
+merge that creates `main` pushes, which the coder correctly refused to fake by pushing to `main` or by merging a draft. The
+split is now:
 
-**And one unresolved question the coder must answer or escalate.** `gh run rerun 41444874714 --failed` returned *"run
-41444874714 cannot be rerun; its workflow file may be broken"*. The run is a `pull_request` run of `.github/workflows/ci.yml`,
-the branch still exists, and the same command works on a push run. I do not know why, and I am not going to guess in a
-document. The coder either finds the cause with evidence — the API response, the run's `workflow_id`, a reproduction — or
-reports it as unexplained and documents the remedy that does work. What must not happen is a documented "just rerun it" that
-fails when someone tries.
+| When | Evidence | Who checks |
+| --- | --- | --- |
+| before merge | **three** `pull_request` runs on the PR branch, each with a table of `run id · job · queued → started · conclusion`, macOS acquired within 5 minutes every time | coder, in the handoff; manager, independently from the API |
+| before merge | one **cancelled** run, with the run that cancelled it (B3) | same |
+| after merge | the push run on `main`, and the next one after that | **manager**, in the AT-02 review addendum |
+
+The queue is a property of the runner pool and the job shape, not of the event type, so three PR runs measure the thing being
+fixed; the push runs exist to prove that `main` is not left with a cancelled or missing run, which is the amendment above and
+can only be observed after a push. Acquisition failures are reported, not hidden: if macOS still misses the window, that is a
+measured result, and the next step is the platform decision above — never `continue-on-error`.
+
+**The rerun question, closed by the manager on 2026-11-02 — with the cause still unknown, which is the honest outcome.**
+`gh run rerun 41444874714 --failed` answers *"run 41444874714 cannot be rerun; its workflow file may be broken"*. That phrase
+is **gh's own wrapper text for any failed API call**, not something GitHub returned: calling the endpoint directly gives
+
+```text
+POST /repos/RUdolf1517/auto-tzim/actions/runs/41444874714/rerun-failed-jobs
+{"message": "Server Error"}          HTTP 502
+```
+
+So the "broken workflow file" theory has no evidence behind it, the workflow file **does** exist at that head SHA
+(`.github/workflows/ci.yml`, blob `78886f8`), and the branch still exists. Conclusion to record: a rerun on that run is not
+available for an unidentified server-side reason, `gh`'s message is misleading and must not be quoted as the cause, and
+**nothing in this project depends on a rerun** — every piece of evidence above is produced by new runs. If a rerun is ever
+needed in a real emergency, the fallback is a new commit, not a retried job.
 
 ## D-52 · What makes two plans the same plan
 

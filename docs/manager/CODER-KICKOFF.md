@@ -8,9 +8,12 @@ in a handoff is checked independently by the manager, who runs the commands rath
 
 ## 1. Before sending anything: the precondition
 
-The kickoff message assumes `main` contains `docs/manager/HANDOFF-AT-01.md`. It does not until PR #19 is merged. The
-message therefore opens with a check rather than a task: if the file is missing at the head of `main`, the coder stops
-and says so. A coder that starts from stale documents is the exact failure this project spent three days removing.
+**Met as of 2026-11-02.** `docs/manager/HANDOFF-AT-01.md` and this file are on `main` (`d81e18e`, PR #19 merged), so the
+message can be sent as it stands and STEP 0 will succeed on its first branch.
+
+The check stays in the message anyway, because the message will be reused for AT-02 and beyond, and a coder that starts
+from a stale ref is the exact failure this project spent three days removing. STEP 0 reads the brief from a named
+commit and requires the coder to say which ref it used.
 
 ## 2. The message
 

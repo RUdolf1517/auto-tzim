@@ -62,6 +62,14 @@ Verified from this session rather than accepted: `pulls/16` answers `mergeable_s
 AT-01 lands CI, required checks come back with the context the workflow actually reports — a check nobody reports protects
 nothing, which is exactly what this rule demonstrated.
 
+### Changed — a documentation merge is not a governance event any more
+
+[D-37](docs/manager/DECISIONS.md): a pull request that touches only Markdown is merged by the manager without a round
+trip, with a STATUS-LOG line like every other merge. The opposite rule made sense while every merge needed `--admin`;
+once the review rule and the placeholder `test` check were gone it became a permission prompt with no decision behind it
+— five of them in one day's work. The boundary is mechanical and checked before each merge: any non-`.md` file, any
+`.github/` path, or any change to an acceptance row, a decision or a fixture expected value still goes to the owner.
+
 ### Started — the assignment was re-read against every decision first
 
 The owner authorised the start on 2026-11-02. Before any coder was pointed at it, the assignment and AT-01…AT-09 were

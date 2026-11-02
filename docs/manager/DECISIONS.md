@@ -724,6 +724,32 @@ rules, and the exit code for a corrupt state (`7`). Those were properties of the
 (hundreds of thousands of files in one folder), in which case the answer is still not a C database — it is an index file
 written with the same primitives.
 
+## D-37 · Documentation merges do not need a round trip
+
+**Decision (owner, 2026-11-02):** a pull request that touches **only** documentation — no `.rs`, no `Cargo.toml`, no
+`.github/`, no fixture data — is merged by the manager without asking, and gets a [STATUS-LOG](STATUS-LOG.md) line like
+every other merge.
+
+**Why.** The opposite rule was correct when nobody could merge without `--admin` and every merge was a governance event
+(D-24, before 2026-11-02). Once the review rule and the placeholder `test` check were removed, asking for permission to
+merge a markdown file became a round trip with no decision in it: five separate "заливай" exchanges in one day, each
+costing the owner attention and teaching nobody anything.
+
+**The boundary is mechanical, and it is checked before every such merge:**
+
+```sh
+git diff --name-only origin/main...HEAD | grep -v '\.md$'    # must print nothing
+git diff --name-only origin/main...HEAD | grep -E '\.(rs|toml|yml|yaml|json|lock)$|^\.github/'  # must print nothing
+```
+
+**What is NOT covered, and stays an owner decision:** any pull request containing code, tests, fixtures, CI or a release
+artefact; any merge that would bypass a red check; and anything that changes an acceptance row, a decision or a fixture
+expected value — those are governance changes that happen to be written in Markdown, and the D-24 rule lists them
+explicitly.
+
+**Reversal:** if a documentation merge is ever found to have carried a substantive change nobody approved, this rule is
+withdrawn the same day and the reason recorded here.
+
 ## D-36 · Distribution: `cargo install`, releases and Homebrew
 
 The owner's instruction, 2026-11-01: *`cargo install` is planned; the binary keeps the hyphen.*

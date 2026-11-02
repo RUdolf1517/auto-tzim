@@ -3,6 +3,11 @@ use std::process::Command;
 #[test]
 fn version_and_unknown_argument() {
     let executable = env!("CARGO_BIN_EXE_auto-tzim");
+    let help = Command::new(executable).arg("--help").output().unwrap();
+    assert!(help.status.success());
+    assert!(!help.stdout.is_empty());
+    assert!(help.stderr.is_empty());
+
     let version = Command::new(executable).arg("--version").output().unwrap();
     assert!(version.status.success());
     assert_eq!(

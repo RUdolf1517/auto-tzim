@@ -7,6 +7,7 @@ never routes a refused file anywhere else.
 
 > **Status: AT-01 skeleton.** Only `--help` and `--version` exist; the product below is not implemented.
 > Build with the pinned Rust toolchain **1.82.0**: `cargo build --workspace`.
+> CI runs on `ubuntu-24.04` and `macos-15`.
 
 ## What it will do (MVP / v0.1)
 

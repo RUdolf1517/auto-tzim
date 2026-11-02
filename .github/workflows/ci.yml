@@ -1,5 +1,8 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 permissions:
   contents: read
 jobs:
@@ -7,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -21,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -38,7 +41,6 @@ jobs:
           cargo build --locked --bin auto-tzim
           target/debug/auto-tzim --help | tee "$RUNNER_TEMP/help.txt"
           target/debug/auto-tzim --version | tee "$RUNNER_TEMP/version.txt"
-          python3 -c 'import pathlib, os; p=pathlib.Path(os.environ["RUNNER_TEMP"]); s=(p/"help.txt").read_text() + (p/"version.txt").read_text(); print("::notice title=CLI output::" + s.replace("%", "%25").replace("\n", "%0A"))'
           for arg in unknown --unknown; do
             status=0
             target/debug/auto-tzim "$arg" >stdout.txt 2>stderr.txt || status=$?
@@ -47,26 +49,35 @@ jobs:
             test -s stderr.txt
             printf "argument=%s exit=%s stdout=<empty> stderr:\n" "$arg" "$status"
             cat stderr.txt
-            python3 -c 'import pathlib, sys; s=pathlib.Path("stderr.txt").read_text(); print("::notice title=Unknown argument " + sys.argv[1] + "::exit=2 stdout=<empty> stderr=" + s.replace("%", "%25").replace("\n", "%0A"))' "$arg"
           done
-      - name: Package and install
+      - name: Install CLI
         shell: bash
         run: |
           cargo install --locked --path crates/auto-tzim --root "$RUNNER_TEMP/auto-tzim-install"
           "$RUNNER_TEMP/auto-tzim-install/bin/auto-tzim" --version
-          cargo package --locked -p auto-tzim-core
+      - name: Package core
+        run: cargo package --locked -p auto-tzim-core
+      - name: Package CLI without verification
+        shell: bash
+        run: |
+          cargo package --locked --no-verify -p auto-tzim
+          python3 -c 'import pathlib, tarfile, tomllib; p=pathlib.Path("target/package/auto-tzim-0.1.0.crate"); t=tarfile.open(p); m=tomllib.loads(t.extractfile("auto-tzim-0.1.0/Cargo.toml").read().decode()); dep=m["dependencies"]["auto-tzim-core"]; assert "path" not in dep and dep["version"] == "=0.1.0", dep'
+      - name: Guard expected unpublished core failure
+        shell: bash
+        run: |
           set +e
-          cargo package --locked -p auto-tzim 2>&1 | tee "$RUNNER_TEMP/package-output"
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            python3 -c 'import pathlib, os; s=pathlib.Path(os.environ["RUNNER_TEMP"], "package-output").read_text(); print("::error title=Package CLI::" + s[-3000:].replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))'
-          fi
-          exit "$status"
+          cargo package --locked -p auto-tzim > "$RUNNER_TEMP/package-output" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/package-output"
+          test "$status" -ne 0
+          grep -F 'no matching package named `auto-tzim-core` found' "$RUNNER_TEMP/package-output"
+
   deny:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -89,8 +100,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: python3 scripts/test-check-pins.py
       - run: python3 scripts/check-pins.py

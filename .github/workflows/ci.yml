@@ -16,7 +16,7 @@ jobs:
       - run: cargo build --workspace
       - name: Report lockfile for bootstrap
         run: |
-          python3 -c 'import base64; print("::notice title=Lockfile::" + base64.b64encode(open("Cargo.lock", "rb").read()).decode())'
+          python3 -c 'import base64; s=base64.b64encode(open("Cargo.lock", "rb").read()).decode(); [print(f"::notice title=Lockfile{i//2000:03d}::{s[i:i+2000]}") for i in range(0,len(s),2000)]'
   test:
     strategy:
       matrix:

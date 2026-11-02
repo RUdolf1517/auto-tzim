@@ -75,6 +75,29 @@ built-in list, path comparison only, documented as best-effort, escapable with o
 behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
 ones are resolved). Each would have been baked into stored data by the first commit.
 
+### Changed before the code — the path comes first
+
+The owner wrote the CLI he wants in one line and it was not in the specification:
+
+```sh
+auto-tzim /home/user/downloads --time 24 --auto
+```
+
+Mine was `folder add` → `scan` → `run --once --mode auto`: three verbs and a config file before the user could do the
+thing they installed the program for. [D-46](docs/manager/DECISIONS.md) now says the path is the first argument, `--time`
+filters by age in hours, and `--auto` installs without asking.
+
+Nothing about safety moved. Every run still builds a plan, hashes it and records it before touching a file — `--auto`
+removes the conversation, never the plan — and every file is re-checked against that plan immediately before install.
+What genuinely changed is [D-20](docs/manager/DECISIONS.md)'s requirement for an *externally stored* plan from a previous
+`scan`: in `confirm` mode the plan shown and the plan executed are the same object, so the extra step bought nothing.
+`--plan <ID>` keeps the old binding for scripts.
+
+Propagated to nine documents, because a shape that lives only in `cli.md` is a shape the coder builds differently: the
+`6` rows in `safety.md`, `faq.md`, `recovery.md`, `limitations.md`, `testing.md` and the exit table no longer say "no plan
+yet"; `folder add` is marked optional in `cli.md`; `config.toml` with zero folders is valid and runs a path from the
+command line.
+
 ### Changed before the code — a folder is identified by its name
 
 The owner rejected my ULID proposal with one sentence: *"у каждой папки будет свое название"* — each folder has its own

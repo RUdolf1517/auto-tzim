@@ -56,7 +56,8 @@ A limitations list is part of the product. Each item below is a deliberate bound
   unattended run uses `--mode auto` — a different mode, not a silenced question.
 - **A refusal is not an error, and it is not typed.** `skipped_by_tzim` and `skipped_unsupported` exit `0`, because
   nothing went wrong; the reason survives as `tzim`'s own note, not as a status we invented.
-- **Exit codes are ours.** `6` means "refused before processing" (no plan yet, paused, low disk), `8` means another run
+- **Exit codes are ours.** `6` means "refused before processing" (stale `--plan`, paused, low disk, no terminal for a
+  `confirm` run), `8` means another run
   holds the lock, `7` means an internal error, and `4` is never produced.
 - **`failed` is not retried automatically.** A second run does not try again until the file, the binary or the policy
   changes; `history` shows why.

@@ -132,8 +132,9 @@ statement of what has been tested.
 
 ## 8a. A run refused before it started (`6`)
 
-What you will see: exit **`6`** with a reason: no matching plan ("preview this folder first"), `pause` is active, free
-space is below `min_free_bytes`, or the folder is disabled.
+What you will see: exit **`6`** with a reason: the folder changed after the `--plan` you named was made, `pause` is
+active, free space is below `min_free_bytes`, the folder is disabled, or a `confirm` run was started without a terminal to
+answer on.
 
 What it means: nothing was read for processing and nothing changed. Not an error and not a success — a scheduler must
 read it as "not now", never as "done".

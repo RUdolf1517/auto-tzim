@@ -11,11 +11,13 @@ never routes a refused file anywhere else.
 
 ## What it will do (MVP / v0.1)
 
-- You add **one narrow folder at a time**, explicitly; nothing is scanned before that.
-- `scan` produces a **deterministic, read-only candidate plan**: which files our policy would hand over, with the exact
-  argv. It does not invoke `tzim` on any of them and writes nothing in the folder.
-- The first apply of a folder requires a matching plan (id + hash); without it the command exits `6` and does nothing.
-- `run --once` then invokes the installed `tzim` as a subprocess, one file per process, argv array, no shell, no PTY.
+- You name **one narrow folder at a time**, explicitly; nothing is scanned before that.
+- `auto-tzim /home/user/downloads --time 24 --auto` is the whole interface: optimise this folder, only files untouched for
+  24 hours, no questions. Without `--auto` it shows the plan and asks; with `--dry-run` it only plans.
+- The plan is **deterministic and read-only**: which files our policy would hand over, with the exact argv. Planning never
+  invokes `tzim` on a file and writes nothing in the folder, and a file that changes between planning and install is
+  skipped rather than overwritten.
+- The run invokes the installed `tzim` as a subprocess, one file per process, argv array, no shell, no PTY.
 - Every result is normalized into a documented status (`optimized`, `already_optimal`, `skipped_unsupported`,
   `skipped_by_tzim`, `skipped_policy`, `skipped_unstable`, `hardlink_skip`, `failed`, `interrupted`) and kept in local
   JSONL history. A `tzim`-decided skip keeps `tzim`'s own reason code — its note is stored verbatim, never interpreted.
@@ -30,9 +32,9 @@ deliberately not mixed into the MVP.
 
 The operative list is charter v0.2 §6 (nineteen invariants). The ones that shape everything else:
 
-1. No folder is processed until the user adds it by name.
-2. Before a folder's first apply there must be a **read-only candidate plan**: `auto-tzim` scan never runs
-   file-processing `tzim`, never passes `--dry-run`, and writes nothing inside the folder. Only `tzim --version` is
+1. No folder is processed until you name it — one path per invocation, nothing scanned in the background.
+2. Every run builds a **read-only candidate plan** first: planning never runs file-processing `tzim`, never passes
+   `--dry-run`, and writes nothing inside the folder. `--auto` removes the question, never the plan. Only `tzim --version` is
    called. (`tzim`'s own dry run writes a temporary candidate into the destination directory — which is exactly why we
    do not use it.)
 3. No root/sudo, no hidden background activity, no daemon.

@@ -51,6 +51,7 @@ invent it; the owner may change it without cost), **superseded**.
 | D-43 | **A folder is identified by its own name** — no generated id: unique case-insensitively, the handle every command takes, renameable in place, and history rows keep the name they were written with | **adopted (owner, 2026-11-02)** — the manager's ULID proposal was rejected | `config.md` §4; owner's answer to the AT-02 question | AT-02, AT-05, `cli.md`, `state.md` |
 | D-44 | The cloud-sync check is a **built-in list of well-known sync directories**, matched on the canonical path; such a folder is **rejected**, best-effort, bypassable only by the documented `allow_cloud_sync = true` | **adopted (owner, 2026-11-02)** | `config.md` §5 `cloud_sync_root`; charter §6-8 | AT-02 |
 | D-45 | A root that is **itself a symlink is rejected**; intermediate components are resolved and the canonical path is stored, so `/tmp/x` on macOS is recorded as `/private/tmp/x` | **adopted (owner, 2026-11-02)** | `config.md` §5 `root_is_symlink`; D-08 | AT-02, AT-03 |
+| D-46 | **The path comes first**: `auto-tzim PATH [--time HOURS] [--auto]` is one complete instruction; the plan is still always built, and `folder add` is a convenience, not a prerequisite | **adopted (owner, 2026-11-02)** | owner's CLI sketch; `cli.md` §0 | AT-02, AT-03, AT-05, AT-06, `README`, `cli.md` |
 
 ---
 
@@ -1008,3 +1009,46 @@ where `/tmp` is a symlink to `/private/tmp` and every path under it has a symlin
 **Consequence, documented rather than discovered:** on macOS a root added as `/tmp/photos` appears in `folder list` as
 `/private/tmp/photos`. Both spellings resolve to the same root, so the second one is a duplicate — which is the desired
 behaviour and the reason the second step exists.
+
+## D-46 · The path comes first
+
+**Status: adopted (owner, 2026-11-02).** The owner wrote the CLI he wants in one line:
+
+```sh
+auto-tzim /user/home/downloads --time 24 --auto
+```
+
+and the specification I had written did not offer it. Mine was `folder add` → `scan` → `run --once --mode auto`: three
+verbs, a config file, and a stored plan id before the user could do the thing they installed the program for. The owner's
+line says the same thing in one command, and it is right — a batch optimiser whose first interaction is editing TOML is
+a batch optimiser people do not use.
+
+| What the owner asked for | Where it lands |
+| --- | --- |
+| `auto-tzim <PATH>` | the path is the first argument; no subcommand, no profile required (§0 of `cli.md`) |
+| `--time 24` | only files whose last modification is at least 24 hours old; integer hours, `0` disables the filter |
+| `--auto` | install without asking; the same thing `--mode auto` meant, with a shorter name |
+
+**What this does not change, and would not change if the owner asked.** The plan is still built on every run, hashed and
+recorded before the first file is touched (`--auto` removes the conversation, never the plan); every file is re-checked
+against the plan immediately before install, and a file that changed is skipped rather than overwritten; `tzim` still runs
+on a staged copy, never on the user's file; `tzim --dry-run` stays forbidden; there are still no prompts anywhere a
+terminal cannot answer, and `--json`, a pipe and a scheduler behave exactly like a TTY minus the question.
+
+**One gate is genuinely superseded, and it is recorded rather than quietly dropped.** [D-20](DECISIONS.md) required an
+*externally stored* plan from a previous `scan` before the first apply of a folder, and exit `6` without one. With the
+path-first form, the plan a `confirm` run shows and the plan it executes are the same object in the same process, so the
+external step bought nothing: the protection was always "the user approved **this** plan", and identity re-checking is
+what makes it real. `--plan <ID>` keeps the old binding available for scripts. Consequences:
+
+1. `GATES.md` AC-11's first case becomes "apply whose plan no longer matches the tree", not "apply with no plan at all";
+   AC-12 (fabricated plan id, foreign plan, mismatched hash ⇒ `6`) is unchanged and still tested.
+2. `config.md` stays valid with **zero** folders: a path given on the command line needs no profile.
+3. `folder add` remains, for repetition, and is the only way to change a persisted default.
+
+**Why I did not just add an alias.** An alias `run --once PATH` would have left the documentation teaching the three-step
+choreography, and the coder would have built the choreography. The first line of `cli.md` now shows the invocation a user
+will type, and everything else in that page is what the one-shot form is made of.
+
+**Reversal:** if the owner ever wants the two-step flow back, `--plan` already carries it; the cost is one paragraph of
+documentation, not a redesign.

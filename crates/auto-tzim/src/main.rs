@@ -170,10 +170,6 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                 apply_options(&mut settings.folder[i], &options);
                 let errors = config::validate_config(&settings);
                 if !errors.is_empty() {
-                    // Negative control: persist a change even though the edit was rejected.
-                    settings.folder[i].name = folder_name.to_owned();
-                    settings.folder[i].enabled = !settings.folder[i].enabled;
-                    config::save(&path, &settings)?;
                     return Err(ConfigError::Invalid(errors));
                 }
                 config::save(&path, &settings)?;

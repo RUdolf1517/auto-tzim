@@ -632,7 +632,8 @@ pub fn validate_root(root: &std::path::Path, allow_cloud_sync: bool) -> Result<P
     }
     if let Some(state) = std::env::var_os("AUTO_TZIM_HOME").filter(|v| !v.is_empty()) {
         let state = PathBuf::from(state);
-        let state = canonicalize_with_missing(&state).unwrap_or(state);
+        let state = canonicalize_with_missing(&state)
+            .ok_or("state_inside_root: cannot resolve AUTO_TZIM_HOME")?;
         if canonical.starts_with(&state) || state.starts_with(&canonical) {
             return Err("state_inside_root".into());
         }
@@ -677,12 +678,31 @@ pub fn validate_root(root: &std::path::Path, allow_cloud_sync: bool) -> Result<P
 
 // Resolve existing ancestors even when the configuration directory has not been created yet.
 fn canonicalize_with_missing(path: &std::path::Path) -> Option<PathBuf> {
-    if let Ok(path) = std::fs::canonicalize(path) {
-        return Some(path);
+    use std::path::Component;
+    let mut resolved = if path.is_absolute() {
+        PathBuf::new()
+    } else {
+        std::env::current_dir().ok()?
+    };
+    for part in path.components() {
+        match part {
+            Component::RootDir => resolved.push(part.as_os_str()),
+            Component::CurDir => (),
+            Component::ParentDir => {
+                resolved.pop();
+            }
+            Component::Normal(name) => {
+                resolved.push(name);
+                match std::fs::symlink_metadata(&resolved) {
+                    Ok(_) => resolved = std::fs::canonicalize(&resolved).ok()?,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+                    Err(_) => return None,
+                }
+            }
+            Component::Prefix(_) => return None,
+        }
     }
-    let parent = path.parent()?;
-    let name = path.file_name()?;
-    Some(canonicalize_with_missing(parent)?.join(name))
+    Some(resolved)
 }
 
 /// Write validated settings atomically, without overwriting an invalid existing file.

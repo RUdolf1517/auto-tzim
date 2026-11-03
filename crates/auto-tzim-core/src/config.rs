@@ -643,9 +643,9 @@ pub fn validate_root(root: &std::path::Path, allow_cloud_sync: bool) -> Result<P
             if let Ok(relative) = canonical.strip_prefix(home) {
                 let parts: Vec<_> = relative
                     .components()
-                    .map(|part| part.as_os_str().to_string_lossy().to_lowercase())
+                    .map(|part| part.as_os_str().to_str().map(str::to_lowercase))
                     .collect();
-                if parts.iter().any(|part| {
+                if parts.iter().flatten().any(|part| {
                     [
                         "dropbox",
                         "dropbox (personal)",
@@ -664,10 +664,10 @@ pub fn validate_root(root: &std::path::Path, allow_cloud_sync: bool) -> Result<P
                     ]
                     .contains(&part.as_str())
                         || part.starts_with("onedrive - ")
-                }) || parts
-                    .windows(2)
-                    .any(|part| part[0] == "library" && part[1] == "mobile documents")
-                {
+                }) || parts.windows(2).any(|part| {
+                    part[0].as_deref() == Some("library")
+                        && part[1].as_deref() == Some("mobile documents")
+                }) {
                     return Err("cloud_sync_root: use allow_cloud_sync = true to override".into());
                 }
             }

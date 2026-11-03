@@ -57,7 +57,8 @@ enum FolderCommand {
     Show { name: String },
     /// Edit a folder profile.
     Edit {
-        name: String,
+        #[arg(value_name = "NAME")]
+        folder_name: String,
         #[command(flatten)]
         options: ProfileOptions,
     },
@@ -159,8 +160,11 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                     println!("[[folder]]\n{}", show(folder)?);
                 }
             }
-            FolderCommand::Edit { name, options } => {
-                let i = folder_index(&settings, &name)?;
+            FolderCommand::Edit {
+                folder_name,
+                options,
+            } => {
+                let i = folder_index(&settings, &folder_name)?;
                 apply_options(&mut settings.folder[i], &options);
                 let errors = config::validate_config(&settings);
                 if !errors.is_empty() {

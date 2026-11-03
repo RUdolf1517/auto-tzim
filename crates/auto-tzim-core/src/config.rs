@@ -236,6 +236,7 @@ pub fn validate_document(input: &str) -> Vec<String> {
         }
         _ => errors.push("folder: expected array of tables".into()),
     }
+    errors.truncate(1); // negative control
     errors
 }
 

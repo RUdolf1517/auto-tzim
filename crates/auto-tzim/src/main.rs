@@ -1,5 +1,6 @@
 use auto_tzim_core::config::{self, Config, ConfigError, Folder};
 use clap::{Args, Parser, Subcommand};
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 /// Companion orchestration tool for tzim.
@@ -46,8 +47,8 @@ struct ProfileOptions {
 enum FolderCommand {
     /// Add one or more folders without processing their files.
     Add {
-        #[arg(required = true)]
-        paths: Vec<PathBuf>,
+        #[arg(required = true, value_parser = clap::builder::ValueParser::os_string())]
+        paths: Vec<OsString>,
         #[command(flatten)]
         options: ProfileOptions,
     },
@@ -132,6 +133,7 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                 }
                 let mut added = Vec::new();
                 for path in paths {
+                    let path = PathBuf::from(path);
                     let root = config::validate_root(&path, false).map_err(invalid)?;
                     let name = match &options.name {
                         Some(name) => name.clone(),

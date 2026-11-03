@@ -203,3 +203,65 @@ fn root_symlinks_are_not_laundered_by_a_trailing_slash() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("root_is_symlink"));
 }
+
+#[test]
+fn configuration_refusal_matrix() {
+    use std::os::unix::fs::symlink;
+    let s = Sandbox::new();
+    let file = s.root.join("file");
+    fs::write(&file, "data").unwrap();
+    let actual = s.folder("real");
+    let link = s.root.join("link");
+    symlink(&actual, &link).unwrap();
+    let state_child = s.folder("config/inside");
+    let home = s.root.join("home");
+    for (value, reason) in [
+        ("".to_string(), "root_not_absolute"),
+        (".".to_string(), "root_not_absolute"),
+        ("relative".to_string(), "root_not_absolute"),
+        ("/".to_string(), "forbidden_root"),
+        (home.to_string_lossy().into_owned(), "forbidden_root"),
+        (file.to_string_lossy().into_owned(), "root_not_a_directory"),
+        (link.to_string_lossy().into_owned(), "root_is_symlink"),
+        (
+            state_child.to_string_lossy().into_owned(),
+            "state_inside_root",
+        ),
+        (s.root.to_string_lossy().into_owned(), "state_inside_root"),
+        (
+            s.root.join("missing").to_string_lossy().into_owned(),
+            "root_missing",
+        ),
+    ] {
+        let output = s.run(&["folder", "add", &value]);
+        assert_eq!(output.status.code(), Some(2), "{value}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(reason),
+            "{value}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(!s.config().exists());
+    }
+}
+
+#[test]
+fn reserved_values_are_rejected_and_inert_settings_accepted() {
+    let s = Sandbox::new();
+    let folder = s.folder("photos");
+    fs::create_dir_all(s.root.join("config")).unwrap();
+    let base = format!("schema = 1\n[installation]\nupdate_policy = 'notify'\nallowed_major_versions = [0]\n[[folder]]\nname = 'photos'\nroot = {:?}\n", folder.to_str().unwrap());
+    for (field, reason) in [
+        ("follow_symlinks = true\n", "not_in_v01"),
+        ("allow_hard_links = true\n", "not_in_v01"),
+        ("jobs = 2\n", "not_in_v01"),
+        ("[folder.schedule]\nenabled = true\n", "not_in_v01"),
+        ("transforms = ['fits-tile']\n", "transforms_forbidden"),
+    ] {
+        fs::write(s.config(), format!("{base}{field}")).unwrap();
+        let out = s.run(&["config", "validate"]);
+        assert_eq!(out.status.code(), Some(2), "{field}");
+        assert!(String::from_utf8_lossy(&out.stderr).contains(reason));
+    }
+    fs::write(s.config(), format!("{base}transforms = []\n")).unwrap();
+    assert!(s.run(&["config", "validate"]).status.success());
+}

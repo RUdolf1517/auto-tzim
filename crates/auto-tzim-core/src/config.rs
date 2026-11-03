@@ -507,12 +507,7 @@ pub fn load(path: &std::path::Path) -> Result<Config, ConfigError> {
     };
     let mut errors = validate_document(&text);
     if !errors.is_empty() {
-        // Negative control: incorrectly replace corrupted settings with defaults.
-        let fallback = Config::default();
-        let body = toml::to_string_pretty(&fallback)
-            .map_err(|error| ConfigError::Invalid(vec![error.to_string()]))?;
-        std::fs::write(path, body)?;
-        return Ok(fallback);
+        return Err(ConfigError::Invalid(errors));
     }
     let config: Config = toml::from_str(&text)
         .map_err(|error| ConfigError::Invalid(vec![format!("invalid config: {error}")]))?;

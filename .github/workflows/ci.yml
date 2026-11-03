@@ -76,6 +76,35 @@ jobs:
             printf "argument=%s exit=%s stdout=<empty> stderr:\n" "$arg" "$status"
             cat stderr.txt
           done
+      - name: Evidence for rejected and accepted edit
+        shell: bash
+        run: |
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          mkdir "$temp/photos"
+          export AUTO_TZIM_HOME="$temp/config"
+          target/debug/auto-tzim folder add "$temp/photos"
+          before="$(shasum -a 256 "$temp/config/config.toml" | cut -d ' ' -f 1)"
+          if [ "$(uname)" = Darwin ]; then
+            before_stat="$(stat -f '%i %z %m' "$temp/config/config.toml")"
+          else
+            before_stat="$(stat -c '%i %s %Y' "$temp/config/config.toml")"
+          fi
+          status=0
+          target/debug/auto-tzim folder edit photos --name '' >"$temp/out" 2>"$temp/err" || status=$?
+          test "$status" -eq 2
+          after="$(shasum -a 256 "$temp/config/config.toml" | cut -d ' ' -f 1)"
+          if [ "$(uname)" = Darwin ]; then
+            after_stat="$(stat -f '%i %z %m' "$temp/config/config.toml")"
+          else
+            after_stat="$(stat -c '%i %s %Y' "$temp/config/config.toml")"
+          fi
+          test "$before" = "$after"
+          test "$before_stat" = "$after_stat"
+          target/debug/auto-tzim folder edit photos --name renamed
+          accepted="$(shasum -a 256 "$temp/config/config.toml" | cut -d ' ' -f 1)"
+          test "$before" != "$accepted"
+          echo "::notice title=Edit evidence::rejected exit=$status sha-before=$before sha-after=$after stat-before=$before_stat stat-after=$after_stat; accepted sha=$accepted"
       - name: Install CLI
         shell: bash
         run: |

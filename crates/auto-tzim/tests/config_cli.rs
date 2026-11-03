@@ -55,6 +55,20 @@ fn three_errors_are_reported_and_suggested() {
     for text in ["folder[0].recurse", "recursive", "enabled", "jobs"] {
         assert!(err.contains(text), "{err}");
     }
+    let folder = s.folder("valid");
+    fs::write(
+        s.config(),
+        format!(
+            "schema=1\n[installation]\n[[folder]]\nname='x'\nroot={:?}\njobs=2\n",
+            folder.to_str().unwrap()
+        ),
+    )
+    .unwrap();
+    let out = s.run(&["config", "validate"]);
+    assert_eq!(out.status.code(), Some(2));
+    let err = String::from_utf8(out.stderr).unwrap();
+    assert_eq!(err.lines().count(), 1, "{err}");
+    assert!(err.contains("jobs"));
 }
 
 #[test]

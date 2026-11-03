@@ -265,3 +265,38 @@ fn reserved_values_are_rejected_and_inert_settings_accepted() {
     fs::write(s.config(), format!("{base}transforms = []\n")).unwrap();
     assert!(s.run(&["config", "validate"]).status.success());
 }
+
+#[test]
+fn killed_edits_never_leave_a_partial_config() {
+    use std::{thread, time::Duration};
+    let s = Sandbox::new();
+    let folder = s.folder("photos");
+    assert!(s
+        .run(&["folder", "add", folder.to_str().unwrap()])
+        .status
+        .success());
+    let old = fs::read(s.config()).unwrap();
+    assert!(s.run(&["folder", "disable", "photos"]).status.success());
+    let new = fs::read(s.config()).unwrap();
+    assert_ne!(old, new);
+    for i in 0..20 {
+        fs::write(s.config(), &old).unwrap();
+        let mut child = Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
+            .env("HOME", s.root.join("home"))
+            .env("AUTO_TZIM_HOME", s.root.join("config"))
+            .args(["folder", "disable", "photos"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        thread::sleep(Duration::from_micros(((i * 541) % 3000) as u64));
+        let _ = child.kill();
+        let _ = child.wait();
+        let actual = fs::read(s.config()).unwrap();
+        assert!(
+            actual == old || actual == new,
+            "unexpected truncated config"
+        );
+        assert!(s.run(&["config", "validate"]).status.success());
+    }
+}

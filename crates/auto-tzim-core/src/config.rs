@@ -618,7 +618,7 @@ pub fn validate_root(root: &std::path::Path, allow_cloud_sync: bool) -> Result<P
     }
     if let Some(state) = std::env::var_os("AUTO_TZIM_HOME").filter(|v| !v.is_empty()) {
         let state = PathBuf::from(state);
-        let state = std::fs::canonicalize(&state).unwrap_or(state);
+        let state = canonicalize_with_missing(&state).unwrap_or(state);
         if canonical.starts_with(&state) || state.starts_with(&canonical) {
             return Err("state_inside_root".into());
         }
@@ -659,6 +659,16 @@ pub fn validate_root(root: &std::path::Path, allow_cloud_sync: bool) -> Result<P
         }
     }
     Ok(canonical)
+}
+
+// Resolve existing ancestors even when the configuration directory has not been created yet.
+fn canonicalize_with_missing(path: &std::path::Path) -> Option<PathBuf> {
+    if let Ok(path) = std::fs::canonicalize(path) {
+        return Some(path);
+    }
+    let parent = path.parent()?;
+    let name = path.file_name()?;
+    Some(canonicalize_with_missing(parent)?.join(name))
 }
 
 /// Write validated settings atomically, without overwriting an invalid existing file.

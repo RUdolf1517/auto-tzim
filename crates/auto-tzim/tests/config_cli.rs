@@ -300,3 +300,36 @@ fn killed_edits_never_leave_a_partial_config() {
         assert!(s.run(&["config", "validate"]).status.success());
     }
 }
+
+#[test]
+fn override_keeps_home_and_xdg_untouched() {
+    let s = Sandbox::new();
+    let folder = s.folder("photos");
+    let xdg = s.root.join("xdg");
+    let state = s.root.join("xdg-state");
+    fs::create_dir_all(&xdg).unwrap();
+    fs::create_dir_all(&state).unwrap();
+    let before_home = fs::read_dir(s.root.join("home")).unwrap().count();
+    let out = Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
+        .env("HOME", s.root.join("home"))
+        .env("XDG_CONFIG_HOME", &xdg)
+        .env("XDG_STATE_HOME", &state)
+        .env("AUTO_TZIM_HOME", s.root.join("config"))
+        .arg("folder")
+        .arg("add")
+        .arg(folder)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        before_home,
+        fs::read_dir(s.root.join("home")).unwrap().count()
+    );
+    assert_eq!(fs::read_dir(xdg).unwrap().count(), 0);
+    assert_eq!(fs::read_dir(state).unwrap().count(), 0);
+    assert!(s.config().exists());
+}

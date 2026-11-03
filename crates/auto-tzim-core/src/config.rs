@@ -1,4 +1,4 @@
-//! Configuration data model. Validation and persistence are not implemented yet.
+//! Configuration model, validation and atomic storage.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -165,6 +165,24 @@ pub fn validate_document(input: &str) -> Vec<String> {
                 ],
                 &mut errors,
             );
+            for key in ["tzim_path", "mode", "update_policy"] {
+                if table.get(key).is_some_and(|v| !v.is_str()) {
+                    errors.push(format!("installation.{key}: expected string"));
+                }
+            }
+            if table.get("allowed_major_versions").is_some_and(|v| {
+                v.as_array().map_or(true, |a| {
+                    a.iter().any(|v| {
+                        v.as_integer()
+                            .map_or(true, |n| !(0..=u32::MAX as i64).contains(&n))
+                    })
+                })
+            }) {
+                errors.push(
+                    "installation.allowed_major_versions: expected array of nonnegative integers"
+                        .into(),
+                );
+            }
         }
         _ => errors.push("installation: required table".into()),
     }
@@ -249,6 +267,38 @@ fn validate_folder_fields(
         "schedule",
     ];
     unknown_fields(table, path, FIELDS, errors);
+    for key in ["name", "root"] {
+        if !table.get(key).is_some_and(toml::Value::is_str) {
+            errors.push(format!("{path}.{key}: required string"));
+        }
+    }
+    for key in ["formats", "transforms", "exclude_globs"] {
+        if table
+            .get(key)
+            .is_some_and(|v| v.as_array().map_or(true, |a| a.iter().any(|v| !v.is_str())))
+        {
+            errors.push(format!("{path}.{key}: expected array of strings"));
+        }
+    }
+    for key in [
+        "min_file_age_seconds",
+        "jobs",
+        "min_free_bytes",
+        "timeout_seconds",
+    ] {
+        if table
+            .get(key)
+            .and_then(toml::Value::as_integer)
+            .is_some_and(|n| {
+                n < 0 || ((key == "jobs" || key == "timeout_seconds") && n > u32::MAX as i64)
+            })
+        {
+            errors.push(format!(
+                "{path}.{key}: expected nonnegative integer in range"
+            ));
+        }
+    }
+
     for key in [
         "enabled",
         "recursive",
@@ -318,4 +368,299 @@ mod validation_tests {
             .iter()
             .any(|e| e.contains("jobs") && e.contains("not_in_v01")));
     }
+}
+
+/// Configuration and storage failures; no error causes the core to exit the process.
+#[derive(Debug)]
+pub enum ConfigError {
+    Invalid(Vec<String>),
+    Io(std::io::Error),
+}
+
+impl std::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Invalid(errors) => write!(f, "{}", errors.join("\n")),
+            Self::Io(error) => write!(f, "configuration I/O: {error}"),
+        }
+    }
+}
+
+impl From<std::io::Error> for ConfigError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            schema: 1,
+            installation: Installation::default(),
+            folder: Vec::new(),
+        }
+    }
+}
+
+/// The config file location, as selected by the operating system and environment.
+pub fn config_path() -> Result<PathBuf, ConfigError> {
+    if let Some(home) = std::env::var_os("AUTO_TZIM_HOME").filter(|value| !value.is_empty()) {
+        return Ok(PathBuf::from(home).join("config.toml"));
+    }
+    let home = std::env::var_os("HOME")
+        .ok_or_else(|| ConfigError::Invalid(vec!["HOME is not set".into()]))?;
+    #[cfg(target_os = "macos")]
+    let dir = PathBuf::from(home).join("Library/Application Support");
+    #[cfg(not(target_os = "macos"))]
+    let dir = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(home).join(".config"));
+    Ok(dir.join("auto-tzim/config.toml"))
+}
+
+/// Reads and validates existing settings. Missing files are an empty default configuration.
+pub fn load(path: &std::path::Path) -> Result<Config, ConfigError> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Config::default()),
+        Err(error) => return Err(error.into()),
+    };
+    let mut errors = validate_document(&text);
+    if !errors.is_empty() {
+        return Err(ConfigError::Invalid(errors));
+    }
+    let config: Config = toml::from_str(&text)
+        .map_err(|error| ConfigError::Invalid(vec![format!("invalid config: {error}")]))?;
+    errors.extend(validate_config(&config));
+    if errors.is_empty() {
+        Ok(config)
+    } else {
+        Err(ConfigError::Invalid(errors))
+    }
+}
+
+/// Validate all values that have been decoded into the schema.
+pub fn validate_config(config: &Config) -> Vec<String> {
+    let mut errors = Vec::new();
+    if config.schema != 1 {
+        errors.push("schema: expected supported schema 1".into());
+    }
+    if config.installation.mode != "confirm" {
+        errors.push("installation.mode: default must be confirm".into());
+    }
+    if config.installation.update_policy != "notify" {
+        errors.push(
+            "installation.update_policy: only notify is supported; scheduled is not in v0.1".into(),
+        );
+    }
+    if !config.installation.tzim_path.is_empty() {
+        let path = std::path::Path::new(&config.installation.tzim_path);
+        if !path.is_absolute() || path.is_dir() {
+            errors.push("installation.tzim_path: must be absolute and not a directory".into());
+        }
+    }
+    for (index, folder) in config.folder.iter().enumerate() {
+        let label = format!("folder[{index}]");
+        let name = &folder.name;
+        if name.trim() != name
+            || name.is_empty()
+            || name.chars().count() > 120
+            || name.chars().any(char::is_control)
+        {
+            errors.push(format!(
+                "{label}.name: expected 1–120 characters without control or surrounding spaces"
+            ));
+        }
+        for previous in &config.folder[..index] {
+            if previous.name.to_lowercase() == name.to_lowercase() {
+                errors.push(format!("{label}.name: duplicate_name"));
+            }
+            if previous.root == folder.root {
+                errors.push(format!("{label}.root: duplicate_root"));
+            }
+        }
+        if let Err(reason) = validate_root(&folder.root, folder.allow_cloud_sync) {
+            errors.push(format!("{label}.root: {reason}"));
+        }
+        if folder.follow_symlinks {
+            errors.push(format!("{label}.follow_symlinks: not_in_v01"));
+        }
+        if folder.allow_hard_links {
+            errors.push(format!("{label}.allow_hard_links: not_in_v01"));
+        }
+        if folder.jobs != 1 {
+            errors.push(format!(
+                "{label}.jobs: not_in_v01: parallel files are a later stage"
+            ));
+        }
+        if !folder.transforms.is_empty() {
+            errors.push(format!("{label}.transforms: transforms_forbidden"));
+        }
+        if folder.min_file_age_seconds > 86_400 {
+            errors.push(format!("{label}.min_file_age_seconds: expected 0–86400"));
+        }
+        if !(1..=21_600).contains(&folder.timeout_seconds) {
+            errors.push(format!("{label}.timeout_seconds: expected 1–21600"));
+        }
+        for format in &folder.formats {
+            if !["png", "gzip", "zip", "ico", "jpeg", "tiff", "zlib"].contains(&format.as_str()) {
+                errors.push(format!("{label}.formats: unsupported format {format}"));
+            }
+        }
+    }
+    errors
+}
+
+/// Refuse dangerous roots before returning the canonical path.
+pub fn validate_root(root: &std::path::Path, allow_cloud_sync: bool) -> Result<PathBuf, String> {
+    use std::path::Path;
+    if !root.is_absolute() {
+        return Err("root_not_absolute".into());
+    }
+    let metadata = std::fs::symlink_metadata(root).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            "root_missing"
+        } else {
+            "root_not_a_directory"
+        }
+    })?;
+    if metadata.file_type().is_symlink() {
+        return Err("root_is_symlink".into());
+    }
+    if !metadata.is_dir() {
+        return Err("root_not_a_directory".into());
+    }
+    let canonical = std::fs::canonicalize(root).map_err(|_| "root_not_a_directory")?;
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .and_then(|path| std::fs::canonicalize(path).ok());
+    if canonical == Path::new("/")
+        || home.as_ref() == Some(&canonical)
+        || ["/usr", "/etc", "/System", "/var", "/bin", "/sbin"]
+            .iter()
+            .any(|p| {
+                canonical == Path::new(p)
+                    || std::fs::canonicalize(p).ok().as_ref() == Some(&canonical)
+            })
+    {
+        return Err("forbidden_root".into());
+    }
+    if let Some(state) = std::env::var_os("AUTO_TZIM_HOME").filter(|v| !v.is_empty()) {
+        let state = PathBuf::from(state);
+        let state = std::fs::canonicalize(&state).unwrap_or(state);
+        if canonical.starts_with(&state) || state.starts_with(&canonical) {
+            return Err("state_inside_root".into());
+        }
+    }
+    if !allow_cloud_sync {
+        if let Some(home) = home {
+            if let Ok(relative) = canonical.strip_prefix(home) {
+                let parts: Vec<_> = relative
+                    .components()
+                    .map(|part| part.as_os_str().to_string_lossy().to_lowercase())
+                    .collect();
+                if parts.iter().any(|part| {
+                    [
+                        "dropbox",
+                        "dropbox (personal)",
+                        "dropbox (business)",
+                        "google drive",
+                        "googledrive",
+                        "my drive",
+                        "onedrive",
+                        "yandex.disk",
+                        "яндекс.диск",
+                        "pcloud drive",
+                        "megasync",
+                        "nextcloud",
+                        "owncloud",
+                        "sync",
+                    ]
+                    .contains(&part.as_str())
+                        || part.starts_with("onedrive - ")
+                }) || parts
+                    .windows(2)
+                    .any(|part| part[0] == "library" && part[1] == "mobile documents")
+                {
+                    return Err("cloud_sync_root: use allow_cloud_sync = true to override".into());
+                }
+            }
+        }
+    }
+    Ok(canonical)
+}
+
+/// Write validated settings atomically, without overwriting an invalid existing file.
+#[cfg(unix)]
+pub fn save(path: &std::path::Path, config: &Config) -> Result<(), ConfigError> {
+    use std::io::Write;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    // Never replace a file that cannot be loaded and validated.
+    let _existing = load(path)?;
+    let errors = validate_config(config);
+    if !errors.is_empty() {
+        return Err(ConfigError::Invalid(errors));
+    }
+    let contents = toml::to_string_pretty(config)
+        .map_err(|error| ConfigError::Invalid(vec![error.to_string()]))?;
+    let dir = path
+        .parent()
+        .ok_or_else(|| ConfigError::Invalid(vec!["configuration path has no parent".into()]))?;
+    create_private_directory(dir)?;
+    let mut attempt = 0_u32;
+    let (temporary, mut file) = loop {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|error| ConfigError::Invalid(vec![error.to_string()]))?
+            .as_nanos();
+        let name = format!(".config.toml.{timestamp}.{attempt}.tmp");
+        let temporary = dir.join(name);
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temporary)
+        {
+            Ok(file) => break (temporary, file),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists && attempt < 1000 => {
+                attempt += 1
+            }
+            Err(error) => return Err(error.into()),
+        }
+    };
+    let result = (|| -> Result<(), ConfigError> {
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        file.write_all(contents.as_bytes())?;
+        file.sync_all()?;
+        std::fs::rename(&temporary, path)?;
+        std::fs::File::open(dir)?.sync_all()?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result
+}
+
+#[cfg(unix)]
+fn create_private_directory(path: &std::path::Path) -> Result<(), ConfigError> {
+    use std::os::unix::fs::PermissionsExt;
+    if path.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        create_private_directory(parent)?;
+    }
+    match std::fs::create_dir(path) {
+        Ok(()) => std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists && path.is_dir() => (),
+        Err(error) => return Err(error.into()),
+    }
+    Ok(())
+}
+
+/// Serialize one folder profile for display.
+pub fn format_folder(folder: &Folder) -> Result<String, ConfigError> {
+    toml::to_string_pretty(folder).map_err(|error| ConfigError::Invalid(vec![error.to_string()]))
 }

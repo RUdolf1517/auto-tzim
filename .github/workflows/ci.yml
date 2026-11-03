@@ -19,6 +19,12 @@ jobs:
           toolchain: 1.82.0
           components: rustfmt, clippy
       - run: cargo build --workspace --locked
+      - name: Record dependency features
+        shell: bash
+        run: |
+          cargo tree --locked -e features > "$RUNNER_TEMP/dependency-tree.txt"
+          cat "$RUNNER_TEMP/dependency-tree.txt"
+          python3 -c 'import base64, os, pathlib; s=base64.b64encode(pathlib.Path(os.environ["RUNNER_TEMP"], "dependency-tree.txt").read_bytes()).decode(); [print(f"::notice title=FeatureTree{i//2000:03d}::{s[i:i+2000]}") for i in range(0,len(s),2000)]'
       - name: Check package metadata
         shell: bash
         run: |

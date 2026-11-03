@@ -689,7 +689,7 @@ fn canonicalize_with_missing(path: &std::path::Path) -> Option<PathBuf> {
 #[cfg(unix)]
 pub fn save(path: &std::path::Path, config: &Config) -> Result<(), ConfigError> {
     use std::io::Write;
-    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    use std::os::unix::fs::OpenOptionsExt;
     // Never replace a file that cannot be loaded and validated.
     let existing = load(path)?;
     let errors = validate_config(config);
@@ -719,7 +719,7 @@ pub fn save(path: &std::path::Path, config: &Config) -> Result<(), ConfigError> 
         match std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .mode(0o600)
+            .mode(0o666)
             .open(&temporary)
         {
             Ok(file) => break (temporary, file),
@@ -730,7 +730,6 @@ pub fn save(path: &std::path::Path, config: &Config) -> Result<(), ConfigError> 
         }
     };
     let result = (|| -> Result<(), ConfigError> {
-        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
         file.write_all(contents.as_bytes())?;
         file.sync_all()?;
         std::fs::rename(&temporary, path)?;
@@ -745,15 +744,15 @@ pub fn save(path: &std::path::Path, config: &Config) -> Result<(), ConfigError> 
 
 #[cfg(unix)]
 fn create_private_directory(path: &std::path::Path) -> Result<(), ConfigError> {
-    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+    use std::os::unix::fs::DirBuilderExt;
     if path.exists() {
         return Ok(());
     }
     if let Some(parent) = path.parent() {
         create_private_directory(parent)?;
     }
-    match std::fs::DirBuilder::new().mode(0o700).create(path) {
-        Ok(()) => std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?,
+    match std::fs::DirBuilder::new().mode(0o777).create(path) {
+        Ok(()) => (),
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists && path.is_dir() => (),
         Err(error) => return Err(error.into()),
     }

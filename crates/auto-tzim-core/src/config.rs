@@ -211,10 +211,24 @@ pub fn validate_document(input: &str) -> Vec<String> {
     match top.get("folder") {
         None => (),
         Some(toml::Value::Array(folders)) => {
+            let mut names = std::collections::HashSet::new();
+            let mut roots = std::collections::HashSet::new();
             for (index, folder) in folders.iter().enumerate() {
                 let path = format!("folder[{index}]");
                 if let Some(table) = folder.as_table() {
                     validate_folder_fields(table, &path, &mut errors);
+                    if let Some(name) = table.get("name").and_then(toml::Value::as_str) {
+                        if !names.insert(name.to_lowercase()) {
+                            errors.push(format!("{path}.name: duplicate_name"));
+                        }
+                    }
+                    if let Some(root) = table.get("root").and_then(toml::Value::as_str) {
+                        if let Ok(root) = std::fs::canonicalize(root) {
+                            if !roots.insert(root) {
+                                errors.push(format!("{path}.root: duplicate_root"));
+                            }
+                        }
+                    }
                 } else {
                     errors.push(format!("{path}: expected table"));
                 }

@@ -166,3 +166,40 @@ fn names_are_case_insensitive_and_cloud_roots_rejected() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("cloud_sync_root"));
 }
+
+#[test]
+fn edit_keeps_other_profile_bytes_and_supports_rename() {
+    let s = Sandbox::new();
+    let a = s.folder("alpha");
+    let b = s.folder("beta");
+    assert!(s
+        .run(&["folder", "add", a.to_str().unwrap(), b.to_str().unwrap()])
+        .status
+        .success());
+    let before = fs::read_to_string(s.config()).unwrap();
+    let beta = before.split("[[folder]]").nth(2).unwrap().to_owned();
+    let out = s.run(&["folder", "edit", "alpha", "--name", "changed"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let after = fs::read_to_string(s.config()).unwrap();
+    assert_eq!(after.split("[[folder]]").nth(2).unwrap(), beta);
+    assert!(s.run(&["folder", "show", "changed"]).status.success());
+    assert_eq!(s.run(&["folder", "show", "alpha"]).status.code(), Some(2));
+}
+
+#[cfg(unix)]
+#[test]
+fn root_symlinks_are_not_laundered_by_a_trailing_slash() {
+    use std::os::unix::fs::symlink;
+    let s = Sandbox::new();
+    let real = s.folder("real");
+    let link = s.root.join("link");
+    symlink(real, &link).unwrap();
+    let root = format!("{}/", link.display());
+    let out = s.run(&["folder", "add", &root]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("root_is_symlink"));
+}

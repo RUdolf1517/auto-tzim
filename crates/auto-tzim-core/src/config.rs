@@ -585,7 +585,10 @@ pub fn validate_root(root: &std::path::Path, allow_cloud_sync: bool) -> Result<P
     if !root.is_absolute() {
         return Err("root_not_absolute".into());
     }
-    let metadata = std::fs::symlink_metadata(root).map_err(|error| {
+    // Rebuilding from components strips trailing separators and `.` so a symlink
+    // to a directory cannot be laundered by appending a slash.
+    let inspected: PathBuf = root.components().collect();
+    let metadata = std::fs::symlink_metadata(&inspected).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             "root_missing"
         } else {

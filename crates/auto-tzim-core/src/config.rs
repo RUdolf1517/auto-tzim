@@ -165,6 +165,28 @@ pub fn validate_document(input: &str) -> Vec<String> {
                 ],
                 &mut errors,
             );
+            if table
+                .get("mode")
+                .and_then(toml::Value::as_str)
+                .is_some_and(|v| v != "confirm")
+            {
+                errors.push("installation.mode: default must be confirm".into());
+            }
+            if table
+                .get("update_policy")
+                .and_then(toml::Value::as_str)
+                .is_some_and(|v| v != "notify")
+            {
+                errors.push("installation.update_policy: scheduled is not in v0.1".into());
+            }
+            if let Some(value) = table.get("tzim_path").and_then(toml::Value::as_str) {
+                let path = std::path::Path::new(value);
+                if !value.is_empty() && (!path.is_absolute() || path.is_dir()) {
+                    errors.push(
+                        "installation.tzim_path: must be absolute and not a directory".into(),
+                    );
+                }
+            }
             for key in ["tzim_path", "mode", "update_policy"] {
                 if table.get(key).is_some_and(|v| !v.is_str()) {
                     errors.push(format!("installation.{key}: expected string"));
@@ -267,6 +289,47 @@ fn validate_folder_fields(
         "schedule",
     ];
     unknown_fields(table, path, FIELDS, errors);
+    if let Some(name) = table.get("name").and_then(toml::Value::as_str) {
+        if name.is_empty()
+            || name.trim() != name
+            || name.chars().count() > 120
+            || name.chars().any(char::is_control)
+        {
+            errors.push(format!(
+                "{path}.name: expected 1–120 characters without control or surrounding spaces"
+            ));
+        }
+    }
+    if let Some(root) = table.get("root").and_then(toml::Value::as_str) {
+        let cloud = table
+            .get("allow_cloud_sync")
+            .and_then(toml::Value::as_bool)
+            .unwrap_or(false);
+        if let Err(reason) = validate_root(std::path::Path::new(root), cloud) {
+            errors.push(format!("{path}.root: {reason}"));
+        }
+    }
+    if table
+        .get("min_file_age_seconds")
+        .and_then(toml::Value::as_integer)
+        .is_some_and(|n| !(0..=86_400).contains(&n))
+    {
+        errors.push(format!("{path}.min_file_age_seconds: expected 0–86400"));
+    }
+    if table
+        .get("timeout_seconds")
+        .and_then(toml::Value::as_integer)
+        .is_some_and(|n| !(1..=21_600).contains(&n))
+    {
+        errors.push(format!("{path}.timeout_seconds: expected 1–21600"));
+    }
+    if let Some(formats) = table.get("formats").and_then(toml::Value::as_array) {
+        for format in formats.iter().filter_map(toml::Value::as_str) {
+            if !["png", "gzip", "zip", "ico", "jpeg", "tiff", "zlib"].contains(&format) {
+                errors.push(format!("{path}.formats: unsupported format {format}"));
+            }
+        }
+    }
     for key in ["name", "root"] {
         if !table.get(key).is_some_and(toml::Value::is_str) {
             errors.push(format!("{path}.{key}: required string"));
@@ -356,7 +419,9 @@ mod validation_tests {
 
     #[test]
     fn independent_errors_are_reported_together() {
-        let errors = validate_document("schema = 1\n[installation]\n[[folder]]\nroot = '/x'\nname = 'x'\nrecurse = true\nenabled = 3\njobs = 2\n");
+        let root = std::env::current_dir().unwrap();
+        let input = format!("schema = 1\n[installation]\n[[folder]]\nroot = {:?}\nname = 'x'\nrecurse = true\nenabled = 3\njobs = 2\n", root.to_str().unwrap());
+        let errors = validate_document(&input);
         assert_eq!(errors.len(), 3, "{errors:?}");
         assert!(errors
             .iter()

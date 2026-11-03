@@ -104,3 +104,65 @@ fn remove_never_touches_user_files() {
     assert!(s.run(&["folder", "remove", "photos"]).status.success());
     assert_eq!(fs::read(folder.join("image")).unwrap(), b"user content");
 }
+
+#[cfg(unix)]
+#[test]
+fn permissions_are_private_under_umask_zero() {
+    use std::os::unix::fs::PermissionsExt;
+    let s = Sandbox::new();
+    let folder = s.folder("photos");
+    let out = Command::new("sh")
+        .args([
+            "-c",
+            "umask 000; exec \"$1\" folder add \"$2\"",
+            "test",
+            env!("CARGO_BIN_EXE_auto-tzim"),
+        ])
+        .arg(&folder)
+        .env("HOME", s.root.join("home"))
+        .env("AUTO_TZIM_HOME", s.root.join("config"))
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        fs::metadata(s.config()).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    assert_eq!(
+        fs::metadata(s.root.join("config"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
+}
+
+#[test]
+fn names_are_case_insensitive_and_cloud_roots_rejected() {
+    let s = Sandbox::new();
+    let first = s.folder("photos");
+    let second = s.folder("other");
+    assert!(s
+        .run(&["folder", "add", first.to_str().unwrap()])
+        .status
+        .success());
+    assert!(s.run(&["folder", "show", "PHOTOS"]).status.success());
+    let out = s.run(&[
+        "folder",
+        "add",
+        second.to_str().unwrap(),
+        "--name",
+        "PHOTOS",
+    ]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("duplicate_name"));
+    let cloud = s.folder("home/Dropbox/images");
+    let out = s.run(&["folder", "add", cloud.to_str().unwrap()]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("cloud_sync_root"));
+}

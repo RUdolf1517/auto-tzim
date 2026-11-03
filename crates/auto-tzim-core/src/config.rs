@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Schema-one settings; a missing installation section is invalid.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub schema: u32,
@@ -14,7 +14,7 @@ pub struct Config {
 }
 
 /// Application-wide settings.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Installation {
     pub tzim_path: String,
@@ -35,7 +35,7 @@ impl Default for Installation {
 }
 
 /// One named folder profile, with the schema defaults applied.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Folder {
     pub name: String,
@@ -476,7 +476,9 @@ pub fn validate_config(config: &Config) -> Vec<String> {
             if previous.name.to_lowercase() == name.to_lowercase() {
                 errors.push(format!("{label}.name: duplicate_name"));
             }
-            if previous.root == folder.root {
+            if previous.root == folder.root
+                || matches!((std::fs::canonicalize(&previous.root), std::fs::canonicalize(&folder.root)), (Ok(a), Ok(b)) if a == b)
+            {
                 errors.push(format!("{label}.root: duplicate_root"));
             }
         }
@@ -597,13 +599,19 @@ pub fn save(path: &std::path::Path, config: &Config) -> Result<(), ConfigError> 
     use std::io::Write;
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
     // Never replace a file that cannot be loaded and validated.
-    let _existing = load(path)?;
+    let existing = load(path)?;
     let errors = validate_config(config);
     if !errors.is_empty() {
         return Err(ConfigError::Invalid(errors));
     }
-    let contents = toml::to_string_pretty(config)
-        .map_err(|error| ConfigError::Invalid(vec![error.to_string()]))?;
+    let contents = match std::fs::read_to_string(path) {
+        Ok(original) => preserve_profiles(&original, &existing, config)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            toml::to_string_pretty(config)
+                .map_err(|error| ConfigError::Invalid(vec![error.to_string()]))?
+        }
+        Err(error) => return Err(error.into()),
+    };
     let dir = path
         .parent()
         .ok_or_else(|| ConfigError::Invalid(vec!["configuration path has no parent".into()]))?;
@@ -645,14 +653,14 @@ pub fn save(path: &std::path::Path, config: &Config) -> Result<(), ConfigError> 
 
 #[cfg(unix)]
 fn create_private_directory(path: &std::path::Path) -> Result<(), ConfigError> {
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
     if path.exists() {
         return Ok(());
     }
     if let Some(parent) = path.parent() {
         create_private_directory(parent)?;
     }
-    match std::fs::create_dir(path) {
+    match std::fs::DirBuilder::new().mode(0o700).create(path) {
         Ok(()) => std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?,
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists && path.is_dir() => (),
         Err(error) => return Err(error.into()),
@@ -663,4 +671,72 @@ fn create_private_directory(path: &std::path::Path) -> Result<(), ConfigError> {
 /// Serialize one folder profile for display.
 pub fn format_folder(folder: &Folder) -> Result<String, ConfigError> {
     toml::to_string_pretty(folder).map_err(|error| ConfigError::Invalid(vec![error.to_string()]))
+}
+
+// Keep the user's original bytes outside the folder blocks being modified.
+fn preserve_profiles(original: &str, old: &Config, new: &Config) -> Result<String, ConfigError> {
+    if original.contains("\"\"\"") || original.contains("\'\'\'") {
+        return Err(ConfigError::Invalid(vec![
+            "cannot safely edit a configuration containing multiline strings".into(),
+        ]));
+    }
+    let mut offsets = Vec::new();
+    let mut offset = 0;
+    for line in original.split_inclusive('\n') {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("[[") {
+            if let Some((name, _)) = rest.split_once("]]") {
+                if name.trim() == "folder" {
+                    offsets.push(offset);
+                }
+            }
+        }
+        offset += line.len();
+    }
+    if offsets.len() != old.folder.len() {
+        return Err(ConfigError::Invalid(vec![
+            "cannot safely edit folder profiles in this TOML layout".into(),
+        ]));
+    }
+    if old.folder.is_empty()
+        && !new.folder.is_empty()
+        && original
+            .parse::<toml::Value>()
+            .ok()
+            .and_then(|v| v.get("folder").cloned())
+            .is_some()
+    {
+        return Err(ConfigError::Invalid(vec![
+            "cannot safely append to inline folder array".into(),
+        ]));
+    }
+    let mut result = original[..offsets.first().copied().unwrap_or(original.len())].to_owned();
+    let mut seen = Vec::new();
+    for (index, folder) in old.folder.iter().enumerate() {
+        let start = offsets[index];
+        let end = offsets.get(index + 1).copied().unwrap_or(original.len());
+        if let Some(next) = new.folder.iter().find(|item| item.root == folder.root) {
+            seen.push(next.root.clone());
+            if next == folder {
+                result.push_str(&original[start..end]);
+            } else {
+                append_folder(&mut result, next)?;
+            }
+        }
+    }
+    for folder in &new.folder {
+        if !seen.contains(&folder.root) {
+            append_folder(&mut result, folder)?;
+        }
+    }
+    Ok(result)
+}
+
+fn append_folder(text: &mut String, folder: &Folder) -> Result<(), ConfigError> {
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str("\n[[folder]]\n");
+    text.push_str(&format_folder(folder)?);
+    Ok(())
 }

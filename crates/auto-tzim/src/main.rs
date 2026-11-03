@@ -137,8 +137,9 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                         None => root
                             .file_name()
                             .ok_or_else(|| invalid("root has no basename"))?
-                            .to_string_lossy()
-                            .into_owned(),
+                            .to_str()
+                            .ok_or_else(|| invalid("non-UTF-8 folder name: specify --name"))?
+                            .to_owned(),
                     };
                     let mut folder = Folder {
                         name,

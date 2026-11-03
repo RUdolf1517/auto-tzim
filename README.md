@@ -5,7 +5,8 @@ files `tzim` is allowed to touch, and records what happened. It contains no code
 replacer: every eligibility, refusal, verification and replacement decision belongs to `tzim`, and `auto-tzim`
 never routes a refused file anywhere else.
 
-> **Status: AT-01 skeleton.** Only `--help` and `--version` exist; the product below is not implemented.
+> **Status: AT-02 work in progress.** Configuration validation and folder profiles are being implemented;
+> discovery, planning and processing are not implemented. This is not a working optimizer.
 > Build with the pinned Rust toolchain **1.82.0**: `cargo build --workspace`.
 > CI runs on `ubuntu-24.04` and `macos-15`.
 

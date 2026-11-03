@@ -347,3 +347,25 @@ fn override_keeps_home_and_xdg_untouched() {
     assert_eq!(fs::read_dir(state).unwrap().count(), 0);
     assert!(s.config().exists());
 }
+
+#[test]
+fn add_to_explicit_empty_profile_array() {
+    let s = Sandbox::new();
+    let folder = s.folder("photos");
+    fs::create_dir_all(s.root.join("config")).unwrap();
+    fs::write(
+        s.config(),
+        "schema = 1\nfolder = [] # keep this comment\n[installation]\n",
+    )
+    .unwrap();
+    let out = s.run(&["folder", "add", folder.to_str().unwrap()]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(s.run(&["config", "validate"]).status.success());
+    assert!(fs::read_to_string(s.config())
+        .unwrap()
+        .contains("# keep this comment"));
+}

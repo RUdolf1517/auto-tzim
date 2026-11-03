@@ -790,6 +790,7 @@ fn preserve_profiles(original: &str, old: &Config, new: &Config) -> Result<Strin
             "cannot safely edit folder profiles in this TOML layout".into(),
         ]));
     }
+    let mut result = original[..offsets.first().copied().unwrap_or(original.len())].to_owned();
     if old.folder.is_empty()
         && !new.folder.is_empty()
         && original
@@ -798,11 +799,37 @@ fn preserve_profiles(original: &str, old: &Config, new: &Config) -> Result<Strin
             .and_then(|v| v.get("folder").cloned())
             .is_some()
     {
-        return Err(ConfigError::Invalid(vec![
-            "cannot safely append to inline folder array".into(),
-        ]));
+        // An empty explicit array and an array-of-tables cannot coexist. Remove
+        // only that assignment, preserving the rest of the user's text.
+        let mut replacement = String::new();
+        let mut removed = false;
+        let mut top_level = true;
+        for line in result.split_inclusive('\n') {
+            let clean = line.split('#').next().unwrap_or("").trim();
+            if clean.starts_with('[') {
+                top_level = false;
+            }
+            if top_level
+                && clean
+                    .split_once('=')
+                    .is_some_and(|(key, value)| key.trim() == "folder" && value.trim() == "[]")
+            {
+                removed = true;
+                if let Some((_, comment)) = line.split_once('#') {
+                    replacement.push('#');
+                    replacement.push_str(comment);
+                }
+            } else {
+                replacement.push_str(line);
+            }
+        }
+        if !removed {
+            return Err(ConfigError::Invalid(vec![
+                "cannot safely edit inline folder array".into(),
+            ]));
+        }
+        result = replacement;
     }
-    let mut result = original[..offsets.first().copied().unwrap_or(original.len())].to_owned();
     let mut seen = Vec::new();
     for (index, folder) in old.folder.iter().enumerate() {
         let start = offsets[index];

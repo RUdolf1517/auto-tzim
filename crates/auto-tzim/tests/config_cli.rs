@@ -524,7 +524,13 @@ fn non_utf8_directory_name_does_not_panic() {
     let path = sandbox
         .root
         .join(OsString::from_vec(b"non-utf8-\xff".to_vec()));
-    fs::create_dir(&path).unwrap();
+    if let Err(error) = fs::create_dir(&path) {
+        // APFS rejects invalid UTF-8 names with EILSEQ; still exercise the
+        // CLI with the same non-UTF-8 argument, even if it cannot exist there.
+        if !cfg!(target_os = "macos") || error.raw_os_error() != Some(92) {
+            panic!("creating non-UTF-8 test directory: {error}");
+        }
+    }
     let output = Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
         .env("HOME", sandbox.root.join("home"))
         .env("AUTO_TZIM_HOME", sandbox.root.join("config"))

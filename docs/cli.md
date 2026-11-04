@@ -150,6 +150,10 @@ adapter contract, `2` invalid config, `7` unreadable state.
 
 ### 2.2 `config validate`
 
+This is the command that checks **reality**, not only the document: it reports a root that no longer exists, is now a
+symlink or a file, and a `tzim_path` that is missing or not executable ([D-56](manager/DECISIONS.md)) — the read-only
+folder commands do not, so an unplugged disk never makes a profile unrepairable.
+
 Parses and validates **without touching state**: it takes no lock and creates no file or directory — a config write is an
 atomic rename, so a reader needs no lock to see a whole file ([D-54](manager/DECISIONS.md), F-21). Exit `0` valid, `2` invalid with **every** error listed (not just the
 first), each naming the field, the rule and a suggested correction.

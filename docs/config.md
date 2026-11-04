@@ -69,11 +69,17 @@ Every field is listed; nothing is implicit.
 
 ## 5. What validation refuses, with the reason
 
+Two of the rows below are **environment** checks and the rest are **structure** checks ([D-56](manager/DECISIONS.md)).
+Structure is checked on every load and every save; environment — the root exists, is a directory, is not a symlink; a
+tzim_path exists and is executable — is checked by `config validate`, by `folder add`, and at run time. A folder on an
+unplugged disk therefore keeps its profile usable: list, edit, disable and remove all work, and `config validate` is the
+command that reports `root_missing`.
+
 | Input | Result | Why |
 | --- | --- | --- |
 | `root = "/"`, `"$HOME"`, `"/usr"`, `"/etc"`, `"/System"`, `"/var"`, `"/bin"`, `"/sbin"`, platform analogues | error `forbidden_root` | the allowlist must be narrow; a whole home directory is the classic "it optimized everything" report |
 | `root = ""`, `"."`, `"../photos"`, a relative path | error `root_not_absolute` | the plan must not depend on the working directory |
-| a root that is a file, a symlink, or missing | error `root_not_a_directory` / `root_is_symlink` / `root_missing` | canonicalisation must not launder a link |
+| a root that is a file, a symlink, or missing — **environment** | error `root_not_a_directory` / `root_is_symlink` / `root_missing` | canonicalisation must not launder a link |
 | a root containing `AUTO_TZIM_HOME`, or inside it | error `state_inside_root` | the program must not plan its own state directory or logs (D-08) |
 | a known cloud-sync root without `allow_cloud_sync = true` | error `cloud_sync_root` | conflicts with a sync client are silent data races |
 | a NUL byte, a control character, a duplicate `name`, a duplicate `root` | error `duplicate_name` / `duplicate_root` | ambiguity is not a feature: two folders that print the same cannot be told apart by the user typing a command |

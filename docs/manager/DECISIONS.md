@@ -61,6 +61,7 @@ invent it; the owner may change it without cost), **superseded**.
 | D-53 | **File locking is `std`: MSRV moves 1.82 → 1.89**, where `File::lock` / `try_lock` / `unlock` were stabilised. `unsafe` stays forbidden, no wrapper crate, and the lock file is never deleted — the kernel releases it when the holder dies, which is exactly the `SIGKILL` case a plain lock file cannot survive | **adopted (manager default, 2026-11-02)** — answers the coder's AT-02 question 3; amends [D-40](DECISIONS.md) | `state.md` §5; `rust-toolchain.toml`; both manifests | AT-02, AT-05 |
 | D-54 | **AT-02's seven grey areas decided**: an explicit `mode = "auto"` is valid (only the *default* is `confirm`); a non-empty `tzim_path` must exist, be a file and be executable; `--allow-cloud-sync` / `--no-allow-cloud-sync` exist on `folder add\|edit`; the permissions control is accepted as a whole-protection check with one added repair test; lock metadata is diagnostics only (`started_at`, host omitted when unknown); stale temp cleanup is safe **because** the config lock is held; and `config validate` takes no lock and creates nothing | **adopted (manager default, 2026-11-03)** — answers the coder's open questions on PR #34 | `config.md` §3; `cli.md` §2.2–2.4; `state.md` §5 | AT-02 |
 | D-55 | **`macos-15-intel` may be measured as a diagnostic, never switched to silently**; the runner decision stays open and the AT-02 merge does not depend on GitHub's macOS capacity | **adopted (manager default, 2026-11-03)** — answer to the coder's D-51 question | R-27; [D-51](DECISIONS.md) | AT-02 onward |
+| D-56 | **Validation splits in two**: *structure* (parsed into the model: schema, enums, names, duplicates, path shape, forbidden roots, cloud-sync rule, reserved features, ranges) is checked on **every** load and save; *environment* (the root exists, is a directory, is not a symlink, canonicalises; `tzim_path` exists and is executable) is checked only by `config validate`, by `folder add`, and at run time — an unplugged disk must not make the tool unrepairable | **adopted (manager default, 2026-11-04)** — amends [D-54](DECISIONS.md) item 2, after the review of `b1b6d5a` found the trap | `config.md` §5; `cli.md` §2.2–2.4 | AT-02 |
 
 ---
 
@@ -1422,3 +1423,45 @@ GitHub's capacity.
 
 The honest summary for the log: the change reduced the demand from four macOS slots per push to one, and the remaining misses
 are GitHub's arm64 pool. If intel turns out to be reliable, the decision to switch will be made on those numbers.
+
+## D-56 · Two kinds of validation, because a disk can be unplugged
+
+**Status: adopted (manager default, 2026-11-04).** Amends [D-54](DECISIONS.md) item 2.
+
+`load()` calls `validate_config()`, and `validate_config()` calls `validate_root()`, which asks the filesystem whether the
+root exists, is a directory and is not a symlink. `save()` does the same before writing. So a profile whose disk is not
+mounted makes **every** command exit `2` — `folder list`, `folder show`, `folder disable`, `folder remove`, `config
+validate`. The user cannot even delete the profile that is in the way; the only repair left is hand-editing TOML, in a tool
+whose purpose is to avoid exactly that. Same shape for `tzim_path`: uninstall `tzim`, and the configuration becomes
+unreadable.
+
+The mistake is mine, not the coder's: [D-54](DECISIONS.md) item 2 said `config validate` must check that the path exists and
+is executable, and the implementation put that check where the rest of validation lives. The rule was right and the
+placement was wrong.
+
+**The split.** Two questions, asked at different times, by different commands:
+
+| Kind | What it asks | Examples | Asked by |
+| --- | --- | --- | --- |
+| **Structure** | is this a well-formed configuration? | schema, `mode`/`update_policy` enums, name rules, duplicate name and root, absolute path, empty root, `forbidden_root`, `state_inside_root`, `cloud_sync_root` without the flag, `not_in_v01`, ranges, format names, `tzim_path` shape | `load()` and `save()` — always |
+| **Environment** | is the world still the way the file says? | root exists, is a directory, is not a symlink, canonicalises; `tzim_path` exists, is a regular file, is executable | `config validate` (all folders), `folder add` (the folders being added), and `run` (the folder being run) |
+
+Both columns are string or metadata facts about *this machine right now* in the second column, and facts about *the document*
+in the first. Only the first is a reason to refuse to read the file.
+
+**Consequences, stated as promises:**
+
+- a config whose root is on an unmounted disk still **loads**; `folder list` and `folder show` print it; `folder edit`,
+  `folder enable`, `folder disable` and `folder remove` work;
+- `config validate` **is** the command that reports reality: it exits `2` with `root_missing` for that folder, and that is
+  the intended way to find out;
+- `folder add` still refuses a root that does not exist, is a file, or is a symlink — the user is naming it *now*;
+- a corrupt configuration is still never overwritten: corruption is a *structure* failure, and structure is still checked on
+  every save.
+
+**Why not warn instead of error on load:** a warning printed by `folder list` is read by nobody, and a program that prints
+warnings while refusing nothing teaches its users to ignore output. The split keeps every fact checkable — in the command
+whose name is `validate`.
+
+**Reversal:** if it turns out users expect `folder list` to fail loudly on a broken root, the alternative is a `--strict`
+flag on the read-only commands, not a return to the trap.

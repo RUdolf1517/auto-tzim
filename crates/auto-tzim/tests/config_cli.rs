@@ -474,3 +474,23 @@ fn inline_folder_array_supports_edit_remove_and_add() {
         Some(2)
     );
 }
+
+#[test]
+fn stale_temporary_file_is_never_loaded_as_configuration() {
+    let sandbox = Sandbox::new();
+    let folder = sandbox.folder("photos");
+    fs::create_dir_all(sandbox.root.join("config")).unwrap();
+    fs::write(
+        sandbox.root.join("config/.config.toml.1.0.tmp"),
+        b"corrupt temporary data",
+    )
+    .unwrap();
+    let result = sandbox.run(&["folder", "add", folder.to_str().unwrap()]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(sandbox.run(&["config", "validate"]).status.success());
+    assert!(sandbox.run(&["folder", "show", "photos"]).status.success());
+}

@@ -76,6 +76,32 @@ jobs:
             printf "argument=%s exit=%s stdout=<empty> stderr:\n" "$arg" "$status"
             cat stderr.txt
           done
+      - name: Record aggregate validation evidence
+        shell: bash
+        run: |
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          mkdir "$temp/settings" "$temp/photos"
+          export AUTO_TZIM_HOME="$temp/settings"
+          printf "schema=1\n[installation]\n[[folder]]\nname='photos'\nroot='%s'\nrecurse=true\nenabled=1\njobs=2\n" "$temp/photos" > "$temp/settings/config.toml"
+          status=0
+          target/debug/auto-tzim config validate >"$temp/out" 2>"$temp/err" || status=$?
+          test "$status" -eq 2
+          test ! -s "$temp/out"
+          grep -F 'folder[0].recurse' "$temp/err"
+          grep -F 'recursive' "$temp/err"
+          grep -F 'folder[0].enabled' "$temp/err"
+          grep -F 'folder[0].jobs' "$temp/err"
+          evidence="$(tr '\n' '|' < "$temp/err")"
+          echo "::notice title=Three validation errors::exit=$status stdout=<empty> stderr=$evidence"
+          printf "schema=1\n[installation]\n[[folder]]\nname='photos'\nroot='%s'\njobs=2\n" "$temp/photos" > "$temp/settings/config.toml"
+          status=0
+          target/debug/auto-tzim config validate >"$temp/out" 2>"$temp/err" || status=$?
+          test "$status" -eq 2
+          test ! -s "$temp/out"
+          test "$(wc -l < "$temp/err" | tr -d ' ')" -eq 1
+          grep -F 'folder[0].jobs' "$temp/err"
+          echo "::notice title=One validation error::exit=$status stdout=<empty> stderr=$(cat "$temp/err")"
       - name: Record configuration refusal evidence
         shell: bash
         run: |

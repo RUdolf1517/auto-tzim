@@ -712,3 +712,65 @@ fn lock_path_symlink_is_refused_without_touching_target() {
     assert_eq!(result.status.code(), Some(2));
     assert_eq!(fs::read(target).unwrap(), b"safe");
 }
+
+#[test]
+fn every_config_command_preserves_corrupt_bytes() {
+    let s = Sandbox::new();
+    let folder = s.folder("candidate");
+    fs::create_dir_all(s.root.join("config")).unwrap();
+    let corrupt = b"invalid [[[\n";
+    fs::write(s.config(), corrupt).unwrap();
+    let path = folder.to_str().unwrap();
+    let commands: &[&[&str]] = &[
+        &["config", "validate"],
+        &["folder", "add", path],
+        &["folder", "list"],
+        &["folder", "show", "candidate"],
+        &["folder", "edit", "candidate", "--name", "new"],
+        &["folder", "enable", "candidate"],
+        &["folder", "disable", "candidate"],
+        &["folder", "remove", "candidate"],
+    ];
+    for args in commands {
+        let output = s.run(args);
+        assert_eq!(output.status.code(), Some(2), "{args:?}");
+        assert!(!output.stderr.is_empty(), "{args:?}");
+        assert_eq!(fs::read(s.config()).unwrap(), corrupt, "{args:?}");
+    }
+}
+
+#[test]
+fn name_identity_duplicates_rename_and_listing_are_stable() {
+    let s = Sandbox::new();
+    let first = s.folder("project");
+    let other = s.folder("other");
+    let path = first.to_str().unwrap();
+    assert!(s.run(&["folder", "add", path]).status.success());
+    let duplicate_root = s.run(&["folder", "add", path]);
+    assert_eq!(duplicate_root.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&duplicate_root.stderr).contains("duplicate_root"));
+    let duplicate_name = s.run(&[
+        "folder",
+        "add",
+        other.to_str().unwrap(),
+        "--name",
+        "Project",
+    ]);
+    assert_eq!(duplicate_name.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&duplicate_name.stderr).contains("duplicate_name"));
+    let lower = s.run(&["folder", "show", "project"]);
+    let upper = s.run(&["folder", "show", "Project"]);
+    assert!(lower.status.success() && upper.status.success());
+    assert_eq!(lower.stdout, upper.stdout);
+    let first_list = s.run(&["folder", "list"]);
+    let second_list = s.run(&["folder", "list"]);
+    assert!(first_list.status.success() && second_list.status.success());
+    assert_eq!(first_list.stdout, second_list.stdout);
+    assert!(s
+        .run(&["folder", "edit", "project", "--name", "trips"])
+        .status
+        .success());
+    let old = s.run(&["folder", "remove", "project"]);
+    assert_eq!(old.status.code(), Some(2));
+    assert!(s.run(&["folder", "show", "trips"]).status.success());
+}

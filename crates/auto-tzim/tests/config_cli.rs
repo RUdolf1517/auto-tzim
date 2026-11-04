@@ -515,3 +515,27 @@ fn quoted_toml_headers_are_preserved_during_edit() {
     assert!(result.contains("[\"installation\"] # installation\nupdate_policy = 'notify'"));
     assert!(sandbox.run(&["config", "validate"]).status.success());
 }
+
+#[test]
+fn non_utf8_directory_name_does_not_panic() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    let sandbox = Sandbox::new();
+    let path = sandbox
+        .root
+        .join(OsString::from_vec(b"non-utf8-\xff".to_vec()));
+    fs::create_dir(&path).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
+        .env("HOME", sandbox.root.join("home"))
+        .env("AUTO_TZIM_HOME", sandbox.root.join("config"))
+        .args(["folder", "add"])
+        .arg(&path)
+        .args(["--name", "safe-name"])
+        .output()
+        .unwrap();
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("panicked"));
+    assert!(output.status.success() || output.status.code() == Some(2));
+    if !output.status.success() {
+        assert!(!sandbox.config().exists());
+    }
+}

@@ -75,6 +75,28 @@ built-in list, path comparison only, documented as best-effort, escapable with o
 behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
 ones are resolved). Each would have been baked into stored data by the first commit.
 
+### Changed before the code — the toolchain moves to 1.89, for a lock that dies with its process
+
+AT-02 needs a lock around the read-modify-write of `config.toml`. Rust **1.82** has none in `std`, and a plain lock file —
+create exclusively, delete on exit — is not deleted when the process is `SIGKILL`ed, so every later `folder add` is blocked
+until a human removes a file. For a tool whose alternative is a lost folder entry, that is the wrong failure.
+
+[D-53](docs/manager/DECISIONS.md): **MSRV 1.82 → 1.89**, where `File::lock` / `try_lock` / `unlock` were stabilised, and
+`std` implements them with `flock` on Unix. No `unsafe`, no wrapper crate, no C. The lock is owned by the kernel, so it is
+released when the holder dies — the `SIGKILL` case stops existing rather than becoming a ritual.
+
+The `unsafe` FFI option was not silly: it is small, and it works. It was refused because it puts the one property this
+project claims never to have into the codebase for a capability `std` ships, and every later reviewer would have to re-verify
+it. The wrapper-crate option was refused for the usual reason: a dependency, an allowlist entry and a review, to wrap a call
+`std` makes.
+
+The bump is free today and will never be this cheap again — nothing is published, and no user has an old toolchain pinned.
+D-40's principle is untouched (*the MSRV is the toolchain CI runs*), only the number moved, and the next bump gets the same
+test: a concrete API, never "newest".
+
+`state.md` §5 is rewritten with it: no stale locks exist any more, the file is never deleted, its contents are diagnostics
+for the human reading exit `8`, and `config.lock` (AT-02) and `run.lock` (AT-05) share one helper.
+
 ### Prepared — a full queue for the coder, and the language said once more
 
 The owner asked for maximum work, so the coder now has a schedule instead of one brief: [CODER-QUEUE](docs/manager/CODER-QUEUE.md).

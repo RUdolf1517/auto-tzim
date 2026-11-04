@@ -14,7 +14,7 @@ This is repeated at the top because it has already been argued once and it will 
 | --- | --- |
 | The product is **Rust**: a workspace with `auto-tzim-core` (library) and `auto-tzim` (binary) | [D-33](DECISIONS.md), adopted by the owner 2026-11-01 |
 | `SPEC.md` §4.1 still recommends Python and **must never be edited** — the override lives in the decision log and in [CONFLICTS C-5](../spec/CONFLICTS.md) | D-33 |
-| Toolchain **1.82.0**, pinned in `rust-toolchain.toml` and in CI. Do not use a standard-library API that arrived after it | [D-40](DECISIONS.md) |
+| Toolchain **1.89.0**, pinned in `rust-toolchain.toml`, in both manifests (`rust-version`) and in CI. Do not use a standard-library API that arrived after it | [D-40](DECISIONS.md), [D-53](DECISIONS.md) |
 | **No Python in the product.** Two exceptions exist and both are CI-only: `scripts/check-pins.py` and its self-test | [D-41](DECISIONS.md) |
 | The fake `tzim`, the case runner and the pinned-binary fetcher are **one Rust binary**, `auto-tzim-harness` — not a shell script, not Python | [dependencies](../dependencies.md) §2a, [testing-harness](../testing-harness.md) |
 | No crate that compiles C, no crate that can open a socket, every version `=X.Y.Z`, every crate on the allowlist | [D-35](DECISIONS.md), [D-38](DECISIONS.md) |
@@ -24,7 +24,8 @@ Mechanics that follow from Rust, and are review items:
 
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace --locked` —
   all three already run in CI on both platforms. They are not advisory.
-- **No `unsafe`** and no `libc`: both need a decision first, and neither is needed for anything in v0.1.
+- **No `unsafe`, no `libc`, no wrapper crate for things `std` does.** The file lock is `std::fs::File::try_lock` — that is
+  why the MSRV is 1.89 ([D-53](DECISIONS.md)). `unsafe` and `libc` still need a decision first, and nothing in v0.1 needs them.
 - **`std::process::Command` lives in `runner.rs` and nowhere else.** `std::fs` writes live in `config.rs`, `state.rs` and
   `staging.rs`. A `use std::process` in `discovery.rs` is a review finding even if the code is correct, because the
   boundary is what makes the promise checkable.

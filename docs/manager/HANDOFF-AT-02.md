@@ -8,7 +8,7 @@ Written 2026-11-02, at `main` = `fc17b9b`, after AT-01 was accepted at `017ae80`
 brief — but the stage does not begin until the owner says so in the issue. A coder who starts before that word is not
 ahead; they are un-reviewable.
 
-**It is Rust.** The workspace is `auto-tzim-core` + `auto-tzim`, toolchain **1.82.0**, no Python in the product, no crate
+**It is Rust.** The workspace is `auto-tzim-core` + `auto-tzim`, toolchain **1.89.0** ([D-53](DECISIONS.md): the file lock is `std`, and std's lock arrived in 1.89), no Python in the product, no crate
 that compiles C or opens a socket, a new dependency being two commits (the dependency, then the `deny.toml` entry). The full
 list of rules, including what is a review finding even when the code works, is [CODER-QUEUE](CODER-QUEUE.md) §0 — read it
 before the first line.
@@ -47,6 +47,7 @@ stage is judged less on features than on **the five ways it is allowed to refuse
 | Canonicalisation | the stored `root` is the canonical path. `lstat` first: a root that is *itself* a symlink is `root_is_symlink` ([D-45](DECISIONS.md)); intermediate components are resolved, which is why `/tmp/x` on macOS is recorded as `/private/tmp/x` |
 | Folder identity | the folder's **own name** ([D-43](DECISIONS.md)): default the canonical root's basename, `--name` to override, 1–120 trimmed characters, unique case-insensitively, and the handle every subcommand takes instead of an id |
 | Cloud-sync check | the built-in list and its best-effort semantics in [D-44](DECISIONS.md); `allow_cloud_sync = true` bypasses it, and a path that is not in the list passes with no warning |
+| Locking | `locks/config.lock` guards the read-modify-write of `config.toml`, with `std::fs::File::try_lock()` ([D-53](DECISIONS.md), [state](../state.md) §5): created `0600`, **never deleted**, contents written for diagnostics, contention exits `8` naming the holder. The file surviving `SIGKILL` is not a problem — the kernel releases the lock with the process |
 | CLI surface | `config validate` and `folder add\|list\|show\|edit\|enable\|disable\|remove`, all taking `NAME`. Exit `0` on success, `2` on any validation, usage or parse error. `--json` is **not** in this stage (AT-06); `scan`, `run`, `status`, `pause`, `resume`, `doctor` still exit `2` as unknown commands |
 | The config is optional | a folder run from the command line needs **no** profile ([D-46](DECISIONS.md)): `config.toml` may hold zero folders and the program still works. Never require `folder add` before a run |
 | `folder add` | validates, canonicalises, creates the profile, prints the resulting TOML block, and **processes nothing** — adding a folder arms a plan, nothing more. A second folder with the same name or the same canonical root is `duplicate_name` / `duplicate_root`. **Several paths are accepted** (`folder add A B C`) under the all-or-nothing rule: if one is invalid, none is added ([D-49](DECISIONS.md)); `--name` applies to a single path only |
@@ -101,7 +102,8 @@ is not evidence.
 | 9 | `AUTO_TZIM_HOME` relocates everything | with it set, no file is created under `$HOME` or `$XDG_*` — shown by a before/after listing of both trees |
 | 10 | `folder remove` deletes no user file | a folder containing a real file: after `remove`, the file is present and byte-identical, and the profile is gone |
 | 11 | Two scans of the same config give the same bytes | `folder list` twice is identical, and `folder add` of the same root twice is a duplicate-`root` error, not a second entry |
-| 12 | Nothing was added that can reach the network, a process, or the registry | `git grep` for `std::net`, `std::process`, `std::fs::remove_dir_all` outside the store; `cargo tree` lists two new crates and no transitive socket or C build |
+| 12 | Two writers never interleave | `SIGKILL` a holder of `config.lock`, then acquire it in a second process — must succeed **immediately**; two processes racing 100 times, each incrementing a counter inside the critical section ⇒ counter is 100, no lost increment; a lock file left by a dead process does not block anyone; a live holder gives exit `8` naming its pid |
+| 12a | Nothing was added that can reach the network, a process, or the registry | `git grep` for `std::net`, `std::process`, `std::fs::remove_dir_all` outside the store; `cargo tree` lists two new crates and no transitive socket or C build |
 
 ## 4. The negative controls are the deliverable
 
@@ -114,7 +116,9 @@ commit with the run ID:
 2. **byte-identical** — let a rejected edit write anyway; the `sha256sum` assertion must fail;
 3. **permissions** — drop the explicit `set_permissions` call; the `umask 000` test must fail with `666`/`777`;
 4. **corrupt-not-overwritten** — let the loader fall back to defaults and save; the byte-identical assertion must fail;
-5. **containment** — disable the `AUTO_TZIM_HOME` check; the `state_inside_root` case must go green when it must be red.
+5. **containment** — disable the `AUTO_TZIM_HOME` check; the `state_inside_root` case must go green when it must be red;
+6. **the lock** — replace `try_lock()` with an `O_EXCL` create-and-delete lock file, `SIGKILL` the holder, and the next
+   acquisition must **fail** (that is the bug [D-53](DECISIONS.md) exists to prevent); restore the real lock afterwards.
 
 Record the run ID, the job name and the message for each, then revert. This is the same rule AT-01 was held to, and the
 reason is the same: a future reader has to be able to tell a live rule from a decoration.

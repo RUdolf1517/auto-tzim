@@ -45,7 +45,7 @@ invent it; the owner may change it without cost), **superseded**.
 | D-37 | **Documentation-only pull requests** are merged by the manager without asking, with a STATUS-LOG line; the boundary is mechanical (no `.rs`, `Cargo.toml`, `.github/`, fixtures) and anything touching an acceptance row stays an owner decision | adopted (owner, 2026-11-02) | five "заливай" round trips in one day | every doc pull request |
 | D-38 | "No C, no network" is enforced by **four mechanisms together** — exact pins, a deny-by-default allowlist, an explicit deny list, and the review that approves an allowlist entry; no one of them is the gate | adopted (manager default, 2026-11-02) | D-35; AT-01 question 3 | AT-01…AT-09, `deny.toml`, `dependencies.md` |
 | D-39 | How a package is verified before publication — **withdrawn the same day by D-42** | *withdrawn* | review round 3 | — |
-| D-40 | The **MSRV is the toolchain CI actually runs** (1.82), not `tzim`'s 1.88: `auto-tzim` does not build `tzim` | adopted (manager default, 2026-11-02) | `rust-toolchain.toml`; review F-03 | every manifest, CI |
+| D-40 | The **MSRV is the toolchain CI actually runs** — **1.89** since D-53 (was 1.82), not `tzim`'s: `auto-tzim` does not build `tzim` | adopted (manager default, 2026-11-02), number amended by [D-53](DECISIONS.md) | `rust-toolchain.toml`; review F-03 | every manifest, CI |
 | D-41 | **CI-only tooling may be Python; the product may not** — with a self-test, a mention in `dependencies.md`, and folding into the Rust harness at AT-08 | adopted (manager default, 2026-11-02) | `scripts/check-pins.py`; review F-06 | AT-01, AT-08 |
 | D-42 | **Packaging is not a CI gate** and nothing is published in AT-01; "publishable" means the manifest metadata, and the tarballs are verified at release, core first | adopted (owner's question, 2026-11-02) | three review rounds on an unpassable check | AT-01, `releases.md` §2 |
 | D-43 | **A folder is identified by its own name** — no generated id: unique case-insensitively, the handle every command takes, renameable in place, and history rows keep the name they were written with | **adopted (owner, 2026-11-02)** — the manager's ULID proposal was rejected | `config.md` §4; owner's answer to the AT-02 question | AT-02, AT-05, `cli.md`, `state.md` |
@@ -58,6 +58,7 @@ invent it; the owner may change it without cost), **superseded**.
 | D-50 | **The cooldown and the exit code are per folder inside a batch**: a folder still inside its window is skipped and named, the others run; `6` only when *no* folder ran because of the clock | **adopted (owner, 2026-11-02)** | D-19, D-47 | AT-05, AT-06 |
 | D-51 | **A check that reads manifests runs once, on Linux; macOS exists for platform behaviour.** Target shape: `build` (Linux), `test` (Linux + macOS), `deny` (Linux), `pinned-dependencies` (Linux) — 5 jobs, one macOS slot instead of four — plus `concurrency` and `timeout-minutes` | **adopted (owner, 2026-11-02)** — *"пусть кодер решит проблему macos jobs заодно"* | R-27; `ci.yml`; AT-02 | AT-02, every later stage |
 | D-52 | **The plan is deterministic by construction**: id is 32 hex chars from OS randomness, the hash is SHA-256 over an ordered canonical row list (paths as bytes, argv included, ids and timestamps excluded), discovery is byte-wise sorted, depth is capped at 64 | **adopted (manager default, 2026-11-02)** — AT-03 cannot start without these four numbers | `state.md` §3.4; AC-1; corpus `K-14` | AT-03, AT-05 |
+| D-53 | **File locking is `std`: MSRV moves 1.82 → 1.89**, where `File::lock` / `try_lock` / `unlock` were stabilised. `unsafe` stays forbidden, no wrapper crate, and the lock file is never deleted — the kernel releases it when the holder dies, which is exactly the `SIGKILL` case a plain lock file cannot survive | **adopted (manager default, 2026-11-02)** — answers the coder's AT-02 question 3; amends [D-40](DECISIONS.md) | `state.md` §5; `rust-toolchain.toml`; both manifests | AT-02, AT-05 |
 
 ---
 
@@ -1298,3 +1299,63 @@ dependency becomes preferable later, that is a decision, not a refactor.
 
 **Reversal.** If a second hash is ever needed (the eligibility cache, D-06), the same module serves it, and swapping in
 `sha2` is a one-file change behind the same trait.
+
+## D-53 · File locking: bump the toolchain, not the trust boundary
+
+**Status: adopted (manager default, 2026-11-02).** The coder asked the right question and — worth saying out loud — did not
+quietly break a rule to keep moving. Three options were put on the table; one of them is now the rule.
+
+**The problem, stated exactly.** `auto-tzim` must hold a lock for the read-modify-write of `config.toml`, and later for a run
+([state](../state.md) §5). Rust **1.82** has no file locking in `std`. A plain lock file — `O_EXCL` create, delete on exit —
+survives `SIGKILL`, and then every later write is blocked until a human deletes a file, which for a `folder add` is a bad
+trade. Two processes must never be inside that critical section at once; that is the whole requirement, and it is not
+negotiable because the alternative is a lost folder entry.
+
+**Verified before deciding** ([Rust RELEASES.md](https://github.com/rust-lang/rust/blob/master/RELEASES.md)): `File::lock`,
+`lock_shared`, `try_lock`, `try_lock_shared` and `unlock` were stabilised in **1.89.0 (2025-08-07)**, and on Unix `std`
+implements them with `flock`, the same primitive `fs2`/`fs4` wrap. So the choice is not "lock or no lock"; it is *which layer
+owns the primitive*.
+
+| Option | Verdict | Why |
+| --- | --- | --- |
+| **1. `unsafe` FFI `flock`** | **not now** | It works, and it is genuinely small — but it puts the one thing this project claims never to have into the codebase for a capability `std` ships. Every later reviewer would have to re-verify it, and the safety argument for a tool that deletes originals is the product |
+| **2. MSRV → 1.89, `std` locking** | **adopted** | No `unsafe`, no dependency, no C compilation, kernel-owned semantics: the lock dies with the process, so `SIGKILL` needs no stale-file ritual. The bump is free **today** — nothing is published, no user has an old toolchain in a lockfile — and it will never be this cheap again |
+| **3. A wrapper crate** (`fs2`/`fs4`) | **refused** | A dependency, an allowlist entry, a review and a transitive tree, to wrap a call `std` makes. `fs2` has had no release since 2018; the crate that needs a crate is the crate that did not read the release notes |
+
+**What moves, in one commit:**
+
+1. `rust-toolchain.toml` → `1.89.0`; both the `dtolnay/rust-toolchain` steps in `ci.yml` → `1.89.0`;
+2. `rust-version = "1.89"` in **both** manifests (the field is already required by F-18's metadata check);
+3. the README line that names the toolchain.
+
+D-40's principle is untouched — *the MSRV is the toolchain CI actually runs* — only the number moved, and it moved because a
+standard-library capability arrived. The next bump has the same test: a concrete API or a concrete fix, never "newest".
+
+**One consequence to expect.** 1.89 enables the `mismatched_lifetime_syntaxes` lint by default, and CI runs
+`cargo clippy -- -D warnings`. Code that compiled quietly on 1.82 may now warn. Fix the warnings; do **not** add
+`#[allow(...)]` at module or crate level to get a green run — a blanket allow here is the same class of shortcut as
+`continue-on-error` ([D-51](DECISIONS.md)).
+
+**The lock design, binding ([state](../state.md) §5):**
+
+| Rule | Detail |
+| --- | --- |
+| Primitive | `File::try_lock()` for acquisition (fail fast), `unlock()` or the file closing for release |
+| Contention | exit `8`, message names the holder read from the file (`pid`, process start time, host); nothing is processed |
+| The file | `locks/config.lock` (AT-02) and `locks/run.lock` (AT-05), created `0600`, **never deleted** — deleting a lock file another process holds is the classic race, and the kernel handles release for us |
+| Contents | written after acquiring, for diagnostics only: `{"pid":…,"start_time":…,"host":…}`. The kernel is the authority; the contents are for the human reading exit `8` |
+| Stale locks | **there are none.** A dead holder means a released lock, so the old "report it stale, never remove it" ritual is retired — the reason it existed was that a lock file could outlive its owner |
+| Scope | `config.lock` guards the read-modify-write of the config; taken before the read, released after the atomic write. The run lock reuses the same helper in AT-05 |
+
+**The controls that make this real** (they go in the AT-02 handoff, §4):
+
+1. `SIGKILL` a process holding the lock, then acquire it in a second process — must succeed **immediately**, which is the whole
+   reason for this decision;
+2. two processes race for the lock 100 times, each incrementing a counter inside the critical section — the counter must equal
+   100 and no increment may be lost;
+3. a lock **file** left by a dead process with no lock held — acquisition succeeds without asking a human;
+4. a live holder — the second process exits `8` and names the pid.
+
+**Reversal.** If 1.89 ever becomes unacceptable — a user on an older compiler who cannot upgrade, a distribution constraint —
+the fallback is option 1, in **one** module, with a written safety contract: `flock(LOCK_EX|LOCK_NB)` through `libc`,
+`cfg(unix)` only, no other `unsafe` anywhere, and the same four controls above. Option 3 stays refused.

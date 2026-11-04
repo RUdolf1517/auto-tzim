@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master snapshot
         with:
-          toolchain: 1.82.0
+          toolchain: 1.89.0
           components: rustfmt, clippy
       - run: cargo build --workspace --locked
       - name: Record dependency features
@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master snapshot
         with:
-          toolchain: 1.82.0
+          toolchain: 1.89.0
           components: rustfmt, clippy
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -180,7 +180,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master snapshot
         with:
-          toolchain: 1.82.0
+          toolchain: 1.89.0
           components: rustfmt, clippy
       - uses: taiki-e/install-action@1215446185352662cec6825af8e979af4006a502 # cargo-deny
       - name: cargo deny check

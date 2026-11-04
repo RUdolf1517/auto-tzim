@@ -7,7 +7,7 @@ never routes a refused file anywhere else.
 
 > **Status: AT-02 work in progress.** Configuration validation and folder profiles are being implemented;
 > discovery, planning and processing are not implemented. This is not a working optimizer.
-> Build with the pinned Rust toolchain **1.82.0**: `cargo build --workspace`.
+> Build with the pinned Rust toolchain **1.89.0**: `cargo build --workspace`.
 > CI runs on `ubuntu-24.04` and `macos-15`.
 
 ## What it will do (MVP / v0.1)

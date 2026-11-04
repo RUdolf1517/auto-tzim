@@ -803,21 +803,22 @@ fn preserve_profiles(original: &str, old: &Config, new: &Config) -> Result<Strin
     let mut offset = 0;
     for line in original.split_inclusive('\n') {
         let trimmed = line.trim();
-        if multiline.is_none() {
-            if let Some(rest) = trimmed.strip_prefix('[') {
-                if let Some((name, after)) = rest.split_once(']') {
-                    if name.trim() == "installation"
-                        && (after.trim().is_empty() || after.trim().starts_with('#'))
-                    {
-                        installation_offsets.push(offset);
-                    }
-                }
-            }
-            if let Some(rest) = trimmed.strip_prefix("[[") {
-                if let Some((name, _)) = rest.split_once("]]") {
-                    if name.trim() == "folder" {
-                        offsets.push(offset);
-                    }
+        if multiline.is_none() && trimmed.starts_with('[') {
+            // TOML permits quoted and escaped table names. Delegate header
+            // interpretation to the TOML parser rather than matching spelling.
+            if let Ok(header) = trimmed.parse::<toml::Value>() {
+                if header
+                    .get("folder")
+                    .and_then(toml::Value::as_array)
+                    .is_some()
+                {
+                    offsets.push(offset);
+                } else if header
+                    .get("installation")
+                    .and_then(toml::Value::as_table)
+                    .is_some()
+                {
+                    installation_offsets.push(offset);
                 }
             }
         }

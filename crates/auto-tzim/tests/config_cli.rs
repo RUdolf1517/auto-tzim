@@ -494,3 +494,24 @@ fn stale_temporary_file_is_never_loaded_as_configuration() {
     assert!(sandbox.run(&["config", "validate"]).status.success());
     assert!(sandbox.run(&["folder", "show", "photos"]).status.success());
 }
+
+#[test]
+fn quoted_toml_headers_are_preserved_during_edit() {
+    let sandbox = Sandbox::new();
+    let folder = sandbox.folder("photos");
+    fs::create_dir_all(sandbox.root.join("config")).unwrap();
+    let original = format!(
+        "schema = 1\n[[\"fol\\u0064er\"]] # folder\nname = 'photos'\nroot = {:?}\n[\"installation\"] # installation\nupdate_policy = 'notify'\n",
+        folder.to_str().unwrap()
+    );
+    fs::write(sandbox.config(), &original).unwrap();
+    let result = sandbox.run(&["folder", "edit", "photos", "--name", "renamed"]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let result = fs::read_to_string(sandbox.config()).unwrap();
+    assert!(result.contains("[\"installation\"] # installation\nupdate_policy = 'notify'"));
+    assert!(sandbox.run(&["config", "validate"]).status.success());
+}

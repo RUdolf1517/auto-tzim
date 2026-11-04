@@ -436,12 +436,12 @@ fn edit_does_not_destroy_installation_after_folder() {
     );
     fs::write(sandbox.config(), &original).unwrap();
     let result = sandbox.run(&["folder", "edit", "photos", "--name", "renamed"]);
-    if result.status.success() {
-        let text = fs::read_to_string(sandbox.config()).unwrap();
-        assert!(text.contains("[installation]"));
-        assert!(sandbox.run(&["config", "validate"]).status.success());
-    } else {
-        assert_eq!(result.status.code(), Some(2));
-        assert_eq!(fs::read_to_string(sandbox.config()).unwrap(), original);
-    }
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let text = fs::read_to_string(sandbox.config()).unwrap();
+    assert!(text.contains("[installation]\nupdate_policy = 'notify'\n"));
+    assert!(sandbox.run(&["config", "validate"]).status.success());
 }

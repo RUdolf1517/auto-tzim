@@ -798,11 +798,21 @@ pub fn format_folder(folder: &Folder) -> Result<String, ConfigError> {
 // Keep the user's original bytes outside the folder blocks being modified.
 fn preserve_profiles(original: &str, old: &Config, new: &Config) -> Result<String, ConfigError> {
     let mut offsets = Vec::new();
+    let mut installation_offsets = Vec::new();
     let mut multiline = None;
     let mut offset = 0;
     for line in original.split_inclusive('\n') {
         let trimmed = line.trim();
         if multiline.is_none() {
+            if let Some(rest) = trimmed.strip_prefix('[') {
+                if let Some((name, after)) = rest.split_once(']') {
+                    if name.trim() == "installation"
+                        && (after.trim().is_empty() || after.trim().starts_with('#'))
+                    {
+                        installation_offsets.push(offset);
+                    }
+                }
+            }
             if let Some(rest) = trimmed.strip_prefix("[[") {
                 if let Some((name, _)) = rest.split_once("]]") {
                     if name.trim() == "folder" {
@@ -860,9 +870,17 @@ fn preserve_profiles(original: &str, old: &Config, new: &Config) -> Result<Strin
         result = replacement;
     }
     let mut seen = Vec::new();
+    let mut cursor = offsets.first().copied().unwrap_or(original.len());
     for (index, folder) in old.folder.iter().enumerate() {
         let start = offsets[index];
-        let end = offsets.get(index + 1).copied().unwrap_or(original.len());
+        let end = offsets
+            .iter()
+            .chain(installation_offsets.iter())
+            .copied()
+            .filter(|position| *position > start)
+            .min()
+            .unwrap_or(original.len());
+        result.push_str(&original[cursor..start]);
         if let Some(next) = new.folder.iter().find(|item| item.root == folder.root) {
             seen.push(next.root.clone());
             if next == folder {
@@ -871,7 +889,9 @@ fn preserve_profiles(original: &str, old: &Config, new: &Config) -> Result<Strin
                 append_folder(&mut result, next)?;
             }
         }
+        cursor = end;
     }
+    result.push_str(&original[cursor..]);
     for folder in &new.folder {
         if !seen.contains(&folder.root) {
             append_folder(&mut result, folder)?;

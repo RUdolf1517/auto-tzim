@@ -106,6 +106,7 @@ fn show(folder: &Folder) -> Result<String, ConfigError> {
 
 fn execute(cli: Cli) -> Result<(), ConfigError> {
     let path = config::config_path()?;
+    let lock = config::acquire_config_lock()?;
     let mut settings = config::load(&path)?;
     match cli.command {
         Command::Config {
@@ -157,7 +158,7 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                 if !errors.is_empty() {
                     return Err(ConfigError::Invalid(errors));
                 }
-                config::save(&path, &settings)?;
+                config::save(&path, &settings, &lock)?;
                 for folder in &added {
                     println!("[[folder]]\n{}", show(folder)?);
                 }
@@ -172,25 +173,25 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                 if !errors.is_empty() {
                     return Err(ConfigError::Invalid(errors));
                 }
-                config::save(&path, &settings)?;
+                config::save(&path, &settings, &lock)?;
                 print!("{}", show(&settings.folder[i])?);
             }
             FolderCommand::Enable { name } => {
                 let i = folder_index(&settings, &name)?;
                 settings.folder[i].enabled = true;
-                config::save(&path, &settings)?;
+                config::save(&path, &settings, &lock)?;
                 println!("enabled {}", settings.folder[i].name);
             }
             FolderCommand::Disable { name } => {
                 let i = folder_index(&settings, &name)?;
                 settings.folder[i].enabled = false;
-                config::save(&path, &settings)?;
+                config::save(&path, &settings, &lock)?;
                 println!("disabled {}", settings.folder[i].name);
             }
             FolderCommand::Remove { name } => {
                 let i = folder_index(&settings, &name)?;
                 let removed = settings.folder.remove(i);
-                config::save(&path, &settings)?;
+                config::save(&path, &settings, &lock)?;
                 println!("removed {}", removed.name);
             }
         },
@@ -200,7 +201,12 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
 
 fn main() {
     if let Err(error) = execute(Cli::parse()) {
+        let code = if matches!(error, ConfigError::Locked(_)) {
+            8
+        } else {
+            2
+        };
         eprintln!("{error}");
-        std::process::exit(2);
+        std::process::exit(code);
     }
 }

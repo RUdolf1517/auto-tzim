@@ -539,3 +539,129 @@ fn non_utf8_directory_name_does_not_panic() {
         assert!(!sandbox.config().exists());
     }
 }
+
+#[test]
+fn lock_holder_process() {
+    let Some(root) = std::env::var_os("AT02_LOCK_HOLDER") else {
+        return;
+    };
+    let root = PathBuf::from(root);
+    let _guard =
+        auto_tzim_core::config::acquire_lock_file(&root.join("locks/config.lock")).unwrap();
+    fs::write(root.join("holder-ready"), std::process::id().to_string()).unwrap();
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+}
+
+fn wait_for_file(path: &std::path::Path) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while !path.exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "timed out waiting for {}",
+            path.display()
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn lock_contention_reports_pid_and_sigkill_releases_kernel_lock() {
+    let sandbox = Sandbox::new();
+    let base = sandbox.root.join("config");
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "lock_holder_process", "--nocapture"])
+        .env("AT02_LOCK_HOLDER", &base)
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_for_file(&base.join("holder-ready"));
+    let holder_pid = child.id().to_string();
+    let blocked = sandbox.run(&["config", "validate"]);
+    assert_eq!(blocked.status.code(), Some(8));
+    assert!(String::from_utf8_lossy(&blocked.stderr).contains(&holder_pid));
+    child.kill().unwrap();
+    child.wait().unwrap();
+    assert!(base.join("locks/config.lock").exists());
+    let after = sandbox.run(&["config", "validate"]);
+    assert!(
+        after.status.success(),
+        "{}",
+        String::from_utf8_lossy(&after.stderr)
+    );
+    assert!(base.join("locks/config.lock").exists());
+}
+
+#[test]
+fn lock_counter_worker() {
+    let Some(root) = std::env::var_os("AT02_COUNTER_WORKER") else {
+        return;
+    };
+    let root = PathBuf::from(root);
+    for _ in 0..50 {
+        let guard = loop {
+            match auto_tzim_core::config::acquire_lock_file(&root.join("locks/config.lock")) {
+                Ok(guard) => break guard,
+                Err(auto_tzim_core::config::ConfigError::Locked(_)) => std::thread::yield_now(),
+                Err(error) => panic!("lock failed: {error}"),
+            }
+        };
+        let counter = root.join("counter");
+        let previous: u32 = fs::read_to_string(&counter).unwrap().parse().unwrap();
+        std::thread::yield_now();
+        fs::write(counter, (previous + 1).to_string()).unwrap();
+        drop(guard);
+    }
+}
+
+#[test]
+fn two_processes_serialize_100_counter_updates() {
+    let sandbox = Sandbox::new();
+    fs::write(sandbox.root.join("counter"), "0").unwrap();
+    let start = || {
+        Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "lock_counter_worker", "--nocapture"])
+            .env("AT02_COUNTER_WORKER", &sandbox.root)
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap()
+    };
+    let mut a = start();
+    let mut b = start();
+    assert!(a.wait().unwrap().success());
+    assert!(b.wait().unwrap().success());
+    assert_eq!(
+        fs::read_to_string(sandbox.root.join("counter")).unwrap(),
+        "100"
+    );
+}
+
+#[test]
+fn successful_write_cleans_stale_temps_but_failed_write_does_not() {
+    let sandbox = Sandbox::new();
+    let folder = sandbox.folder("photos");
+    fs::create_dir_all(sandbox.root.join("config")).unwrap();
+    let stale = sandbox.root.join("config/.config.toml.1.0.tmp");
+    let unrelated = sandbox.root.join("config/.config.toml.not-ours.tmp");
+    fs::write(&stale, b"stale").unwrap();
+    fs::write(&unrelated, b"keep").unwrap();
+    fs::write(sandbox.config(), b"broken [[[").unwrap();
+    assert_eq!(
+        sandbox
+            .run(&["folder", "add", folder.to_str().unwrap()])
+            .status
+            .code(),
+        Some(2)
+    );
+    assert!(stale.exists());
+    fs::remove_file(sandbox.config()).unwrap();
+    let result = sandbox.run(&["folder", "add", folder.to_str().unwrap()]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(!stale.exists());
+    assert_eq!(fs::read(unrelated).unwrap(), b"keep");
+}

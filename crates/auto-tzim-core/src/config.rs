@@ -454,6 +454,8 @@ mod validation_tests {
 pub enum ConfigError {
     Invalid(Vec<String>),
     Io(std::io::Error),
+    /// Another process currently holds the configuration lock.
+    Locked(String),
 }
 
 impl std::fmt::Display for ConfigError {
@@ -461,6 +463,7 @@ impl std::fmt::Display for ConfigError {
         match self {
             Self::Invalid(errors) => write!(f, "{}", errors.join("\n")),
             Self::Io(error) => write!(f, "configuration I/O: {error}"),
+            Self::Locked(holder) => write!(f, "configuration locked: {holder}"),
         }
     }
 }
@@ -707,7 +710,11 @@ fn canonicalize_with_missing(path: &std::path::Path) -> Option<PathBuf> {
 
 /// Write validated settings atomically, without overwriting an invalid existing file.
 #[cfg(unix)]
-pub fn save(path: &std::path::Path, config: &Config) -> Result<(), ConfigError> {
+pub fn save(
+    path: &std::path::Path,
+    config: &Config,
+    _lock: &ConfigLock,
+) -> Result<(), ConfigError> {
     use std::io::Write;
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
     // Never replace a file that cannot be loaded and validated.
@@ -764,6 +771,8 @@ pub fn save(path: &std::path::Path, config: &Config) -> Result<(), ConfigError> 
         file.write_all(contents.as_bytes())?;
         file.sync_all()?;
         std::fs::rename(&temporary, path)?;
+        std::fs::File::open(dir)?.sync_all()?;
+        remove_stale_temps(dir)?;
         std::fs::File::open(dir)?.sync_all()?;
         Ok(())
     })();
@@ -998,4 +1007,117 @@ mod source_span_tests {
             "{ name = 'b', root = '/b' }"
         );
     }
+}
+
+/// An OS-held exclusive lock. The lock file itself is intentionally never removed.
+pub struct ConfigLock {
+    _file: std::fs::File,
+}
+
+/// Resolve the lock directory with the same environment precedence as state.
+pub fn lock_dir() -> Result<PathBuf, ConfigError> {
+    if let Some(home) = std::env::var_os("AUTO_TZIM_HOME").filter(|value| !value.is_empty()) {
+        return Ok(PathBuf::from(home).join("locks"));
+    }
+    let home = std::env::var_os("HOME")
+        .ok_or_else(|| ConfigError::Invalid(vec!["HOME is not set".into()]))?;
+    #[cfg(target_os = "macos")]
+    let state = PathBuf::from(home).join("Library/Application Support/auto-tzim");
+    #[cfg(not(target_os = "macos"))]
+    let state = std::env::var_os("XDG_STATE_HOME")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(|| PathBuf::from(home).join(".local/state"))
+        .join("auto-tzim");
+    Ok(state.join("locks"))
+}
+
+/// Acquire the configuration lock before reading any settings.
+pub fn acquire_config_lock() -> Result<ConfigLock, ConfigError> {
+    acquire_lock_file(&lock_dir()?.join("config.lock"))
+}
+
+/// Acquire an exclusive nonblocking OS lock; suitable for other lock names later.
+#[cfg(unix)]
+pub fn acquire_lock_file(path: &std::path::Path) -> Result<ConfigLock, ConfigError> {
+    use std::io::{Read, Seek, SeekFrom, Write};
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+    let parent = path
+        .parent()
+        .ok_or_else(|| ConfigError::Invalid(vec!["lock path has no parent".into()]))?;
+    create_private_directory(parent)?;
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(path)?;
+    match file.try_lock() {
+        Ok(()) => (),
+        Err(std::fs::TryLockError::WouldBlock) => {
+            // The holder writes diagnostic data only after locking, so its
+            // first write can briefly race with this read; never infer ownership
+            // from stale metadata or remove the lock file.
+            let mut holder = String::new();
+            file.read_to_string(&mut holder)?;
+            return Err(ConfigError::Locked(if holder.trim().is_empty() {
+                "holder information not yet available".into()
+            } else {
+                holder.trim().into()
+            }));
+        }
+        Err(std::fs::TryLockError::Error(error)) => return Err(error.into()),
+    }
+    file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    let start_time = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| ConfigError::Invalid(vec![format!("clock: {error}")]))?
+        .as_secs();
+    let host = std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown".into());
+    let diagnostic = format!(
+        "pid={} start_time={} host={:?}\n",
+        std::process::id(),
+        start_time,
+        host
+    );
+    file.set_len(0)?;
+    file.seek(SeekFrom::Start(0))?;
+    file.write_all(diagnostic.as_bytes())?;
+    file.sync_all()?;
+    Ok(ConfigLock { _file: file })
+}
+
+#[cfg(unix)]
+fn remove_stale_temps(directory: &std::path::Path) -> Result<(), ConfigError> {
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let Some(mid) = name
+            .strip_prefix(".config.toml.")
+            .and_then(|name| name.strip_suffix(".tmp"))
+        else {
+            continue;
+        };
+        let Some((timestamp, attempt)) = mid.split_once('.') else {
+            continue;
+        };
+        if timestamp.is_empty()
+            || attempt.is_empty()
+            || !timestamp.bytes().all(|c| c.is_ascii_digit())
+            || !attempt.bytes().all(|c| c.is_ascii_digit())
+        {
+            continue;
+        }
+        // Do not follow symbolic links or touch unrelated names.
+        if entry.file_type()?.is_file() {
+            std::fs::remove_file(entry.path())?;
+        }
+    }
+    Ok(())
 }

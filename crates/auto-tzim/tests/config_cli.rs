@@ -579,6 +579,11 @@ fn wait_for_file(path: &std::path::Path) {
 fn lock_contention_reports_pid_and_sigkill_releases_kernel_lock() {
     let sandbox = Sandbox::new();
     let base = sandbox.root.join("config");
+    let folder = sandbox.folder("photos");
+    assert!(sandbox
+        .run(&["folder", "add", folder.to_str().unwrap()])
+        .status
+        .success());
     let mut child = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", "lock_holder_process", "--nocapture"])
         .env("AT02_LOCK_HOLDER", &base)
@@ -587,13 +592,16 @@ fn lock_contention_reports_pid_and_sigkill_releases_kernel_lock() {
         .unwrap();
     wait_for_file(&base.join("holder-ready"));
     let holder_pid = child.id().to_string();
-    let blocked = sandbox.run(&["config", "validate"]);
+    let blocked = sandbox.run(&["folder", "disable", "photos"]);
+    assert!(sandbox.run(&["config", "validate"]).status.success());
+    assert!(sandbox.run(&["folder", "list"]).status.success());
+    assert!(sandbox.run(&["folder", "show", "photos"]).status.success());
     assert_eq!(blocked.status.code(), Some(8));
     assert!(String::from_utf8_lossy(&blocked.stderr).contains(&holder_pid));
     child.kill().unwrap();
     child.wait().unwrap();
     assert!(base.join("locks/config.lock").exists());
-    let after = sandbox.run(&["config", "validate"]);
+    let after = sandbox.run(&["folder", "disable", "photos"]);
     assert!(
         after.status.success(),
         "{}",
@@ -682,7 +690,8 @@ fn unlocked_leftover_lock_file_is_reused() {
     let path = sandbox.root.join("config/locks/config.lock");
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(&path, b"{\"pid\": 999999, \"host\": \"dead\"}").unwrap();
-    let result = sandbox.run(&["config", "validate"]);
+    let folder = sandbox.folder("photos");
+    let result = sandbox.run(&["folder", "add", folder.to_str().unwrap()]);
     assert!(
         result.status.success(),
         "{}",
@@ -695,8 +704,8 @@ fn unlocked_leftover_lock_file_is_reused() {
     );
     let metadata = fs::read_to_string(&path).unwrap();
     assert!(metadata.contains("\"pid\":"));
-    assert!(metadata.contains("\"start_time\":"));
-    assert!(metadata.contains("\"host\":"));
+    assert!(metadata.contains("\"started_at\":"));
+    assert!(!metadata.contains("\"start_time\":"));
 }
 
 #[test]
@@ -708,7 +717,8 @@ fn lock_path_symlink_is_refused_without_touching_target() {
     let lock = sandbox.root.join("config/locks/config.lock");
     fs::create_dir_all(lock.parent().unwrap()).unwrap();
     symlink(&target, &lock).unwrap();
-    let result = sandbox.run(&["config", "validate"]);
+    let folder = sandbox.folder("photos");
+    let result = sandbox.run(&["folder", "add", folder.to_str().unwrap()]);
     assert_eq!(result.status.code(), Some(2));
     assert_eq!(fs::read(target).unwrap(), b"safe");
 }
@@ -773,4 +783,151 @@ fn name_identity_duplicates_rename_and_listing_are_stable() {
     let old = s.run(&["folder", "remove", "project"]);
     assert_eq!(old.status.code(), Some(2));
     assert!(s.run(&["folder", "show", "trips"]).status.success());
+}
+
+#[test]
+fn read_only_commands_do_not_create_or_lock_state() {
+    let s = Sandbox::new();
+    assert!(!s.root.join("config").exists());
+    for args in [
+        &["config", "validate"][..],
+        &["folder", "list"][..],
+        &["folder", "show", "missing"][..],
+    ] {
+        let out = s.run(args);
+        assert_eq!(
+            out.status.code(),
+            Some(if args[1] == "show" { 2 } else { 0 })
+        );
+        assert!(!s.root.join("config").exists(), "{args:?}");
+    }
+}
+
+#[test]
+fn mode_and_tzim_path_validation() {
+    use std::os::unix::fs::PermissionsExt;
+    let s = Sandbox::new();
+    fs::create_dir_all(s.root.join("config")).unwrap();
+    let validate = |mode: &str, executable: &str| {
+        fs::write(
+            s.config(),
+            format!("schema=1\n[installation]\nmode={mode:?}\ntzim_path={executable:?}\n"),
+        )
+        .unwrap();
+        s.run(&["config", "validate"])
+    };
+    assert!(validate("auto", "").status.success());
+    let invalid = validate("sometimes", "");
+    assert_eq!(invalid.status.code(), Some(2));
+    let err = String::from_utf8_lossy(&invalid.stderr);
+    assert!(err.contains("confirm") && err.contains("auto"));
+    let missing = s.root.join("missing");
+    let out = validate("confirm", missing.to_str().unwrap());
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("tzim_path_missing"));
+    let out = validate("confirm", s.root.to_str().unwrap());
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("tzim_path_not_executable"));
+    let exe = s.root.join("tzim");
+    fs::write(&exe, b"not actually invoked").unwrap();
+    fs::set_permissions(&exe, fs::Permissions::from_mode(0o600)).unwrap();
+    let out = validate("confirm", exe.to_str().unwrap());
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("tzim_path_not_executable"));
+    fs::set_permissions(&exe, fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(validate("auto", exe.to_str().unwrap()).status.success());
+}
+
+#[test]
+fn cloud_override_flags_and_permission_repair() {
+    use std::os::unix::fs::PermissionsExt;
+    let s = Sandbox::new();
+    let cloud = s.folder("home/Dropbox/photos");
+    let path = cloud.to_str().unwrap();
+    let refused = s.run(&["folder", "add", path]);
+    assert_eq!(refused.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("cloud_sync_root"));
+    assert!(s
+        .run(&["folder", "add", path, "--allow-cloud-sync"])
+        .status
+        .success());
+    fs::set_permissions(s.config(), fs::Permissions::from_mode(0o666)).unwrap();
+    assert!(s
+        .run(&["folder", "edit", "photos", "--allow-cloud-sync"])
+        .status
+        .success());
+    assert_eq!(
+        fs::metadata(s.config()).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    let before = fs::read(s.config()).unwrap();
+    let denied = s.run(&["folder", "edit", "photos", "--no-allow-cloud-sync"]);
+    assert_eq!(denied.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&denied.stderr).contains("cloud_sync_root"));
+    assert_eq!(fs::read(s.config()).unwrap(), before);
+    let ordinary = s.folder("ordinary");
+    assert!(s
+        .run(&[
+            "folder",
+            "add",
+            ordinary.to_str().unwrap(),
+            "--allow-cloud-sync"
+        ])
+        .status
+        .success());
+    assert!(s
+        .run(&["folder", "edit", "ordinary", "--no-allow-cloud-sync"])
+        .status
+        .success());
+    assert!(s.run(&["folder", "show", "ordinary"]).status.success());
+    let conflicting = s.run(&[
+        "folder",
+        "edit",
+        "ordinary",
+        "--allow-cloud-sync",
+        "--no-allow-cloud-sync",
+    ]);
+    assert_eq!(conflicting.status.code(), Some(2));
+}
+
+#[test]
+fn lock_diagnostics_omit_missing_host_and_include_set_host() {
+    let s = Sandbox::new();
+    let first = s.folder("first");
+    let binary = env!("CARGO_BIN_EXE_auto-tzim");
+    let mut command = Command::new(binary);
+    let out = command
+        .env("HOME", s.root.join("home"))
+        .env("AUTO_TZIM_HOME", s.root.join("config"))
+        .env_remove("HOSTNAME")
+        .args(["folder", "add"])
+        .arg(first)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let path = s.root.join("config/locks/config.lock");
+    let metadata = fs::read_to_string(&path).unwrap();
+    assert!(metadata.contains("\"started_at\":"));
+    assert!(!metadata.contains("\"host\":"));
+    assert!(!metadata.contains("unknown"));
+    let second = s.folder("second");
+    let out = Command::new(binary)
+        .env("HOME", s.root.join("home"))
+        .env("AUTO_TZIM_HOME", s.root.join("config"))
+        .env("HOSTNAME", "test-host")
+        .args(["folder", "add"])
+        .arg(second)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let metadata = fs::read_to_string(path).unwrap();
+    assert!(metadata.contains("\"host\":\"test-host\""));
 }

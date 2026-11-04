@@ -168,9 +168,9 @@ pub fn validate_document(input: &str) -> Vec<String> {
             if table
                 .get("mode")
                 .and_then(toml::Value::as_str)
-                .is_some_and(|v| v != "confirm")
+                .is_some_and(|v| v != "confirm" && v != "auto")
             {
-                errors.push("installation.mode: default must be confirm".into());
+                errors.push("installation.mode: allowed values are confirm or auto".into());
             }
             if table
                 .get("update_policy")
@@ -180,11 +180,8 @@ pub fn validate_document(input: &str) -> Vec<String> {
                 errors.push("installation.update_policy: scheduled is not in v0.1".into());
             }
             if let Some(value) = table.get("tzim_path").and_then(toml::Value::as_str) {
-                let path = std::path::Path::new(value);
-                if !value.is_empty() && (!path.is_absolute() || path.is_dir()) {
-                    errors.push(
-                        "installation.tzim_path: must be absolute and not a directory".into(),
-                    );
+                if let Some(error) = validate_tzim_path(value) {
+                    errors.push(error);
                 }
             }
             for key in ["tzim_path", "mode", "update_policy"] {
@@ -522,25 +519,45 @@ pub fn load(path: &std::path::Path) -> Result<Config, ConfigError> {
     }
 }
 
+fn validate_tzim_path(value: &str) -> Option<String> {
+    use std::os::unix::fs::PermissionsExt;
+    if value.is_empty() {
+        return None;
+    }
+    let path = std::path::Path::new(value);
+    if !path.is_absolute() {
+        return Some("installation.tzim_path: must be absolute".into());
+    }
+    match std::fs::metadata(path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Some("installation.tzim_path: tzim_path_missing".into())
+        }
+        Err(error) => Some(format!(
+            "installation.tzim_path: tzim_path_not_executable: {error}"
+        )),
+        Ok(metadata) if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 => {
+            Some("installation.tzim_path: tzim_path_not_executable".into())
+        }
+        Ok(_) => None,
+    }
+}
+
 /// Validate all values that have been decoded into the schema.
 pub fn validate_config(config: &Config) -> Vec<String> {
     let mut errors = Vec::new();
     if config.schema != 1 {
         errors.push("schema: expected supported schema 1".into());
     }
-    if config.installation.mode != "confirm" {
-        errors.push("installation.mode: default must be confirm".into());
+    if config.installation.mode != "confirm" && config.installation.mode != "auto" {
+        errors.push("installation.mode: allowed values are confirm or auto".into());
     }
     if config.installation.update_policy != "notify" {
         errors.push(
             "installation.update_policy: only notify is supported; scheduled is not in v0.1".into(),
         );
     }
-    if !config.installation.tzim_path.is_empty() {
-        let path = std::path::Path::new(&config.installation.tzim_path);
-        if !path.is_absolute() || path.is_dir() {
-            errors.push("installation.tzim_path: must be absolute and not a directory".into());
-        }
+    if let Some(error) = validate_tzim_path(&config.installation.tzim_path) {
+        errors.push(error);
     }
     for (index, folder) in config.folder.iter().enumerate() {
         let label = format!("folder[{index}]");
@@ -772,6 +789,7 @@ pub fn save(
         file.sync_all()?;
         std::fs::rename(&temporary, path)?;
         std::fs::File::open(dir)?.sync_all()?;
+        // Every writer holds the lock, so matching old temps cannot belong to a live writer.
         remove_stale_temps(dir)?;
         std::fs::File::open(dir)?.sync_all()?;
         Ok(())
@@ -1099,12 +1117,17 @@ pub fn acquire_lock_file(path: &std::path::Path) -> Result<ConfigLock, ConfigErr
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|error| ConfigError::Invalid(vec![format!("clock: {error}")]))?
         .as_secs();
-    let host = std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown".into());
+    // These fields are human-readable diagnostics only; ownership is the kernel lock.
+    let host = std::env::var("HOSTNAME").ok();
+    let host_field = host
+        .as_deref()
+        .map(|host| format!(",\"host\":{}", json_string(host)))
+        .unwrap_or_default();
     let diagnostic = format!(
-        "{{\"pid\":{},\"start_time\":\"{}\",\"host\":{}}}\n",
+        "{{\"pid\":{},\"started_at\":\"{}\"{}}}\n",
         std::process::id(),
         start_time,
-        json_string(&host)
+        host_field
     );
     file.set_len(0)?;
     file.seek(SeekFrom::Start(0))?;

@@ -41,6 +41,10 @@ struct ProfileOptions {
     formats: Option<String>,
     #[arg(long)]
     exclude: Vec<String>,
+    #[arg(long, conflicts_with = "no_allow_cloud_sync")]
+    allow_cloud_sync: bool,
+    #[arg(long, conflicts_with = "allow_cloud_sync")]
+    no_allow_cloud_sync: bool,
 }
 
 #[derive(Subcommand)]
@@ -98,6 +102,11 @@ fn apply_options(folder: &mut Folder, options: &ProfileOptions) {
         };
     }
     folder.exclude_globs.extend(options.exclude.iter().cloned());
+    if options.allow_cloud_sync {
+        folder.allow_cloud_sync = true;
+    } else if options.no_allow_cloud_sync {
+        folder.allow_cloud_sync = false;
+    }
 }
 
 fn show(folder: &Folder) -> Result<String, ConfigError> {
@@ -106,7 +115,18 @@ fn show(folder: &Folder) -> Result<String, ConfigError> {
 
 fn execute(cli: Cli) -> Result<(), ConfigError> {
     let path = config::config_path()?;
-    let lock = config::acquire_config_lock()?;
+    let mutating = !matches!(
+        &cli.command,
+        Command::Config { .. }
+            | Command::Folder {
+                command: FolderCommand::List | FolderCommand::Show { .. }
+            }
+    );
+    let lock = if mutating {
+        Some(config::acquire_config_lock()?)
+    } else {
+        None
+    };
     let mut settings = config::load(&path)?;
     match cli.command {
         Command::Config {
@@ -135,7 +155,8 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                 let mut added = Vec::new();
                 for path in paths {
                     let path = PathBuf::from(path);
-                    let root = config::validate_root(&path, false).map_err(invalid)?;
+                    let root =
+                        config::validate_root(&path, options.allow_cloud_sync).map_err(invalid)?;
                     let name = match &options.name {
                         Some(name) => name.clone(),
                         None => root
@@ -158,7 +179,11 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                 if !errors.is_empty() {
                     return Err(ConfigError::Invalid(errors));
                 }
-                config::save(&path, &settings, &lock)?;
+                config::save(
+                    &path,
+                    &settings,
+                    lock.as_ref().expect("mutating command holds the lock"),
+                )?;
                 for folder in &added {
                     println!("[[folder]]\n{}", show(folder)?);
                 }
@@ -173,25 +198,41 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                 if !errors.is_empty() {
                     return Err(ConfigError::Invalid(errors));
                 }
-                config::save(&path, &settings, &lock)?;
+                config::save(
+                    &path,
+                    &settings,
+                    lock.as_ref().expect("mutating command holds the lock"),
+                )?;
                 print!("{}", show(&settings.folder[i])?);
             }
             FolderCommand::Enable { name } => {
                 let i = folder_index(&settings, &name)?;
                 settings.folder[i].enabled = true;
-                config::save(&path, &settings, &lock)?;
+                config::save(
+                    &path,
+                    &settings,
+                    lock.as_ref().expect("mutating command holds the lock"),
+                )?;
                 println!("enabled {}", settings.folder[i].name);
             }
             FolderCommand::Disable { name } => {
                 let i = folder_index(&settings, &name)?;
                 settings.folder[i].enabled = false;
-                config::save(&path, &settings, &lock)?;
+                config::save(
+                    &path,
+                    &settings,
+                    lock.as_ref().expect("mutating command holds the lock"),
+                )?;
                 println!("disabled {}", settings.folder[i].name);
             }
             FolderCommand::Remove { name } => {
                 let i = folder_index(&settings, &name)?;
                 let removed = settings.folder.remove(i);
-                config::save(&path, &settings, &lock)?;
+                config::save(
+                    &path,
+                    &settings,
+                    lock.as_ref().expect("mutating command holds the lock"),
+                )?;
                 println!("removed {}", removed.name);
             }
         },

@@ -36,8 +36,8 @@ example: `unknown field "folder[0].recurse": did you mean "recursive"?`.
 
 | Field | Type | Default | Rules |
 | --- | --- | --- | --- |
-| `tzim_path` | string | `""` | empty means "find `tzim` on `PATH`"; a path is resolved and its `realpath` recorded. Must be an absolute path or empty; must not be a directory |
-| `mode` | enum | `confirm` | `confirm` \| `auto` (D-29). `confirm` shows a proposal and installs only on approval; `auto` installs without asking. `--mode` on the command line overrides it. A default of `auto` is refused: destruction by default is not a convenience |
+| `tzim_path` | string | `""` | empty means "find `tzim` on `PATH`", resolved at run time. A non-empty value must be **absolute, an existing regular file and executable**, otherwise `config validate` fails with `tzim_path_missing` / `tzim_path_not_executable` ([D-54](manager/DECISIONS.md)) |
+| `mode` | enum | `confirm` | `confirm` \| `auto` (D-29). `confirm` shows a proposal and installs only on approval; `auto` installs without asking. `--auto` / `--mode` on the command line overrides it per run. The **default** value is `confirm` — destruction by default is not a convenience — but an explicit `mode = "auto"` in the file is valid: the user said so ([D-54](manager/DECISIONS.md)) |
 | `update_policy` | enum | `notify` | reserved: the key is accepted and has no effect in v0.1, because there is no `update-check` command (D-28). `scheduled` is rejected with a message saying so |
 | `allowed_major_versions` | array of integers | `[0]` | reserved with `update_policy` and used only once `update-check` exists in v0.2 (D-28); the key is accepted and validated now so a config file does not have to change later |
 

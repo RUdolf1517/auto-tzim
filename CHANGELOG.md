@@ -75,6 +75,52 @@ built-in list, path comparison only, documented as best-effort, escapable with o
 behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
 ones are resolved). Each would have been baked into stored data by the first commit.
 
+### Decided — seven grey areas in AT-02, and one promise the code broke
+
+The coder asked instead of guessing, seven times, and the answers are now rules ([D-54](docs/manager/DECISIONS.md)):
+
+- **an explicit `mode = "auto"` is valid** — only the *default* must be `confirm`; the implementation had read the rule as
+  "accept only `confirm`", which is a different sentence and would have made the second mode unusable from the file;
+- **a non-empty `tzim_path` must exist, be a regular file and be executable** — a named path that is not there is a typo, and
+  that is what `validate` is for;
+- **`--allow-cloud-sync` / `--no-allow-cloud-sync` exist** on `folder add` and `folder edit`, because a documented escape
+  hatch that needs hand-edited TOML is not reachable from the tool that exists to avoid hand-edited TOML;
+- **the permissions control is accepted as a whole-protection check**, with one added repair test so the `chmod` layer is
+  proven too — the alternative was briefly making a file world-writable to prove a single call, which is worse than the gap;
+- **lock metadata is diagnostics** (`started_at`, host omitted when unknown, no dependency for OS-reported values);
+- **stale temp cleanup is legal because the lock is held** — without the lock the coder was right to refuse it;
+- **`config validate` takes no lock and creates nothing.**
+
+That last one was a real defect, not a question: taking the lock created `$AUTO_TZIM_HOME/locks/`, while `cli.md` §2.2
+promises a command that inspects "without touching state". It was also unnecessary — config writes are atomic renames, so a
+reader always sees a whole file. Recorded as **F-21**.
+
+[D-55](docs/manager/DECISIONS.md) settles the runner question for now: measure `macos-15-intel` if you like, but switching is
+a decision, and AT-02's merge does not wait on GitHub's capacity — it waits on a green run that exists, and `41900805601` is
+green on both platforms at `a4e9b1e`.
+
+### Changed before the code — the toolchain moves to 1.89, for a lock that dies with its process
+
+AT-02 needs a lock around the read-modify-write of `config.toml`. Rust **1.82** has none in `std`, and a plain lock file —
+create exclusively, delete on exit — is not deleted when the process is `SIGKILL`ed, so every later `folder add` is blocked
+until a human removes a file. For a tool whose alternative is a lost folder entry, that is the wrong failure.
+
+[D-53](docs/manager/DECISIONS.md): **MSRV 1.82 → 1.89**, where `File::lock` / `try_lock` / `unlock` were stabilised, and
+`std` implements them with `flock` on Unix. No `unsafe`, no wrapper crate, no C. The lock is owned by the kernel, so it is
+released when the holder dies — the `SIGKILL` case stops existing rather than becoming a ritual.
+
+The `unsafe` FFI option was not silly: it is small, and it works. It was refused because it puts the one property this
+project claims never to have into the codebase for a capability `std` ships, and every later reviewer would have to re-verify
+it. The wrapper-crate option was refused for the usual reason: a dependency, an allowlist entry and a review, to wrap a call
+`std` makes.
+
+The bump is free today and will never be this cheap again — nothing is published, and no user has an old toolchain pinned.
+D-40's principle is untouched (*the MSRV is the toolchain CI runs*), only the number moved, and the next bump gets the same
+test: a concrete API, never "newest".
+
+`state.md` §5 is rewritten with it: no stale locks exist any more, the file is never deleted, its contents are diagnostics
+for the human reading exit `8`, and `config.lock` (AT-02) and `run.lock` (AT-05) share one helper.
+
 ### Prepared — a full queue for the coder, and the language said once more
 
 The owner asked for maximum work, so the coder now has a schedule instead of one brief: [CODER-QUEUE](docs/manager/CODER-QUEUE.md).

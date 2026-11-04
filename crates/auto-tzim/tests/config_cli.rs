@@ -665,3 +665,27 @@ fn successful_write_cleans_stale_temps_but_failed_write_does_not() {
     assert!(!stale.exists());
     assert_eq!(fs::read(unrelated).unwrap(), b"keep");
 }
+
+#[test]
+fn unlocked_leftover_lock_file_is_reused() {
+    use std::os::unix::fs::PermissionsExt;
+    let sandbox = Sandbox::new();
+    let path = sandbox.root.join("config/locks/config.lock");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(&path, b"{\"pid\": 999999, \"host\": \"dead\"}").unwrap();
+    let result = sandbox.run(&["config", "validate"]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(path.exists());
+    assert_eq!(
+        fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    let metadata = fs::read_to_string(&path).unwrap();
+    assert!(metadata.contains("\"pid\":"));
+    assert!(metadata.contains("\"start_time\":"));
+    assert!(metadata.contains("\"host\":"));
+}

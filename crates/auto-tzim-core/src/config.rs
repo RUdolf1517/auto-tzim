@@ -1078,16 +1078,32 @@ pub fn acquire_lock_file(path: &std::path::Path) -> Result<ConfigLock, ConfigErr
         .as_secs();
     let host = std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown".into());
     let diagnostic = format!(
-        "pid={} start_time={} host={:?}\n",
+        "{{\"pid\":{},\"start_time\":\"{}\",\"host\":{}}}\n",
         std::process::id(),
         start_time,
-        host
+        json_string(&host)
     );
     file.set_len(0)?;
     file.seek(SeekFrom::Start(0))?;
     file.write_all(diagnostic.as_bytes())?;
     file.sync_all()?;
     Ok(ConfigLock { _file: file })
+}
+
+// The lock metadata has only three scalar fields; avoid adding a JSON crate
+// solely for diagnostics, and escape host bytes as a JSON string.
+fn json_string(value: &str) -> String {
+    let mut result = String::from("\"");
+    for c in value.chars() {
+        match c {
+            '"' => result.push_str("\\\""),
+            '\\' => result.push_str("\\\\"),
+            c if c.is_control() => result.push_str(&format!("\\u{:04x}", c as u32)),
+            c => result.push(c),
+        }
+    }
+    result.push('"');
+    result
 }
 
 #[cfg(unix)]

@@ -424,3 +424,24 @@ fn edit_preserves_multiline_string_in_another_profile() {
     );
     assert!(sandbox.run(&["config", "validate"]).status.success());
 }
+
+#[test]
+fn edit_does_not_destroy_installation_after_folder() {
+    let sandbox = Sandbox::new();
+    let folder = sandbox.folder("photos");
+    fs::create_dir_all(sandbox.root.join("config")).unwrap();
+    let original = format!(
+        "schema = 1\n[[folder]]\nname = 'photos'\nroot = {:?}\n[installation]\nupdate_policy = 'notify'\n",
+        folder.to_str().unwrap()
+    );
+    fs::write(sandbox.config(), &original).unwrap();
+    let result = sandbox.run(&["folder", "edit", "photos", "--name", "renamed"]);
+    if result.status.success() {
+        let text = fs::read_to_string(sandbox.config()).unwrap();
+        assert!(text.contains("[installation]"));
+        assert!(sandbox.run(&["config", "validate"]).status.success());
+    } else {
+        assert_eq!(result.status.code(), Some(2));
+        assert_eq!(fs::read_to_string(sandbox.config()).unwrap(), original);
+    }
+}

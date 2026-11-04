@@ -724,6 +724,16 @@ pub fn save(path: &std::path::Path, config: &Config) -> Result<(), ConfigError> 
         }
         Err(error) => return Err(error.into()),
     };
+    // Never replace the file if profile editing accidentally changed unrelated
+    // settings or produced invalid TOML. This check happens before any write.
+    let roundtrip: Config = toml::from_str(&contents).map_err(|error| {
+        ConfigError::Invalid(vec![format!("cannot safely edit configuration: {error}")])
+    })?;
+    if &roundtrip != config {
+        return Err(ConfigError::Invalid(vec![
+            "cannot safely edit configuration without altering other settings".into(),
+        ]));
+    }
     let dir = path
         .parent()
         .ok_or_else(|| ConfigError::Invalid(vec!["configuration path has no parent".into()]))?;

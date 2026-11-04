@@ -5,18 +5,21 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+static SANDBOX_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 struct Sandbox {
     root: PathBuf,
 }
 impl Sandbox {
     fn new() -> Self {
         let root = std::env::temp_dir().join(format!(
-            "auto-tzim-test-{}-{}",
+            "auto-tzim-test-{}-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            SANDBOX_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
         fs::create_dir_all(root.join("home")).unwrap();
         Self { root }

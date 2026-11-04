@@ -689,3 +689,17 @@ fn unlocked_leftover_lock_file_is_reused() {
     assert!(metadata.contains("\"start_time\":"));
     assert!(metadata.contains("\"host\":"));
 }
+
+#[test]
+fn lock_path_symlink_is_refused_without_touching_target() {
+    use std::os::unix::fs::symlink;
+    let sandbox = Sandbox::new();
+    let target = sandbox.root.join("do-not-touch");
+    fs::write(&target, b"safe").unwrap();
+    let lock = sandbox.root.join("config/locks/config.lock");
+    fs::create_dir_all(lock.parent().unwrap()).unwrap();
+    symlink(&target, &lock).unwrap();
+    let result = sandbox.run(&["config", "validate"]);
+    assert_eq!(result.status.code(), Some(2));
+    assert_eq!(fs::read(target).unwrap(), b"safe");
+}

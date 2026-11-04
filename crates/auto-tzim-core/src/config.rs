@@ -1049,7 +1049,7 @@ pub fn acquire_config_lock() -> Result<ConfigLock, ConfigError> {
 #[cfg(unix)]
 pub fn acquire_lock_file(path: &std::path::Path) -> Result<ConfigLock, ConfigError> {
     use std::io::{Read, Seek, SeekFrom, Write};
-    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 
     let parent = path
         .parent()
@@ -1062,6 +1062,17 @@ pub fn acquire_lock_file(path: &std::path::Path) -> Result<ConfigLock, ConfigErr
         .truncate(false)
         .mode(0o600)
         .open(path)?;
+    // Do not truncate or chmod a lock-path symlink or an unexpected file.
+    let path_metadata = std::fs::symlink_metadata(path)?;
+    let file_metadata = file.metadata()?;
+    if !path_metadata.file_type().is_file()
+        || path_metadata.dev() != file_metadata.dev()
+        || path_metadata.ino() != file_metadata.ino()
+    {
+        return Err(ConfigError::Invalid(vec![
+            "lock path must be a regular file".into(),
+        ]));
+    }
     match file.try_lock() {
         Ok(()) => (),
         Err(std::fs::TryLockError::WouldBlock) => {

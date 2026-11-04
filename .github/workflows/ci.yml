@@ -76,6 +76,36 @@ jobs:
             printf "argument=%s exit=%s stdout=<empty> stderr:\n" "$arg" "$status"
             cat stderr.txt
           done
+      - name: Record configuration refusal evidence
+        shell: bash
+        run: |
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          mkdir -p "$temp/home/Dropbox/photos" "$temp/storage/inside" "$temp/photos"
+          touch "$temp/file"
+          ln -s "$temp/photos" "$temp/link"
+          export HOME="$temp/home" AUTO_TZIM_HOME="$temp/storage"
+          check_refusal() {
+            label="$1"; path="$2"; reason="$3"; status=0
+            target/debug/auto-tzim folder add "$path" >"$temp/out" 2>"$temp/err" || status=$?
+            test "$status" -eq 2
+            test ! -s "$temp/out"
+            grep -F "$reason" "$temp/err"
+            message="$(cat "$temp/err")"
+            message="${message//'%'/'%25'}"
+            echo "::notice title=Refusal $label::exit=$status stdout=<empty> stderr=$message"
+          }
+          check_refusal empty '' root_not_absolute
+          check_refusal dot '.' root_not_absolute
+          check_refusal relative 'relative' root_not_absolute
+          check_refusal root '/' forbidden_root
+          check_refusal home "$HOME" forbidden_root
+          check_refusal file "$temp/file" root_not_a_directory
+          check_refusal symlink "$temp/link" root_is_symlink
+          check_refusal missing "$temp/missing" root_missing
+          check_refusal inside "$temp/storage/inside" state_inside_root
+          check_refusal containing "$temp" state_inside_root
+          check_refusal cloud "$HOME/Dropbox/photos" cloud_sync_root
       - name: Evidence for rejected and accepted edit
         shell: bash
         run: |

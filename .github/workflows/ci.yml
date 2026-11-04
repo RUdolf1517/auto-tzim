@@ -93,7 +93,13 @@ jobs:
             grep -F "$reason" "$temp/err"
             message="$(cat "$temp/err")"
             message="${message//'%'/'%25'}"
-            echo "::notice title=Refusal $label::exit=$status stdout=<empty> stderr=$message"
+            if [ "$label" = containing ]; then
+              containing_evidence="containing: exit=$status stdout=<empty> stderr=$message"
+            elif [ "$label" = cloud ]; then
+              echo "::notice title=Refusal cloud and containing::$containing_evidence; cloud: exit=$status stdout=<empty> stderr=$message"
+            else
+              echo "::notice title=Refusal $label::exit=$status stdout=<empty> stderr=$message"
+            fi
           }
           check_refusal empty '' root_not_absolute
           check_refusal dot '.' root_not_absolute

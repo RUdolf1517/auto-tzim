@@ -445,3 +445,32 @@ fn edit_does_not_destroy_installation_after_folder() {
     assert!(text.contains("[installation]\nupdate_policy = 'notify'\n"));
     assert!(sandbox.run(&["config", "validate"]).status.success());
 }
+
+#[test]
+fn inline_folder_array_supports_edit_remove_and_add() {
+    let sandbox = Sandbox::new();
+    let first = sandbox.folder("first");
+    let second = sandbox.folder("second");
+    let third = sandbox.folder("third");
+    fs::create_dir_all(sandbox.root.join("config")).unwrap();
+    fs::write(sandbox.config(), format!("schema = 1\nfolder = [{{ name = 'first', root = {:?} }}, {{ name = 'second', root = {:?} }}]\n[installation]\n", first.to_str().unwrap(), second.to_str().unwrap())).unwrap();
+    for args in [
+        vec!["folder", "edit", "first", "--name", "renamed"],
+        vec!["folder", "remove", "second"],
+        vec!["folder", "add", third.to_str().unwrap()],
+    ] {
+        let result = sandbox.run(&args);
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(sandbox.run(&["config", "validate"]).status.success());
+    }
+    assert!(sandbox.run(&["folder", "show", "renamed"]).status.success());
+    assert!(sandbox.run(&["folder", "show", "third"]).status.success());
+    assert_eq!(
+        sandbox.run(&["folder", "show", "second"]).status.code(),
+        Some(2)
+    );
+}

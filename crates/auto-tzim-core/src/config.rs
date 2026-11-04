@@ -825,9 +825,7 @@ fn preserve_profiles(original: &str, old: &Config, new: &Config) -> Result<Strin
         offset += line.len();
     }
     if offsets.len() != old.folder.len() {
-        return Err(ConfigError::Invalid(vec![
-            "cannot safely edit folder profiles in this TOML layout".into(),
-        ]));
+        return preserve_inline_profiles(original, old, new);
     }
     let mut result = original[..offsets.first().copied().unwrap_or(original.len())].to_owned();
     if old.folder.is_empty()
@@ -898,6 +896,62 @@ fn preserve_profiles(original: &str, old: &Config, new: &Config) -> Result<Strin
         }
     }
     Ok(result)
+}
+
+// A single top-level inline array is one TOML assignment. Preserve the exact
+// bytes of each unchanged profile; only the assignment separators may be
+// reformatted when a profile is added or removed.
+fn preserve_inline_profiles(
+    original: &str,
+    old: &Config,
+    new: &Config,
+) -> Result<String, ConfigError> {
+    #[derive(Deserialize)]
+    struct InlineDocument {
+        folder: toml::Spanned<Vec<toml::Spanned<toml::Value>>>,
+    }
+    let document: InlineDocument = toml::from_str(original).map_err(|error| {
+        ConfigError::Invalid(vec![format!("cannot safely edit folder array: {error}")])
+    })?;
+    let span = document.folder.span();
+    let source = original.get(span.clone()).unwrap_or("").trim_start();
+    if !source.starts_with('[')
+        || source.starts_with("[[")
+        || document.folder.get_ref().len() != old.folder.len()
+    {
+        return Err(ConfigError::Invalid(vec![
+            "cannot safely edit folder profiles in this TOML layout".into(),
+        ]));
+    }
+    let mut items = Vec::new();
+    let mut seen = Vec::new();
+    for (old_folder, entry) in old.folder.iter().zip(document.folder.get_ref()) {
+        if let Some(next) = new.folder.iter().find(|item| item.root == old_folder.root) {
+            seen.push(next.root.clone());
+            if next == old_folder {
+                let text = original.get(entry.span()).ok_or_else(|| {
+                    ConfigError::Invalid(vec!["invalid folder source span".into()])
+                })?;
+                items.push(text.to_owned());
+            } else {
+                items.push(inline_folder(next)?);
+            }
+        }
+    }
+    for folder in &new.folder {
+        if !seen.contains(&folder.root) {
+            items.push(inline_folder(folder)?);
+        }
+    }
+    let mut result = original.to_owned();
+    result.replace_range(span, &format!("[{}]", items.join(", ")));
+    Ok(result)
+}
+
+fn inline_folder(folder: &Folder) -> Result<String, ConfigError> {
+    let value = toml::Value::try_from(folder)
+        .map_err(|error| ConfigError::Invalid(vec![format!("cannot serialize folder: {error}")]))?;
+    Ok(value.to_string())
 }
 
 // Track only TOML string boundaries; comments and quoted single-line strings

@@ -921,3 +921,29 @@ fn append_folder(text: &mut String, folder: &Folder) -> Result<(), ConfigError> 
     text.push_str(&format_folder(folder)?);
     Ok(())
 }
+
+#[cfg(test)]
+mod source_span_tests {
+    use serde::Deserialize;
+    #[derive(Deserialize)]
+    struct Spans {
+        folder: toml::Spanned<Vec<toml::Spanned<toml::Value>>>,
+    }
+    #[test]
+    fn inline_folder_array_has_usable_value_and_item_spans() {
+        let text = "schema = 1\nfolder = [{ name = 'a', root = '/a' }, { name = 'b', root = '/b' }]\n[installation]\n";
+        let parsed: Spans = toml::from_str(text).unwrap();
+        assert_eq!(
+            &text[parsed.folder.span()],
+            "[{ name = 'a', root = '/a' }, { name = 'b', root = '/b' }]"
+        );
+        assert_eq!(
+            &text[parsed.folder.get_ref()[0].span()],
+            "{ name = 'a', root = '/a' }"
+        );
+        assert_eq!(
+            &text[parsed.folder.get_ref()[1].span()],
+            "{ name = 'b', root = '/b' }"
+        );
+    }
+}

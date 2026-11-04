@@ -150,10 +150,11 @@ adapter contract, `2` invalid config, `7` unreadable state.
 
 ### 2.2 `config validate`
 
-Parses and validates without touching state. Exit `0` valid, `2` invalid with **every** error listed (not just the
+Parses and validates **without touching state**: it takes no lock and creates no file or directory — a config write is an
+atomic rename, so a reader needs no lock to see a whole file ([D-54](manager/DECISIONS.md), F-21). Exit `0` valid, `2` invalid with **every** error listed (not just the
 first), each naming the field, the rule and a suggested correction.
 
-### 2.3 `folder add PATH [PATH…] [--name NAME] [--recursive] [--formats LIST] [--exclude GLOB]...`
+### 2.3 `folder add PATH [PATH…] [--name NAME] [--recursive] [--allow-cloud-sync] [--formats LIST] [--exclude GLOB]...`
 
 **Optional.** Remembering a folder is a convenience, not a prerequisite: `auto-tzim PATH` works on a folder the config has
 never seen ([D-46](manager/DECISIONS.md)). What `add` buys is a stored name and stored defaults, so the path stops being
@@ -167,7 +168,8 @@ path inside `AUTO_TZIM_HOME`, or a non-empty `transforms` requirement it cannot 
 
 ### 2.4 `folder list`, `folder show NAME`, `folder edit NAME ...`, `folder enable NAME`, `folder disable NAME`, `folder remove NAME`
 
-Every subcommand takes the folder's **name**, matched case-insensitively and quoted if it contains spaces — there is no
+`edit` also takes `--allow-cloud-sync` / `--no-allow-cloud-sync`, the D-44 escape hatch ([D-54](manager/DECISIONS.md)). Every
+subcommand takes the folder's **name**, matched case-insensitively and quoted if it contains spaces — there is no
 opaque id to copy out of a file ([D-43](manager/DECISIONS.md)). `edit` also takes `--name`, which renames in place and
 refuses a name another folder already holds. `show` prints the profile plus its last run and counts. `edit` validates
 the whole result before writing, so a rejected edit leaves the file byte-identical. `remove` deletes the profile and its cached eligibility records — never a user file

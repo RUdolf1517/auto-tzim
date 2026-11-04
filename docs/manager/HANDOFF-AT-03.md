@@ -5,7 +5,7 @@ Written 2026-11-02 at `main` = `6c55db2`. Coder's brief for **AT-03 only**, in t
 [format](HANDOFF-TEMPLATE.md) and does not replace it.
 
 **Status: queued behind AT-02.** Do not start until the AT-02 review says PASS — a discovery layer built on an unaccepted
-config schema is built on sand. Read [CODER-QUEUE](CODER-QUEUE.md) §0 first: it is Rust, and it is 1.82.0.
+config schema is built on sand. Read [CODER-QUEUE](CODER-QUEUE.md) §0 first: it is Rust, and it is 1.89.0.
 
 ## 1. What AT-03 is for
 

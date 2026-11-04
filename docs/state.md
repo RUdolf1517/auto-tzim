@@ -177,14 +177,32 @@ lock, so it cannot create a second writer either.
 | global run lock | one run at a time per `AUTO_TZIM_HOME` **including every folder of a batch** ([D-49](manager/DECISIONS.md)) | `run`, and later the scheduler | on exit, including on signal |
 | update lock | no run during an update and no update during a run (v0.3) | `update` | on exit |
 
-`locks/run.lock` contains `{"pid":…, "start_time":…, "host":…, "run_id":…}`. `start_time` is the process start time from
-the OS, not the wall clock, because **pids are reused** and a pid alone would make a stale lock look live.
+Two lock files, one mechanism ([D-53](manager/DECISIONS.md)):
 
-- `run --once` on a locked installation exits `8` and processes nothing.
-- A lock whose pid is gone — or whose pid now belongs to a process with a different start time — is reported as **stale**
-  with its contents, and the user is told how to remove it. It is **never removed automatically**: automatic stealing is
-  how two runs end up on one file.
-- The lock is taken **before** discovery, so two runs cannot both build a plan.
+| File | Guards |
+| --- | --- |
+| `locks/config.lock` | the read-modify-write of `config.toml` (AT-02) |
+| `locks/run.lock` | one run at a time, whole batch included (AT-05) |
+
+The lock is a **kernel lock** taken with `File::try_lock()` (std, stable since Rust 1.89). The file is created `0600` and
+**never deleted** — deleting a lock file another process still holds is the classic race — and its contents are written
+after acquisition for diagnostics only:
+
+```json
+{"pid": 48213, "started_at": "…", "host": "…"}
+```
+
+`started_at` is the process **entry time**, not an OS-reported creation time, and `host` is omitted when `HOSTNAME` is unset —
+these fields are diagnostics for the human reading exit `8`, nothing depends on them ([D-54](manager/DECISIONS.md)).
+`config validate`, `folder list` and `folder show` take **no** lock: config writes are atomic renames, so a reader always sees a
+whole file.
+
+- Contention exits **`8`** and processes nothing; the message names the holder from the file, when it can be read.
+- **There are no stale locks.** A holder that dies takes its lock with it, so the old "report it stale, never remove it"
+  ritual is retired: it existed only because a lock *file* could outlive its owner. A file left by a dead process is not an
+  obstacle and is reused.
+- The config lock is taken **before** the config is read, and released after the atomic write. The run lock is taken
+  **before** discovery, so two runs cannot both build a plan.
 
 ## 6. Crash behaviour
 

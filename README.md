@@ -7,7 +7,8 @@ never routes a refused file anywhere else.
 
 > **Status: AT-02 work in progress.** Configuration validation and folder profiles are being implemented;
 > discovery, planning and processing are not implemented. This is not a working optimizer.
-> Build with the pinned Rust toolchain **1.89.0**: `cargo build --workspace`.
+> Build with the pinned Rust toolchain **1.89.0**: `cargo build --workspace`. The floor is 1.89 because the config lock
+> uses `std::fs::File::try_lock`, which stabilised there ([D-53](docs/manager/DECISIONS.md)).
 > CI runs on `ubuntu-24.04` and `macos-15`.
 
 ## What it will do (MVP / v0.1)

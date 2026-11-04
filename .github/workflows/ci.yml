@@ -176,6 +176,59 @@ jobs:
           accepted="$(shasum -a 256 "$temp/config/config.toml" | cut -d ' ' -f 1)"
           test "$before" != "$accepted"
           echo "::notice title=Edit evidence::rejected exit=$status sha-before=$before sha-after=$after stat-before=$before_stat stat-after=$after_stat; accepted sha=$accepted"
+      - name: Record corrupt configuration and identity evidence
+        shell: bash
+        run: |
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          mkdir -p "$temp/home" "$temp/config" "$temp/project" "$temp/other"
+          export HOME="$temp/home" AUTO_TZIM_HOME="$temp/config"
+          cli="$PWD/target/debug/auto-tzim"
+          printf 'invalid [[[\n' > "$AUTO_TZIM_HOME/config.toml"
+          before="$(shasum -a 256 "$AUTO_TZIM_HOME/config.toml" | cut -d ' ' -f 1)"
+          corrupt_case() {
+            label="$1"; shift; status=0
+            "$cli" "$@" >"$temp/out" 2>"$temp/err" || status=$?
+            test "$status" -eq 2
+            test -s "$temp/err"
+            after="$(shasum -a 256 "$AUTO_TZIM_HOME/config.toml" | cut -d ' ' -f 1)"
+            test "$before" = "$after"
+            printf 'corrupt %s exit=%s sha=%s stderr=' "$label" "$status" "$after"
+            tr '\n' '|' < "$temp/err"
+            printf '\n'
+          }
+          corrupt_case validate config validate
+          corrupt_case add folder add "$temp/project"
+          corrupt_case list folder list
+          corrupt_case show folder show project
+          corrupt_case edit folder edit project --name trips
+          corrupt_case enable folder enable project
+          corrupt_case disable folder disable project
+          corrupt_case remove folder remove project
+          echo "::notice title=Corrupt configuration::all eight commands exit 2, stderr nonempty, unchanged SHA256=$before; individual output in job log"
+          rm "$AUTO_TZIM_HOME/config.toml"
+          "$cli" folder add "$temp/project"
+          "$cli" folder list >"$temp/list1"
+          "$cli" folder list >"$temp/list2"
+          cmp "$temp/list1" "$temp/list2"
+          "$cli" folder show project >"$temp/show1"
+          "$cli" folder show Project >"$temp/show2"
+          cmp "$temp/show1" "$temp/show2"
+          status=0
+          "$cli" folder add "$temp/project" >"$temp/out" 2>"$temp/err" || status=$?
+          test "$status" -eq 2
+          grep -F duplicate_root "$temp/err"
+          status=0
+          "$cli" folder add "$temp/other" --name Project >"$temp/out" 2>"$temp/err" || status=$?
+          test "$status" -eq 2
+          grep -F duplicate_name "$temp/err"
+          "$cli" folder edit project --name trips
+          status=0
+          "$cli" folder remove project >"$temp/out" 2>"$temp/err" || status=$?
+          test "$status" -eq 2
+          grep -F 'folder not found' "$temp/err"
+          "$cli" folder show trips
+          echo '::notice title=Identity evidence::duplicate_root=2 duplicate_name=2 case-insensitive show identical list identical rename=0 old-name removal=2 new-name show=0'
       - name: Install CLI
         shell: bash
         run: |

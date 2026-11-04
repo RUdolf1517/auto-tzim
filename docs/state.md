@@ -189,8 +189,13 @@ The lock is a **kernel lock** taken with `File::try_lock()` (std, stable since R
 after acquisition for diagnostics only:
 
 ```json
-{"pid": 48213, "start_time": "…", "host": "…"}
+{"pid": 48213, "started_at": "…", "host": "…"}
 ```
+
+`started_at` is the process **entry time**, not an OS-reported creation time, and `host` is omitted when `HOSTNAME` is unset —
+these fields are diagnostics for the human reading exit `8`, nothing depends on them ([D-54](manager/DECISIONS.md)).
+`config validate`, `folder list` and `folder show` take **no** lock: config writes are atomic renames, so a reader always sees a
+whole file.
 
 - Contention exits **`8`** and processes nothing; the message names the holder from the file, when it can be read.
 - **There are no stale locks.** A holder that dies takes its lock with it, so the old "report it stale, never remove it"

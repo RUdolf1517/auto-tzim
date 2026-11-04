@@ -59,6 +59,8 @@ invent it; the owner may change it without cost), **superseded**.
 | D-51 | **A check that reads manifests runs once, on Linux; macOS exists for platform behaviour.** Target shape: `build` (Linux), `test` (Linux + macOS), `deny` (Linux), `pinned-dependencies` (Linux) — 5 jobs, one macOS slot instead of four — plus `concurrency` and `timeout-minutes` | **adopted (owner, 2026-11-02)** — *"пусть кодер решит проблему macos jobs заодно"* | R-27; `ci.yml`; AT-02 | AT-02, every later stage |
 | D-52 | **The plan is deterministic by construction**: id is 32 hex chars from OS randomness, the hash is SHA-256 over an ordered canonical row list (paths as bytes, argv included, ids and timestamps excluded), discovery is byte-wise sorted, depth is capped at 64 | **adopted (manager default, 2026-11-02)** — AT-03 cannot start without these four numbers | `state.md` §3.4; AC-1; corpus `K-14` | AT-03, AT-05 |
 | D-53 | **File locking is `std`: MSRV moves 1.82 → 1.89**, where `File::lock` / `try_lock` / `unlock` were stabilised. `unsafe` stays forbidden, no wrapper crate, and the lock file is never deleted — the kernel releases it when the holder dies, which is exactly the `SIGKILL` case a plain lock file cannot survive | **adopted (manager default, 2026-11-02)** — answers the coder's AT-02 question 3; amends [D-40](DECISIONS.md) | `state.md` §5; `rust-toolchain.toml`; both manifests | AT-02, AT-05 |
+| D-54 | **AT-02's seven grey areas decided**: an explicit `mode = "auto"` is valid (only the *default* is `confirm`); a non-empty `tzim_path` must exist, be a file and be executable; `--allow-cloud-sync` / `--no-allow-cloud-sync` exist on `folder add\|edit`; the permissions control is accepted as a whole-protection check with one added repair test; lock metadata is diagnostics only (`started_at`, host omitted when unknown); stale temp cleanup is safe **because** the config lock is held; and `config validate` takes no lock and creates nothing | **adopted (manager default, 2026-11-03)** — answers the coder's open questions on PR #34 | `config.md` §3; `cli.md` §2.2–2.4; `state.md` §5 | AT-02 |
+| D-55 | **`macos-15-intel` may be measured as a diagnostic, never switched to silently**; the runner decision stays open and the AT-02 merge does not depend on GitHub's macOS capacity | **adopted (manager default, 2026-11-03)** — answer to the coder's D-51 question | R-27; [D-51](DECISIONS.md) | AT-02 onward |
 
 ---
 
@@ -1359,3 +1361,64 @@ standard-library capability arrived. The next bump has the same test: a concrete
 **Reversal.** If 1.89 ever becomes unacceptable — a user on an older compiler who cannot upgrade, a distribution constraint —
 the fallback is option 1, in **one** module, with a written safety contract: `flock(LOCK_EX|LOCK_NB)` through `libc`,
 `cfg(unix)` only, no other `unsafe` anywhere, and the same four controls above. Option 3 stays refused.
+
+## D-54 · AT-02's grey areas, decided
+
+**Status: adopted (manager default, 2026-11-03).** Seven questions came up while the code was being written. Each was worth
+asking; each is now a rule, so the next coder does not ask again.
+
+**1. An explicit `mode = "auto"` is valid.** `config.md` says a *default* of `auto` is refused, and the implementation read
+that as "only `confirm` is accepted". It is not the same sentence. The default value of the field is `confirm`, so a config
+that never mentions `mode` cannot silently install; a user who writes `mode = "auto"` has made the choice in the file, which
+is exactly what D-29 allows, and `--auto` on the command line still overrides per run. The validator accepts both values and
+rejects everything else.
+
+**2. A non-empty `tzim_path` must be real.** Absolute, not a directory, **exists**, **is a regular file**, **is executable** —
+otherwise exit `2` (`tzim_path_missing`, `tzim_path_not_executable`). Empty means "find it on `PATH`", which is resolved at
+run time by the adapter (AT-04), not by `config validate`. Rationale: the user who names a path is naming a specific binary;
+a path that is not there is a typo, and `validate` exists to catch typos before a run rather than after one.
+
+**3. `--allow-cloud-sync` and `--no-allow-cloud-sync` exist** on `folder add` and `folder edit`; the pair sets the field.
+D-44's escape hatch has to be reachable from the command line, otherwise it is a documented flag that only people who edit
+TOML by hand can use — and the whole point of `folder add` is not editing TOML by hand.
+
+**4. The permissions control is accepted as it is, plus one test.** The control removes the explicit `set_permissions` **and**
+the safe creation modes and sees `0666`, which proves the *protection as a whole* fails when both layers go. That is the
+right control: making a file `0666` for a moment to prove a single `chmod` is worse than the gap it closes. The gap is
+closed from the other side with a **repair test**: take a config that is already `0666`, run any mutating command, and assert
+it ends `0600`. Together: layer one is proven by the negative control, layer two by the repair test.
+
+**5. Lock metadata is diagnostics, and is labelled as such.** `started_at` is the process entry time (not an OS-reported
+creation time), and `host` is `HOSTNAME` when set and **omitted** when not — never the string `"unknown"`, which reads like a
+host called unknown. No dependency is added for OS-reported values: since D-53 the kernel owns the lock, nothing is decided
+from this file, and a dependency for cosmetics fails the test in [D-38](DECISIONS.md).
+
+**6. Stale temp cleanup is allowed — because the lock is held.** Every writer takes `config.lock`, so any
+`.config.toml.<ts>.<n>.tmp` present while the lock is held belongs to a dead process. Cleanup happens **after** a successful
+rename, only in the config directory, only for names matching our exact pattern, never recursively. Without the lock this
+would be the unsafe deletion the coder correctly refused to write.
+
+**7. `config validate` takes no lock and creates nothing (F-21).** `cli.md` §2.2 promises "without touching state", and taking
+the lock creates `$AUTO_TZIM_HOME/locks/` — a promise broken for a command whose entire purpose is to inspect. It is also
+unnecessary: config writes are atomic renames, so a reader sees the old file or the new one, never a half-written one. Reads
+take no lock; only read-modify-write does. The same applies to `folder list` and `folder show`.
+
+**Reversal:** items 1–3 are user-visible and cheap to change; 4–7 are internal and cheaper. None of them weakens a safety
+property, which is the test they were all held to.
+
+## D-55 · The macOS runner: measure, do not switch
+
+**Status: adopted (manager default, 2026-11-03).** After D-51 the macOS job is acquired in seconds when it is acquired at
+all — 2 s, 3 s, 4 s on the three qualifying runs — and it still fails to be acquired on some runs at all (15-minute
+cancellations). The mitigation removed the self-inflicted part of the problem (four simultaneous requests); it cannot remove
+GitHub's capacity.
+
+| Rule | Detail |
+| --- | --- |
+| Measuring `macos-15-intel` is **allowed** | as a diagnostic, with numbers, clearly labelled as a different architecture |
+| Switching to it is **a decision**, not an experiment | it changes the platform the project claims to support; it needs D-53-class reasoning and the owner's word |
+| A red run because a runner was never acquired is **`not-run`** | never `passed`, and never a reason to add `continue-on-error` ([D-51](DECISIONS.md)) |
+| AT-02's merge does **not** wait on capacity | it waits on a green run that exists: `41900805601` is green on both platforms at `a4e9b1e`. Unacquired runs are recorded as misses, and R-27 stays open |
+
+The honest summary for the log: the change reduced the demand from four macOS slots per push to one, and the remaining misses
+are GitHub's arm64 pool. If intel turns out to be reliable, the decision to switch will be made on those numbers.

@@ -1009,6 +1009,13 @@ mod source_span_tests {
     }
 }
 
+static PROCESS_START: std::sync::OnceLock<std::time::SystemTime> = std::sync::OnceLock::new();
+
+/// Record the application's start time as early as possible in the entry point.
+pub fn record_process_start() {
+    PROCESS_START.get_or_init(std::time::SystemTime::now);
+}
+
 /// An OS-held exclusive lock. The lock file itself is intentionally never removed.
 pub struct ConfigLock {
     _file: std::fs::File,
@@ -1072,7 +1079,8 @@ pub fn acquire_lock_file(path: &std::path::Path) -> Result<ConfigLock, ConfigErr
         Err(std::fs::TryLockError::Error(error)) => return Err(error.into()),
     }
     file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
-    let start_time = std::time::SystemTime::now()
+    let start_time = PROCESS_START
+        .get_or_init(std::time::SystemTime::now)
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|error| ConfigError::Invalid(vec![format!("clock: {error}")]))?
         .as_secs();

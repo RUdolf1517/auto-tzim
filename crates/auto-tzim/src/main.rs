@@ -200,6 +200,7 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
 }
 
 fn main() {
+    config::record_process_start();
     if let Err(error) = execute(Cli::parse()) {
         let code = if matches!(error, ConfigError::Locked(_)) {
             8

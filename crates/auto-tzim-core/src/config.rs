@@ -1079,12 +1079,16 @@ pub fn acquire_lock_file(path: &std::path::Path) -> Result<ConfigLock, ConfigErr
             // The holder writes diagnostic data only after locking, so its
             // first write can briefly race with this read; never infer ownership
             // from stale metadata or remove the lock file.
-            let mut holder = String::new();
-            file.read_to_string(&mut holder)?;
-            return Err(ConfigError::Locked(if holder.trim().is_empty() {
+            let mut bytes = Vec::new();
+            let holder = if file.read_to_end(&mut bytes).is_ok() {
+                String::from_utf8_lossy(&bytes).trim().to_owned()
+            } else {
+                String::new()
+            };
+            return Err(ConfigError::Locked(if holder.is_empty() {
                 "holder information not yet available".into()
             } else {
-                holder.trim().into()
+                holder
             }));
         }
         Err(std::fs::TryLockError::Error(error)) => return Err(error.into()),

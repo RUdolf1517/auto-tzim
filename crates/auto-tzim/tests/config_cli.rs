@@ -315,6 +315,29 @@ fn killed_edits_never_leave_a_partial_config() {
     }
 }
 
+// Compare complete trees (including file bytes), not just their immediate children.
+fn tree_snapshot(root: &std::path::Path) -> Vec<(PathBuf, Vec<u8>)> {
+    fn walk(root: &std::path::Path, current: &std::path::Path, rows: &mut Vec<(PathBuf, Vec<u8>)>) {
+        for entry in fs::read_dir(current).unwrap() {
+            let path = entry.unwrap().path();
+            let relative = path.strip_prefix(root).unwrap().to_path_buf();
+            let kind = fs::symlink_metadata(&path).unwrap().file_type();
+            if kind.is_dir() {
+                rows.push((relative, b"directory".to_vec()));
+                walk(root, &path, rows);
+            } else if kind.is_file() {
+                rows.push((relative, fs::read(path).unwrap()));
+            } else {
+                panic!("unexpected entry in isolation test: {}", path.display());
+            }
+        }
+    }
+    let mut rows = Vec::new();
+    walk(root, root, &mut rows);
+    rows.sort();
+    rows
+}
+
 #[test]
 fn override_keeps_home_and_xdg_untouched() {
     let s = Sandbox::new();
@@ -323,7 +346,14 @@ fn override_keeps_home_and_xdg_untouched() {
     let state = s.root.join("xdg-state");
     fs::create_dir_all(&xdg).unwrap();
     fs::create_dir_all(&state).unwrap();
-    let before_home = fs::read_dir(s.root.join("home")).unwrap().count();
+    let home = s.root.join("home");
+    for root in [&home, &xdg, &state] {
+        fs::create_dir_all(root.join("sentinel/nested")).unwrap();
+        fs::write(root.join("sentinel/nested/keep"), b"unchanged").unwrap();
+    }
+    let before_home = tree_snapshot(&home);
+    let before_xdg = tree_snapshot(&xdg);
+    let before_state = tree_snapshot(&state);
     let out = Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
         .env("HOME", s.root.join("home"))
         .env("XDG_CONFIG_HOME", &xdg)
@@ -339,12 +369,9 @@ fn override_keeps_home_and_xdg_untouched() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert_eq!(
-        before_home,
-        fs::read_dir(s.root.join("home")).unwrap().count()
-    );
-    assert_eq!(fs::read_dir(xdg).unwrap().count(), 0);
-    assert_eq!(fs::read_dir(state).unwrap().count(), 0);
+    assert_eq!(before_home, tree_snapshot(&home));
+    assert_eq!(before_xdg, tree_snapshot(&xdg));
+    assert_eq!(before_state, tree_snapshot(&state));
     assert!(s.config().exists());
 }
 

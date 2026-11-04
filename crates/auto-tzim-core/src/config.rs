@@ -787,22 +787,21 @@ pub fn format_folder(folder: &Folder) -> Result<String, ConfigError> {
 
 // Keep the user's original bytes outside the folder blocks being modified.
 fn preserve_profiles(original: &str, old: &Config, new: &Config) -> Result<String, ConfigError> {
-    if original.contains("\"\"\"") || original.contains("\'\'\'") {
-        return Err(ConfigError::Invalid(vec![
-            "cannot safely edit a configuration containing multiline strings".into(),
-        ]));
-    }
     let mut offsets = Vec::new();
+    let mut multiline = None;
     let mut offset = 0;
     for line in original.split_inclusive('\n') {
         let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("[[") {
-            if let Some((name, _)) = rest.split_once("]]") {
-                if name.trim() == "folder" {
-                    offsets.push(offset);
+        if multiline.is_none() {
+            if let Some(rest) = trimmed.strip_prefix("[[") {
+                if let Some((name, _)) = rest.split_once("]]") {
+                    if name.trim() == "folder" {
+                        offsets.push(offset);
+                    }
                 }
             }
         }
+        multiline = scan_multiline(line, multiline);
         offset += line.len();
     }
     if offsets.len() != old.folder.len() {
@@ -869,6 +868,49 @@ fn preserve_profiles(original: &str, old: &Config, new: &Config) -> Result<Strin
         }
     }
     Ok(result)
+}
+
+// Track only TOML string boundaries; comments and quoted single-line strings
+// cannot introduce a table header. A table-like line inside a multiline string
+// must never be treated as a real profile boundary.
+fn scan_multiline(line: &str, mut state: Option<u8>) -> Option<u8> {
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if let Some(quote) = state {
+            if quote == b'"' && bytes[i] == b'\\' {
+                i = (i + 2).min(bytes.len());
+            } else if bytes[i..].starts_with(&[quote, quote, quote]) {
+                state = None;
+                i += 3;
+            } else {
+                i += 1;
+            }
+        } else if bytes[i] == b'#' {
+            break;
+        } else if bytes[i] == b'"' || bytes[i] == b'\'' {
+            let quote = bytes[i];
+            if bytes[i..].starts_with(&[quote, quote, quote]) {
+                state = Some(quote);
+                i += 3;
+            } else {
+                i += 1;
+                while i < bytes.len() {
+                    if quote == b'"' && bytes[i] == b'\\' {
+                        i = (i + 2).min(bytes.len());
+                    } else if bytes[i] == quote {
+                        i += 1;
+                        break;
+                    } else {
+                        i += 1;
+                    }
+                }
+            }
+        } else {
+            i += 1;
+        }
+    }
+    state
 }
 
 fn append_folder(text: &mut String, folder: &Folder) -> Result<(), ConfigError> {

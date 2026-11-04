@@ -369,3 +369,31 @@ fn add_to_explicit_empty_profile_array() {
         .unwrap()
         .contains("# keep this comment"));
 }
+
+#[test]
+fn edit_preserves_multiline_string_in_another_profile() {
+    let sandbox = Sandbox::new();
+    let first = sandbox.folder("first");
+    let second = sandbox.folder("second");
+    fs::create_dir_all(sandbox.root.join("config")).unwrap();
+    let original = format!(
+        "schema = 1\n[installation]\n\n[[folder]]\nname = 'first'\nroot = {:?}\nexclude_globs = [\"\"\"line one\n[[folder]]\nline three\"\"\"]\n# retain this comment\n\n[[folder]]\nname = 'second'\nroot = {:?}\n",
+        first.to_str().unwrap(),
+        second.to_str().unwrap()
+    );
+    fs::write(sandbox.config(), &original).unwrap();
+    let result = sandbox.run(&["folder", "edit", "second", "--name", "renamed"]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let actual = fs::read_to_string(sandbox.config()).unwrap();
+    assert!(
+        actual.contains(
+            "exclude_globs = [\"\"\"line one\n[[folder]]\nline three\"\"\"]\n# retain this comment"
+        ),
+        "{actual}"
+    );
+    assert!(sandbox.run(&["config", "validate"]).status.success());
+}

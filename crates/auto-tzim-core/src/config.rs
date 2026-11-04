@@ -1019,6 +1019,13 @@ pub fn record_process_start() {
 /// An OS-held exclusive lock. The lock file itself is intentionally never removed.
 pub struct ConfigLock {
     _file: std::fs::File,
+    path: PathBuf,
+}
+
+impl Drop for ConfigLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
 }
 
 /// Resolve the lock directory with the same environment precedence as state.
@@ -1048,51 +1055,29 @@ pub fn acquire_config_lock() -> Result<ConfigLock, ConfigError> {
 /// Acquire an exclusive nonblocking OS lock; suitable for other lock names later.
 #[cfg(unix)]
 pub fn acquire_lock_file(path: &std::path::Path) -> Result<ConfigLock, ConfigError> {
-    use std::io::{Read, Seek, SeekFrom, Write};
-    use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+    use std::io::{Seek, SeekFrom, Write};
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
     let parent = path
         .parent()
         .ok_or_else(|| ConfigError::Invalid(vec!["lock path has no parent".into()]))?;
     create_private_directory(parent)?;
-    let mut file = std::fs::OpenOptions::new()
+    // NEGATIVE CONTROL: O_EXCL cannot survive a killed holder.
+    let mut file = match std::fs::OpenOptions::new()
         .read(true)
         .write(true)
-        .create(true)
-        .truncate(false)
+        .create_new(true)
         .mode(0o600)
-        .open(path)?;
-    // Do not truncate or chmod a lock-path symlink or an unexpected file.
-    let path_metadata = std::fs::symlink_metadata(path)?;
-    let file_metadata = file.metadata()?;
-    if !path_metadata.file_type().is_file()
-        || path_metadata.dev() != file_metadata.dev()
-        || path_metadata.ino() != file_metadata.ino()
+        .open(path)
     {
-        return Err(ConfigError::Invalid(vec![
-            "lock path must be a regular file".into(),
-        ]));
-    }
-    match file.try_lock() {
-        Ok(()) => (),
-        Err(std::fs::TryLockError::WouldBlock) => {
-            // The holder writes diagnostic data only after locking, so its
-            // first write can briefly race with this read; never infer ownership
-            // from stale metadata or remove the lock file.
-            let mut bytes = Vec::new();
-            let holder = if file.read_to_end(&mut bytes).is_ok() {
-                String::from_utf8_lossy(&bytes).trim().to_owned()
-            } else {
-                String::new()
-            };
-            return Err(ConfigError::Locked(if holder.is_empty() {
-                "holder information not yet available".into()
-            } else {
-                holder
-            }));
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(ConfigError::Locked(
+                std::fs::read_to_string(path).unwrap_or_default(),
+            ));
         }
-        Err(std::fs::TryLockError::Error(error)) => return Err(error.into()),
-    }
+        Err(error) => return Err(error.into()),
+    };
     file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
     let start_time = PROCESS_START
         .get_or_init(std::time::SystemTime::now)
@@ -1110,7 +1095,10 @@ pub fn acquire_lock_file(path: &std::path::Path) -> Result<ConfigLock, ConfigErr
     file.seek(SeekFrom::Start(0))?;
     file.write_all(diagnostic.as_bytes())?;
     file.sync_all()?;
-    Ok(ConfigLock { _file: file })
+    Ok(ConfigLock {
+        _file: file,
+        path: path.to_path_buf(),
+    })
 }
 
 // The lock metadata has only three scalar fields; avoid adding a JSON crate

@@ -193,10 +193,10 @@ pub fn validate_document(input: &str) -> Vec<String> {
                 }
             }
             if table.get("allowed_major_versions").is_some_and(|v| {
-                v.as_array().map_or(true, |a| {
+                v.as_array().is_none_or(|a| {
                     a.iter().any(|v| {
                         v.as_integer()
-                            .map_or(true, |n| !(0..=u32::MAX as i64).contains(&n))
+                            .is_none_or(|n| !(0..=u32::MAX as i64).contains(&n))
                     })
                 })
             }) {
@@ -352,7 +352,7 @@ fn validate_folder_fields(
     for key in ["formats", "transforms", "exclude_globs"] {
         if table
             .get(key)
-            .is_some_and(|v| v.as_array().map_or(true, |a| a.iter().any(|v| !v.is_str())))
+            .is_some_and(|v| v.as_array().is_none_or(|a| a.iter().any(|v| !v.is_str())))
         {
             errors.push(format!("{path}.{key}: expected array of strings"));
         }

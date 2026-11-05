@@ -2,7 +2,7 @@
 name = "auto-tzim"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.89"
 license = "MIT"
 description = "Companion orchestration tool for tzim"
 repository = "https://github.com/RUdolf1517/auto-tzim"

@@ -2,7 +2,11 @@
 name = "auto-tzim-core"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.89"
 license = "MIT"
 description = "Core library for auto-tzim"
 repository = "https://github.com/RUdolf1517/auto-tzim"
+
+[dependencies]
+serde = { version = "=1.0.210", features = ["derive"] }
+toml = "=0.8.19"

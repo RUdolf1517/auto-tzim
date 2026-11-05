@@ -5,20 +5,36 @@ on:
   pull_request:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-15]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master snapshot
         with:
-          toolchain: 1.82.0
+          toolchain: 1.89.0
           components: rustfmt, clippy
       - run: cargo build --workspace --locked
+      - name: Record dependency features
+        shell: bash
+        run: |
+          cargo tree --locked -e features > "$RUNNER_TEMP/dependency-tree.txt"
+          cat "$RUNNER_TEMP/dependency-tree.txt"
+          python3 -c 'import base64, os, pathlib; s=base64.b64encode(pathlib.Path(os.environ["RUNNER_TEMP"], "dependency-tree.txt").read_bytes()).decode(); [print(f"::notice title=FeatureTree{i//2000:03d}::{s[i:i+2000]}") for i in range(0,len(s),2000)]'
+      - name: Check package metadata
+        shell: bash
+        run: |
+          # jq is already present on GitHub runners; it validates Cargo's JSON without another project script.
+          # Check the seven registry metadata fields for both workspace packages.
+          cargo metadata --locked --no-deps --format-version 1 | jq -e '
+            [.packages[] | select(.name == "auto-tzim" or .name == "auto-tzim-core")]
+            | length == 2 and all(.[]; all(.name, .version, .edition, .license, .description, .repository, .rust_version; type == "string" and length > 0))
+          '
+
 
   test:
     strategy:
@@ -26,15 +42,34 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master snapshot
         with:
-          toolchain: 1.82.0
+          toolchain: 1.89.0
           components: rustfmt, clippy
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - run: cargo test --workspace --locked
+      - name: Cargo clippy
+        shell: bash
+        run: |
+          set +e
+          cargo clippy --workspace --all-targets --locked --color never -- -D warnings 2>&1 | tee "$RUNNER_TEMP/clippy-output"
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            python3 -c 'import os, pathlib; s=pathlib.Path(os.environ["RUNNER_TEMP"], "clippy-output").read_text(); print("::error title=Clippy failure::" + s[-3000:].replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))'
+          fi
+          exit "$status"
+      - name: Cargo tests
+        shell: bash
+        run: |
+          set +e
+          cargo test --workspace --locked 2>&1 | tee "$RUNNER_TEMP/test-output"
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            python3 -c 'import os, pathlib; s=pathlib.Path(os.environ["RUNNER_TEMP"], "test-output").read_text(); print("::error title=Test failure::" + s[-3000:].replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))'
+          fi
+          exit "$status"
       - name: CLI contract
         shell: bash
         run: |
@@ -50,6 +85,150 @@ jobs:
             printf "argument=%s exit=%s stdout=<empty> stderr:\n" "$arg" "$status"
             cat stderr.txt
           done
+      - name: Record aggregate validation evidence
+        shell: bash
+        run: |
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          mkdir "$temp/settings" "$temp/photos"
+          export AUTO_TZIM_HOME="$temp/settings"
+          printf "schema=1\n[installation]\n[[folder]]\nname='photos'\nroot='%s'\nrecurse=true\nenabled=1\njobs=2\n" "$temp/photos" > "$temp/settings/config.toml"
+          status=0
+          target/debug/auto-tzim config validate >"$temp/out" 2>"$temp/err" || status=$?
+          test "$status" -eq 2
+          test ! -s "$temp/out"
+          grep -F 'folder[0].recurse' "$temp/err"
+          grep -F 'recursive' "$temp/err"
+          grep -F 'folder[0].enabled' "$temp/err"
+          grep -F 'folder[0].jobs' "$temp/err"
+          evidence="$(tr '\n' '|' < "$temp/err")"
+          echo "::notice title=Three validation errors::exit=$status stdout=<empty> stderr=$evidence"
+          printf "schema=1\n[installation]\n[[folder]]\nname='photos'\nroot='%s'\njobs=2\n" "$temp/photos" > "$temp/settings/config.toml"
+          status=0
+          target/debug/auto-tzim config validate >"$temp/out" 2>"$temp/err" || status=$?
+          test "$status" -eq 2
+          test ! -s "$temp/out"
+          test "$(wc -l < "$temp/err" | tr -d ' ')" -eq 1
+          grep -F 'folder[0].jobs' "$temp/err"
+          echo "::notice title=One validation error::exit=$status stdout=<empty> stderr=$(cat "$temp/err")"
+      - name: Record configuration refusal evidence
+        shell: bash
+        run: |
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          mkdir -p "$temp/home/Dropbox/photos" "$temp/storage/inside" "$temp/photos"
+          touch "$temp/file"
+          ln -s "$temp/photos" "$temp/link"
+          export HOME="$temp/home" AUTO_TZIM_HOME="$temp/storage"
+          check_refusal() {
+            label="$1"; path="$2"; reason="$3"; status=0
+            target/debug/auto-tzim folder add "$path" >"$temp/out" 2>"$temp/err" || status=$?
+            test "$status" -eq 2
+            test ! -s "$temp/out"
+            grep -F "$reason" "$temp/err"
+            message="$(cat "$temp/err")"
+            message="${message//'%'/'%25'}"
+            if [ "$label" = containing ]; then
+              containing_evidence="containing: exit=$status stdout=<empty> stderr=$message"
+            elif [ "$label" = cloud ]; then
+              echo "::notice title=Refusal cloud and containing::$containing_evidence; cloud: exit=$status stdout=<empty> stderr=$message"
+            else
+              echo "::notice title=Refusal $label::exit=$status stdout=<empty> stderr=$message"
+            fi
+          }
+          check_refusal empty '' root_not_absolute
+          check_refusal dot '.' root_not_absolute
+          check_refusal relative 'relative' root_not_absolute
+          check_refusal root '/' forbidden_root
+          check_refusal home "$HOME" forbidden_root
+          check_refusal file "$temp/file" root_not_a_directory
+          check_refusal symlink "$temp/link" root_is_symlink
+          check_refusal missing "$temp/missing" root_missing
+          check_refusal inside "$temp/storage/inside" state_inside_root
+          check_refusal containing "$temp" state_inside_root
+          check_refusal cloud "$HOME/Dropbox/photos" cloud_sync_root
+      - name: Evidence for rejected and accepted edit
+        shell: bash
+        run: |
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          mkdir "$temp/photos"
+          export AUTO_TZIM_HOME="$temp/config"
+          target/debug/auto-tzim folder add "$temp/photos"
+          before="$(shasum -a 256 "$temp/config/config.toml" | cut -d ' ' -f 1)"
+          if [ "$(uname)" = Darwin ]; then
+            before_stat="$(stat -f '%i %z %m' "$temp/config/config.toml")"
+          else
+            before_stat="$(stat -c '%i %s %Y' "$temp/config/config.toml")"
+          fi
+          status=0
+          target/debug/auto-tzim folder edit photos --name '' >"$temp/out" 2>"$temp/err" || status=$?
+          test "$status" -eq 2
+          after="$(shasum -a 256 "$temp/config/config.toml" | cut -d ' ' -f 1)"
+          if [ "$(uname)" = Darwin ]; then
+            after_stat="$(stat -f '%i %z %m' "$temp/config/config.toml")"
+          else
+            after_stat="$(stat -c '%i %s %Y' "$temp/config/config.toml")"
+          fi
+          test "$before" = "$after"
+          test "$before_stat" = "$after_stat"
+          target/debug/auto-tzim folder edit photos --name renamed
+          accepted="$(shasum -a 256 "$temp/config/config.toml" | cut -d ' ' -f 1)"
+          test "$before" != "$accepted"
+          echo "::notice title=Edit evidence::rejected exit=$status sha-before=$before sha-after=$after stat-before=$before_stat stat-after=$after_stat; accepted sha=$accepted"
+      - name: Record corrupt configuration and identity evidence
+        shell: bash
+        run: |
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          mkdir -p "$temp/home" "$temp/config" "$temp/project" "$temp/other"
+          export HOME="$temp/home" AUTO_TZIM_HOME="$temp/config"
+          cli="$PWD/target/debug/auto-tzim"
+          printf 'invalid [[[\n' > "$AUTO_TZIM_HOME/config.toml"
+          before="$(shasum -a 256 "$AUTO_TZIM_HOME/config.toml" | cut -d ' ' -f 1)"
+          corrupt_case() {
+            label="$1"; shift; status=0
+            "$cli" "$@" >"$temp/out" 2>"$temp/err" || status=$?
+            test "$status" -eq 2
+            test -s "$temp/err"
+            after="$(shasum -a 256 "$AUTO_TZIM_HOME/config.toml" | cut -d ' ' -f 1)"
+            test "$before" = "$after"
+            printf 'corrupt %s exit=%s sha=%s stderr=' "$label" "$status" "$after"
+            tr '\n' '|' < "$temp/err"
+            printf '\n'
+          }
+          corrupt_case validate config validate
+          corrupt_case add folder add "$temp/project"
+          corrupt_case list folder list
+          corrupt_case show folder show project
+          corrupt_case edit folder edit project --name trips
+          corrupt_case enable folder enable project
+          corrupt_case disable folder disable project
+          corrupt_case remove folder remove project
+          echo "::notice title=Corrupt configuration::all eight commands exit 2, stderr nonempty, unchanged SHA256=$before; individual output in job log"
+          rm "$AUTO_TZIM_HOME/config.toml"
+          "$cli" folder add "$temp/project"
+          "$cli" folder list >"$temp/list1"
+          "$cli" folder list >"$temp/list2"
+          cmp "$temp/list1" "$temp/list2"
+          "$cli" folder show project >"$temp/show1"
+          "$cli" folder show Project >"$temp/show2"
+          cmp "$temp/show1" "$temp/show2"
+          status=0
+          "$cli" folder add "$temp/project" >"$temp/out" 2>"$temp/err" || status=$?
+          test "$status" -eq 2
+          grep -F duplicate_root "$temp/err"
+          status=0
+          "$cli" folder add "$temp/other" --name Project >"$temp/out" 2>"$temp/err" || status=$?
+          test "$status" -eq 2
+          grep -F duplicate_name "$temp/err"
+          "$cli" folder edit project --name trips
+          status=0
+          "$cli" folder remove project >"$temp/out" 2>"$temp/err" || status=$?
+          test "$status" -eq 2
+          grep -F 'folder not found' "$temp/err"
+          "$cli" folder show trips
+          echo '::notice title=Identity evidence::duplicate_root=2 duplicate_name=2 case-insensitive show identical list identical rename=0 old-name removal=2 new-name show=0'
       - name: Install CLI
         shell: bash
         run: |
@@ -57,16 +236,13 @@ jobs:
           "$RUNNER_TEMP/auto-tzim-install/bin/auto-tzim" --version
 
   deny:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-15]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master snapshot
         with:
-          toolchain: 1.82.0
+          toolchain: 1.89.0
           components: rustfmt, clippy
       - uses: taiki-e/install-action@1215446185352662cec6825af8e979af4006a502 # cargo-deny
       - name: cargo deny check
@@ -79,12 +255,10 @@ jobs:
             python3 -c 'import pathlib, os; s=pathlib.Path(os.environ["RUNNER_TEMP"], "deny-output").read_text(); print("::error title=cargo-deny::" + s[-3000:].replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))'
           fi
           exit "$status"
+
   pinned-dependencies:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-15]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: python3 scripts/test-check-pins.py

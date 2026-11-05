@@ -131,7 +131,13 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
     match cli.command {
         Command::Config {
             command: ConfigCommand::Validate,
-        } => println!("configuration valid"),
+        } => {
+            let errors = config::validate_environment(&settings);
+            if !errors.is_empty() {
+                return Err(ConfigError::Invalid(errors));
+            }
+            println!("configuration valid");
+        }
         Command::Folder { command } => match command {
             FolderCommand::List => {
                 for folder in &settings.folder {
@@ -182,7 +188,9 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                 config::save(
                     &path,
                     &settings,
-                    lock.as_ref().expect("mutating command holds the lock"),
+                    lock.as_ref().ok_or_else(|| {
+                        invalid("internal error: mutating command without config lock")
+                    })?,
                 )?;
                 for folder in &added {
                     println!("[[folder]]\n{}", show(folder)?);
@@ -201,7 +209,9 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                 config::save(
                     &path,
                     &settings,
-                    lock.as_ref().expect("mutating command holds the lock"),
+                    lock.as_ref().ok_or_else(|| {
+                        invalid("internal error: mutating command without config lock")
+                    })?,
                 )?;
                 print!("{}", show(&settings.folder[i])?);
             }
@@ -211,7 +221,9 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                 config::save(
                     &path,
                     &settings,
-                    lock.as_ref().expect("mutating command holds the lock"),
+                    lock.as_ref().ok_or_else(|| {
+                        invalid("internal error: mutating command without config lock")
+                    })?,
                 )?;
                 println!("enabled {}", settings.folder[i].name);
             }
@@ -221,7 +233,9 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                 config::save(
                     &path,
                     &settings,
-                    lock.as_ref().expect("mutating command holds the lock"),
+                    lock.as_ref().ok_or_else(|| {
+                        invalid("internal error: mutating command without config lock")
+                    })?,
                 )?;
                 println!("disabled {}", settings.folder[i].name);
             }
@@ -231,7 +245,9 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                 config::save(
                     &path,
                     &settings,
-                    lock.as_ref().expect("mutating command holds the lock"),
+                    lock.as_ref().ok_or_else(|| {
+                        invalid("internal error: mutating command without config lock")
+                    })?,
                 )?;
                 println!("removed {}", removed.name);
             }

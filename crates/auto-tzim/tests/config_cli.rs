@@ -828,6 +828,7 @@ fn mode_and_tzim_path_validation() {
     let out = validate("confirm", s.root.to_str().unwrap());
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("tzim_path_not_executable"));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("not a regular file"));
     let exe = s.root.join("tzim");
     fs::write(&exe, b"not actually invoked").unwrap();
     fs::set_permissions(&exe, fs::Permissions::from_mode(0o600)).unwrap();
@@ -930,4 +931,97 @@ fn lock_diagnostics_omit_missing_host_and_include_set_host() {
     );
     let metadata = fs::read_to_string(path).unwrap();
     assert!(metadata.contains("\"host\":\"test-host\""));
+}
+
+#[test]
+fn unavailable_resources_do_not_block_profile_management() {
+    use std::os::unix::fs::PermissionsExt;
+    let s = Sandbox::new();
+    let root = s.folder("external");
+    let exe = s.root.join("tzim");
+    fs::write(&exe, b"test executable").unwrap();
+    fs::set_permissions(&exe, fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(s
+        .run(&["folder", "add", root.to_str().unwrap()])
+        .status
+        .success());
+    let original = fs::read_to_string(s.config()).unwrap();
+    assert!(original.contains("tzim_path = \"\""));
+    let configured = original.replace(
+        "tzim_path = \"\"",
+        &format!("tzim_path = {:?}", exe.to_str().unwrap()),
+    );
+    fs::write(s.config(), configured).unwrap();
+    assert!(s.run(&["config", "validate"]).status.success());
+    fs::remove_dir(&root).unwrap();
+    fs::remove_file(&exe).unwrap();
+
+    let validation = s.run(&["config", "validate"]);
+    assert_eq!(validation.status.code(), Some(2));
+    let errors = String::from_utf8_lossy(&validation.stderr);
+    assert!(
+        errors.contains("root_missing") && errors.contains("tzim_path_missing"),
+        "{errors}"
+    );
+    for args in [
+        &["folder", "list"][..],
+        &["folder", "show", "external"][..],
+        &["folder", "disable", "external"][..],
+        &["folder", "edit", "external", "--name", "renamed"][..],
+        &["folder", "enable", "renamed"][..],
+    ] {
+        let out = s.run(args);
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    let other = s.folder("other");
+    let out = s.run(&["folder", "add", other.to_str().unwrap()]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let missing_new = s.root.join("missing-new");
+    let out = s.run(&["folder", "add", missing_new.to_str().unwrap()]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("root_missing"));
+    let out = s.run(&["folder", "remove", "renamed"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn structural_validation_still_rejects_invalid_unavailable_profiles() {
+    let s = Sandbox::new();
+    fs::create_dir_all(s.root.join("config")).unwrap();
+    let missing = s.root.join("not-mounted");
+    let template = format!(
+        "schema=1\n[installation]\n[[folder]]\nname='old'\nroot={:?}\n",
+        missing.to_str().unwrap()
+    );
+    fs::write(
+        s.config(),
+        format!(
+            "{template}[[folder]]\nname='new'\nroot={:?}\n",
+            missing.to_str().unwrap()
+        ),
+    )
+    .unwrap();
+    let out = s.run(&["folder", "list"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("duplicate_root"));
+    fs::write(
+        s.config(),
+        "schema=1\n[installation]\ntzim_path='relative'\n",
+    )
+    .unwrap();
+    let out = s.run(&["folder", "list"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("must be absolute"));
 }

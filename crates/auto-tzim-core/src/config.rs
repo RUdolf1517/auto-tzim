@@ -137,7 +137,7 @@ mod tests {
 }
 
 /// Inspect independent fields without stopping at the first semantic error.
-/// Root and filesystem validation is not yet implemented.
+/// Only structural checks run here; environment checks are explicit.
 pub fn validate_document(input: &str) -> Vec<String> {
     let document = match input.parse::<toml::Value>() {
         Ok(value) => value,
@@ -180,7 +180,7 @@ pub fn validate_document(input: &str) -> Vec<String> {
                 errors.push("installation.update_policy: scheduled is not in v0.1".into());
             }
             if let Some(value) = table.get("tzim_path").and_then(toml::Value::as_str) {
-                if let Some(error) = validate_tzim_path(value) {
+                if let Some(error) = validate_tzim_path_shape(value) {
                     errors.push(error);
                 }
             }
@@ -220,10 +220,9 @@ pub fn validate_document(input: &str) -> Vec<String> {
                         }
                     }
                     if let Some(root) = table.get("root").and_then(toml::Value::as_str) {
-                        if let Ok(root) = std::fs::canonicalize(root) {
-                            if !roots.insert(root) {
-                                errors.push(format!("{path}.root: duplicate_root"));
-                            }
+                        let root = structural_path(std::path::Path::new(root));
+                        if !roots.insert(root) {
+                            errors.push(format!("{path}.root: duplicate_root"));
                         }
                     }
                 } else {
@@ -316,7 +315,7 @@ fn validate_folder_fields(
             .get("allow_cloud_sync")
             .and_then(toml::Value::as_bool)
             .unwrap_or(false);
-        if let Err(reason) = validate_root(std::path::Path::new(root), cloud) {
+        if let Err(reason) = validate_root_structure(std::path::Path::new(root), cloud) {
             errors.push(format!("{path}.root: {reason}"));
         }
     }
@@ -519,27 +518,49 @@ pub fn load(path: &std::path::Path) -> Result<Config, ConfigError> {
     }
 }
 
-fn validate_tzim_path(value: &str) -> Option<String> {
+fn validate_tzim_path_shape(value: &str) -> Option<String> {
+    if !value.is_empty() && !std::path::Path::new(value).is_absolute() {
+        Some("installation.tzim_path: must be absolute".into())
+    } else {
+        None
+    }
+}
+
+fn validate_tzim_path_environment(value: &str) -> Option<String> {
+    // v0.1 supports Unix platforms only; Windows is outside its stated scope.
     use std::os::unix::fs::PermissionsExt;
     if value.is_empty() {
         return None;
     }
-    let path = std::path::Path::new(value);
-    if !path.is_absolute() {
-        return Some("installation.tzim_path: must be absolute".into());
-    }
-    match std::fs::metadata(path) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            Some("installation.tzim_path: tzim_path_missing".into())
-        }
+    match std::fs::metadata(value) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Some(format!(
+            "installation.tzim_path: tzim_path_missing: {error}"
+        )),
         Err(error) => Some(format!(
             "installation.tzim_path: tzim_path_not_executable: {error}"
         )),
-        Ok(metadata) if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 => {
+        Ok(metadata) if !metadata.is_file() => {
+            Some("installation.tzim_path: tzim_path_not_executable: not a regular file".into())
+        }
+        Ok(metadata) if metadata.permissions().mode() & 0o111 == 0 => {
             Some("installation.tzim_path: tzim_path_not_executable".into())
         }
         Ok(_) => None,
     }
+}
+
+/// Check external resources only for commands that require them.
+pub fn validate_environment(config: &Config) -> Vec<String> {
+    let mut errors = Vec::new();
+    if let Some(error) = validate_tzim_path_environment(&config.installation.tzim_path) {
+        errors.push(error);
+    }
+    for (index, folder) in config.folder.iter().enumerate() {
+        if let Err(reason) = validate_root(&folder.root, folder.allow_cloud_sync) {
+            errors.push(format!("folder[{index}].root: {reason}"));
+        }
+    }
+    errors
 }
 
 /// Validate all values that have been decoded into the schema.
@@ -556,7 +577,7 @@ pub fn validate_config(config: &Config) -> Vec<String> {
             "installation.update_policy: only notify is supported; scheduled is not in v0.1".into(),
         );
     }
-    if let Some(error) = validate_tzim_path(&config.installation.tzim_path) {
+    if let Some(error) = validate_tzim_path_shape(&config.installation.tzim_path) {
         errors.push(error);
     }
     for (index, folder) in config.folder.iter().enumerate() {
@@ -575,13 +596,11 @@ pub fn validate_config(config: &Config) -> Vec<String> {
             if previous.name.to_lowercase() == name.to_lowercase() {
                 errors.push(format!("{label}.name: duplicate_name"));
             }
-            if previous.root == folder.root
-                || matches!((std::fs::canonicalize(&previous.root), std::fs::canonicalize(&folder.root)), (Ok(a), Ok(b)) if a == b)
-            {
+            if structural_path(&previous.root) == structural_path(&folder.root) {
                 errors.push(format!("{label}.root: duplicate_root"));
             }
         }
-        if let Err(reason) = validate_root(&folder.root, folder.allow_cloud_sync) {
+        if let Err(reason) = validate_root_structure(&folder.root, folder.allow_cloud_sync) {
             errors.push(format!("{label}.root: {reason}"));
         }
         if folder.follow_symlinks {
@@ -613,32 +632,16 @@ pub fn validate_config(config: &Config) -> Vec<String> {
     errors
 }
 
-/// Refuse dangerous roots before returning the canonical path.
-pub fn validate_root(root: &std::path::Path, allow_cloud_sync: bool) -> Result<PathBuf, String> {
+/// Refuse unsafe path shapes without requiring the root to exist.
+fn validate_root_structure(root: &std::path::Path, allow_cloud_sync: bool) -> Result<(), String> {
     use std::path::Path;
     if !root.is_absolute() {
         return Err("root_not_absolute".into());
     }
-    // Rebuilding from components strips trailing separators and `.` so a symlink
-    // to a directory cannot be laundered by appending a slash.
-    let inspected: PathBuf = root.components().collect();
-    let metadata = std::fs::symlink_metadata(&inspected).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::NotFound {
-            "root_missing"
-        } else {
-            "root_not_a_directory"
-        }
-    })?;
-    if metadata.file_type().is_symlink() {
-        return Err("root_is_symlink".into());
-    }
-    if !metadata.is_dir() {
-        return Err("root_not_a_directory".into());
-    }
-    let canonical = std::fs::canonicalize(root).map_err(|_| "root_not_a_directory")?;
+    let canonical = structural_path(root);
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
-        .and_then(|path| std::fs::canonicalize(path).ok());
+        .map(|path| structural_path(&path));
     if canonical == Path::new("/")
         || home.as_ref() == Some(&canonical)
         || ["/usr", "/etc", "/System", "/var", "/bin", "/sbin"]
@@ -652,8 +655,7 @@ pub fn validate_root(root: &std::path::Path, allow_cloud_sync: bool) -> Result<P
     }
     if let Some(state) = std::env::var_os("AUTO_TZIM_HOME").filter(|v| !v.is_empty()) {
         let state = PathBuf::from(state);
-        let state = canonicalize_with_missing(&state)
-            .ok_or("state_inside_root: cannot resolve AUTO_TZIM_HOME")?;
+        let state = structural_path(&state);
         if canonical.starts_with(&state) || state.starts_with(&canonical) {
             return Err("state_inside_root".into());
         }
@@ -693,7 +695,47 @@ pub fn validate_root(root: &std::path::Path, allow_cloud_sync: bool) -> Result<P
             }
         }
     }
+    Ok(())
+}
+
+/// Check a newly added or explicitly validated root against the filesystem.
+pub fn validate_root(root: &std::path::Path, allow_cloud_sync: bool) -> Result<PathBuf, String> {
+    validate_root_structure(root, allow_cloud_sync)?;
+    let inspected: PathBuf = root.components().collect();
+    let metadata = std::fs::symlink_metadata(&inspected).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            "root_missing"
+        } else {
+            "root_not_a_directory"
+        }
+    })?;
+    if metadata.file_type().is_symlink() {
+        return Err("root_is_symlink".into());
+    }
+    if !metadata.is_dir() {
+        return Err("root_not_a_directory".into());
+    }
+    let canonical = std::fs::canonicalize(root).map_err(|_| "root_not_a_directory")?;
+    validate_root_structure(&canonical, allow_cloud_sync)?;
     Ok(canonical)
+}
+
+// Prefer resolving existing ancestors to catch aliases; if unavailable, fall
+// back to the path's lexical form rather than requiring an attached disk.
+fn structural_path(path: &std::path::Path) -> PathBuf {
+    canonicalize_with_missing(path).unwrap_or_else(|| {
+        let mut result = PathBuf::new();
+        for component in path.components() {
+            match component {
+                std::path::Component::ParentDir => {
+                    result.pop();
+                }
+                std::path::Component::CurDir => (),
+                other => result.push(other.as_os_str()),
+            }
+        }
+        result
+    })
 }
 
 // Resolve existing ancestors even when the configuration directory has not been created yet.

@@ -410,6 +410,20 @@ setting for this conversation, not something to work around in the repository.
 
 ---
 
+## 6d. Close AT-02 in the tracker — **2026-11-05, needs you**
+
+**Why:** AT-02 is accepted and merged, but "issue write" is still 403 for me, so the issue stays open and the tracker now
+lies about the project: stage 2 is done and stage 3 is next.
+
+**What to run:**
+
+```bash
+gh issue close 2 -c "AT-02 accepted at d0ac17e (run 42046562705, green on Linux and macOS), merged as 70ab3d0 via #34. Post-merge push-run 42087393439 green 5/5. Review: docs/manager/reviews/REVIEW-d0ac17e.md. Carried into AT-03: F-26, F-27."
+```
+
+**What it changes:** `#2` closes with the evidence line; nothing else. **What it does not change:** AT-03 does not start on a
+closed issue — it starts on your word in **#3**, and its first commit carries F-26 and F-27.
+
 ## 7. If the command does not run at all
 
 These are the failures that look like "the command is wrong" but are not, in the order they are worth checking.

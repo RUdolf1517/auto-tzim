@@ -75,6 +75,17 @@ built-in list, path comparison only, documented as best-effort, escapable with o
 behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
 ones are resolved). Each would have been baked into stored data by the first commit.
 
+### Decided — validation splits in two, so an unplugged disk cannot brick the config
+
+Reviewing `b1b6d5a` found the trap my own D-54 answer had set: `load()` validates the whole config, and that validation asked
+the filesystem whether each root exists. Store a profile on an external disk, unplug it, and **every** command exits `2` —
+including `folder remove`. The only repair left is hand-editing TOML, in a tool whose purpose is to avoid that.
+
+[D-56](docs/manager/DECISIONS.md) splits the two questions: **structure** (is this a well-formed document?) is checked on
+every load and save; **environment** (does the world still match?) is checked by `config validate`, by `folder add`, and at
+run time. Nothing is weakened — a corrupt config is still never overwritten, `folder add` still refuses a missing root — and
+`config validate` becomes the command that tells the user the disk is not there. Recorded as **F-22**.
+
 ### Decided — seven grey areas in AT-02, and one promise the code broke
 
 The coder asked instead of guessing, seven times, and the answers are now rules ([D-54](docs/manager/DECISIONS.md)):

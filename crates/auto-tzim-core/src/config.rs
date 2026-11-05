@@ -511,8 +511,6 @@ pub fn load(path: &std::path::Path) -> Result<Config, ConfigError> {
     let config: Config = toml::from_str(&text)
         .map_err(|error| ConfigError::Invalid(vec![format!("invalid config: {error}")]))?;
     errors.extend(validate_config(&config));
-    // Negative control: intentionally reproduce F-22.
-    errors.extend(validate_environment(&config));
     if errors.is_empty() {
         Ok(config)
     } else {

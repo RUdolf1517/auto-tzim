@@ -1465,3 +1465,8 @@ whose name is `validate`.
 
 **Reversal:** if it turns out users expect `folder list` to fail loudly on a broken root, the alternative is a `--strict`
 flag on the read-only commands, not a return to the trap.
+
+**"Structure" means no requirement on the environment, not no syscalls** (F-27). `validate_root_structure` resolves existing
+ancestors through `canonicalize_with_missing` so two names for the same directory are still one folder, and falls back to a
+lexical form when the disk is absent — that is what keeps an unplugged root from failing. A later reader should not assume
+"structural" is I/O-free, and should not put anything expensive behind it.

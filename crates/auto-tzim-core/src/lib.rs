@@ -8,4 +8,5 @@ pub mod config;
 
 pub mod discovery;
 pub mod hash;
+pub mod planner;
 pub mod stability;

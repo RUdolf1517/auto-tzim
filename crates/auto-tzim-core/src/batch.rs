@@ -75,3 +75,87 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 }
+
+/// Failure before scanning is invalid input; a discovery error aborts the batch.
+#[derive(Debug)]
+pub enum BatchError {
+    Invalid(String),
+    Discovery(String),
+}
+
+/// Preflight all roots, then walk them independently in their typed order.
+/// A failed walk returns no partial batch to the caller.
+pub fn discover(
+    profiles: Vec<Folder>,
+    now: std::time::SystemTime,
+) -> Result<Vec<(Folder, crate::discovery::Discovery)>, BatchError> {
+    discover_with(profiles, |profile| {
+        crate::discovery::walk(&profile.root, profile, now)
+    })
+}
+
+fn discover_with<F>(
+    profiles: Vec<Folder>,
+    mut walk: F,
+) -> Result<Vec<(Folder, crate::discovery::Discovery)>, BatchError>
+where
+    F: FnMut(&Folder) -> Result<crate::discovery::Discovery, String>,
+{
+    let profiles = preflight(profiles).map_err(BatchError::Invalid)?;
+    let mut result = Vec::with_capacity(profiles.len());
+    for profile in profiles {
+        let found = walk(&profile).map_err(BatchError::Discovery)?;
+        result.push((profile, found));
+    }
+    Ok(result)
+}
+
+#[cfg(test)]
+mod order_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    #[test]
+    fn invalid_batch_performs_no_walk_and_good_batch_preserves_order() {
+        let dir = std::env::temp_dir().join(format!(
+            "atz-preflight-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        let a = dir.join("a");
+        let b = dir.join("b");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        let mut seen = Vec::new();
+        let invalid = discover_with(
+            vec![
+                direct(a.clone()),
+                direct(dir.join("missing")),
+                direct(b.clone()),
+            ],
+            |folder| {
+                seen.push(folder.root.clone());
+                Ok(crate::discovery::Discovery::default())
+            },
+        );
+        assert!(matches!(invalid, Err(BatchError::Invalid(_))));
+        assert!(seen.is_empty());
+        let result = discover_with(
+            vec![direct(b.clone()), direct(a.clone()), direct(b.clone())],
+            |folder| {
+                seen.push(folder.root.clone());
+                Ok(crate::discovery::Discovery::default())
+            },
+        )
+        .unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(
+            seen,
+            [
+                std::fs::canonicalize(b).unwrap(),
+                std::fs::canonicalize(a).unwrap()
+            ]
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}

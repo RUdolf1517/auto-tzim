@@ -227,7 +227,9 @@ fn check_parent(root: &Path, full: &Path) -> Result<(), String> {
         .ok_or_else(|| "candidate has no parent".to_owned())?;
     let resolved =
         std::fs::canonicalize(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
-    let _ = (resolved, root);
+    if !resolved.starts_with(root) {
+        return Err(format!("containment violation: {}", full.display()));
+    }
     Ok(())
 }
 

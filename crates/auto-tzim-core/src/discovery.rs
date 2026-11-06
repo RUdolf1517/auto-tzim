@@ -96,6 +96,11 @@ fn visit(
         let exclusion = profile.exclude_globs.iter().find(|pattern| {
             glob(pattern.as_bytes(), raw)
                 || (file_type.is_dir() && glob(pattern.as_bytes(), &[raw, b"/"].concat()))
+                || (file_type.is_dir()
+                    && matches!(
+                        (pattern.as_str(), name_bytes),
+                        (".git/**", b".git") | (".hg/**", b".hg") | (".svn/**", b".svn")
+                    ))
         });
         if let Some(pattern) = exclusion {
             if file_type.is_dir() {

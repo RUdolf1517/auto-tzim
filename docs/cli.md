@@ -179,13 +179,21 @@ refuses a name another folder already holds. `show` prints the profile plus its 
 the whole result before writing, so a rejected edit leaves the file byte-identical. `remove` deletes the profile and its cached eligibility records — never a user file
 — and prints what was removed.
 
-### 2.5 `scan [PATH | --folder NAME]` — the read-only candidate plan
+### 2.5 `scan [PATH… | --folder NAME]…` — the read-only candidate plan
 
 `auto-tzim PATH --dry-run` is the same thing with the path first; `scan` stays for scripts that prefer a verb.
 
+**Several paths are one batch** (§0.2, [D-57](manager/DECISIONS.md)): every path is validated before a directory is read, one
+refusal is exit `2` with nothing scanned **and no plan file written anywhere**, a duplicate canonical root is planned once, an
+overlapping root is `overlapping_roots`, and output follows the order typed. Each folder gets **its own plan** — its own id,
+its own hash, its own `plans/<plan_id>.json` naming its canonical root — because `--plan ID` binds one folder (§2.6) and the
+hash covers one tree's rows ([D-52](manager/DECISIONS.md)). A batch is the same walk repeated per root, with validation done
+once, up front. `--folder` may be repeated.
+
 Builds the plan and **starts no file-processing `tzim`**. Specifically:
 
-- runs discovery, stability and policy, and calls `tzim --version` once per run;
+- runs discovery, stability and policy, and calls `tzim --version` once per run — in v0.1, once the adapter exists (AT-04);
+  until then a scan spawns **nothing at all**, which the AT-03 brief makes acceptance point 5;
 - never passes a target path to `tzim`, never passes `--dry-run`, never passes `--formats` when `formats = []`;
 - writes nothing inside the target root and does not need write access there;
 - emits one `planned` row per candidate with path, size, identity, the policy decision and the argv a future apply would

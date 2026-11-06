@@ -75,6 +75,22 @@ built-in list, path comparison only, documented as best-effort, escapable with o
 behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
 ones are resolved). Each would have been baked into stored data by the first commit.
 
+### Decided — a folder means the folder and everything in it
+
+The owner asked whether `auto-tzim ~/Downloads` walks the subfolders. The answer was *no, unless you pass `--recursive`* —
+and that default was wrong in the quietest possible way. Downloads with 41 images at the top level and 1 300 below would plan
+the 41, print a summary and never mention the rest: not skipped, not refused, simply never looked at. The user reads "done",
+sees a disk that did not shrink, and concludes the program does not work. Every other refusal in this project is loud.
+
+[D-58](docs/manager/DECISIONS.md): `recursive` defaults to **`true`**, `--no-recursive` limits a run to the top level, and
+every scan/run summary **states the scope** — directories walked, deepest level, and each limit that applied with its count
+(`3 subfolders not walked (mount point)`), including the reason when zero candidates were found. Non-recursive was never the
+safe reading; the boundaries that matter — no symlinks, no mount points, depth 64, `.git` excluded, cloud roots refused,
+plan and identity re-check before any install — all stay exactly where they were.
+
+Also fixed while there: the [D-46](docs/manager/DECISIONS.md) row that still described `--time 24` as a file-age filter, which
+[D-47](docs/manager/DECISIONS.md) had already corrected to a cooldown after the owner said so.
+
 ### Decided — five folders, five plans: the batch rule reaches the read-only path
 
 The owner asked the question the documents should have answered themselves: *"почему обход папки? их же может быть

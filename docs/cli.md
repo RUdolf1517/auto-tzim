@@ -42,7 +42,8 @@ subcommand; otherwise it is a path, and it must be a directory that exists (anyt
 | `--time <HOURS>` | `0` — every invocation may compress | the **cooldown** ([D-47](manager/DECISIONS.md)): compress this folder at most once in this many hours. `0` disables it. Integer, 0–100 000 |
 | `--force` | off | ignore the cooldown for this run; the cooldown is then restarted from now |
 | `--dry-run` | off | plan only. This is **our** flag; `tzim --dry-run` stays forbidden (D-04) |
-| `--name`, `--recursive`, `--formats`, `--exclude` | the profile's values | per-run overrides; they are used for this run and **not** written back to the config |
+| `--recursive` / `--no-recursive` | recursive — a named folder means the folder and everything in it | walk subfolders, or the top level only ([D-58](manager/DECISIONS.md)); a per-run override, not written back |
+| `--name`, `--formats`, `--exclude` | the profile's values | per-run overrides; they are used for this run and **not** written back to the config |
 | `--plan <ID>` | — | bind this run to an earlier plan record; if the tree no longer matches it, exit `6` before anything is installed |
 
 ### 0.2 Several paths are one batch
@@ -158,7 +159,7 @@ Parses and validates **without touching state**: it takes no lock and creates no
 atomic rename, so a reader needs no lock to see a whole file ([D-54](manager/DECISIONS.md), F-21). Exit `0` valid, `2` invalid with **every** error listed (not just the
 first), each naming the field, the rule and a suggested correction.
 
-### 2.3 `folder add PATH [PATH…] [--name NAME] [--recursive] [--allow-cloud-sync] [--formats LIST] [--exclude GLOB]...`
+### 2.3 `folder add PATH [PATH…] [--name NAME] [--no-recursive] [--allow-cloud-sync] [--formats LIST] [--exclude GLOB]...`
 
 **Optional.** Remembering a folder is a convenience, not a prerequisite: `auto-tzim PATH` works on a folder the config has
 never seen ([D-46](manager/DECISIONS.md)). What `add` buys is a stored name and stored defaults, so the path stops being

@@ -505,6 +505,25 @@ mod corpus_tests {
     }
 
     #[test]
+    fn ten_thousand_entries_record_elapsed_time() {
+        let f = Fixture::new();
+        for index in 0..10_000 {
+            std::fs::File::create(f.0.join(format!("f{index:05}"))).unwrap();
+        }
+        let profile = Folder {
+            min_file_age_seconds: 0,
+            ..Folder::default()
+        };
+        let start = std::time::Instant::now();
+        let result = walk(&f.0, &profile, SystemTime::now()).unwrap();
+        let elapsed = start.elapsed();
+        assert_eq!(result.files_seen, 10_000);
+        assert_eq!(result.candidates.len(), 10_000);
+        assert_eq!(result.directories, 1);
+        eprintln!("10,000 entries: {} ms (walk only)", elapsed.as_millis());
+    }
+
+    #[test]
     fn hostile_names_remain_bytes_and_are_sorted() {
         let f = Fixture::new();
         let names: &[&[u8]] = &[

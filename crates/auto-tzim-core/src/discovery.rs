@@ -33,10 +33,26 @@ pub struct Discovery {
 
 /// Walk a canonical root without opening candidate files.
 pub fn walk(root: &Path, profile: &Folder, now: SystemTime) -> Result<Discovery, String> {
+    walk_with_order(root, profile, now, false)
+}
+
+// Test injection simulates a hostile filesystem enumerating entries in reverse.
+fn walk_with_order(
+    root: &Path,
+    profile: &Folder,
+    now: SystemTime,
+    reverse: bool,
+) -> Result<Discovery, String> {
     let metadata = std::fs::symlink_metadata(root).map_err(|e| format!("root: {e}"))?;
     let root_dev = Identity::from_metadata(&metadata).dev;
     let mut result = Discovery::default();
-    visit(root, Path::new(""), 0, root_dev, profile, now, &mut result)?;
+    let options = WalkOptions {
+        root_dev,
+        profile,
+        now,
+        reverse,
+    };
+    visit(root, Path::new(""), 0, &options, &mut result)?;
     result.candidates.sort_by(|a, b| {
         a.path
             .as_os_str()
@@ -56,15 +72,26 @@ fn limit(result: &mut Discovery, key: String) {
     *result.limits.entry(key).or_default() += 1;
 }
 
+struct WalkOptions<'a> {
+    root_dev: u64,
+    profile: &'a Folder,
+    now: SystemTime,
+    reverse: bool,
+}
+
 fn visit(
     root: &Path,
     relative: &Path,
     depth: usize,
-    root_dev: u64,
-    profile: &Folder,
-    now: SystemTime,
+    options: &WalkOptions<'_>,
     out: &mut Discovery,
 ) -> Result<(), String> {
+    let WalkOptions {
+        root_dev,
+        profile,
+        now,
+        reverse,
+    } = *options;
     let dir = root.join(relative);
     let canonical = std::fs::canonicalize(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     if !canonical.starts_with(root) {
@@ -76,6 +103,9 @@ fn visit(
         .map_err(|e| format!("{}: {e}", dir.display()))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("{}: {e}", dir.display()))?;
+    if reverse {
+        entries.sort_by(|a, b| b.file_name().as_bytes().cmp(a.file_name().as_bytes()));
+    }
     entries.sort_by(|a, b| a.file_name().as_bytes().cmp(b.file_name().as_bytes()));
     for entry in entries {
         let name = entry.file_name();
@@ -141,18 +171,10 @@ fn visit(
                 });
                 continue;
             }
-            visit(root, &path, depth + 1, root_dev, profile, now, out)?;
+            visit(root, &path, depth + 1, options, out)?;
         } else if file_type.is_file() {
             out.files_seen += 1;
-            // Recheck the parent after lstat; an escaping swap aborts the whole walk.
-            let parent = full
-                .parent()
-                .ok_or_else(|| "candidate has no parent".to_owned())?;
-            let resolved =
-                std::fs::canonicalize(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
-            if !resolved.starts_with(root) {
-                return Err(format!("containment violation: {}", full.display()));
-            }
+            check_parent(root, &full)?;
             let identity = Identity::from_metadata(&metadata);
             if let Some(reason) = stability::refusal(&identity, now, profile.min_file_age_seconds) {
                 out.skipped.push(Skip {
@@ -168,6 +190,19 @@ fn visit(
                 reason: "skipped_policy: special file".into(),
             });
         }
+    }
+    Ok(())
+}
+
+// A parent outside the canonical root is a hard abort, never a skipped row.
+fn check_parent(root: &Path, full: &Path) -> Result<(), String> {
+    let parent = full
+        .parent()
+        .ok_or_else(|| "candidate has no parent".to_owned())?;
+    let resolved =
+        std::fs::canonicalize(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+    if !resolved.starts_with(root) {
+        return Err(format!("containment violation: {}", full.display()));
     }
     Ok(())
 }
@@ -266,5 +301,65 @@ mod walk_tests {
         let result = walk(&root.0, &shallow, SystemTime::now()).unwrap();
         assert_eq!(result.candidates.len(), 2);
         assert_eq!(result.limits.get("non-recursive"), Some(&1));
+    }
+}
+
+#[cfg(test)]
+mod ordering_and_containment_tests {
+    use super::*;
+    use std::os::unix::fs::symlink;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    #[test]
+    fn reverse_enumeration_and_escaping_parents() {
+        let base = std::env::temp_dir().join(format!(
+            "atz-order-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        let root = base.join("root");
+        let outside = base.join("escape");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let root = std::fs::canonicalize(root).unwrap();
+        for name in ["z", "A", "a"] {
+            std::fs::write(root.join(name), b"x").unwrap();
+        }
+        std::fs::write(outside.join("file"), b"outside").unwrap();
+        symlink(&outside, root.join("external-dir")).unwrap();
+        symlink("/etc/hostname", root.join("external-file")).unwrap();
+        let profile = Folder {
+            min_file_age_seconds: 0,
+            ..Folder::default()
+        };
+        let now = SystemTime::now();
+        let normal = walk_with_order(&root, &profile, now, false).unwrap();
+        let reverse = walk_with_order(&root, &profile, now, true).unwrap();
+        assert_eq!(normal.candidates, reverse.candidates);
+        assert_eq!(normal.skipped, reverse.skipped);
+        assert_eq!(
+            normal
+                .candidates
+                .iter()
+                .map(|c| c.path.as_os_str().as_bytes())
+                .collect::<Vec<_>>(),
+            [b"A".as_slice(), b"a", b"z"]
+        );
+        assert_eq!(
+            normal
+                .skipped
+                .iter()
+                .filter(|s| s.reason == "skipped_policy: symlink")
+                .count(),
+            2
+        );
+        assert!(check_parent(&root, &root.join("../escape/file"))
+            .unwrap_err()
+            .contains("containment violation"));
+        assert!(check_parent(&root, &root.join("external-dir/file"))
+            .unwrap_err()
+            .contains("containment violation"));
+        std::fs::remove_dir_all(base).unwrap();
     }
 }

@@ -55,18 +55,6 @@ fn walk_with_order(
         reverse,
     };
     visit(root, Path::new(""), 0, &options, &mut result)?;
-    result.candidates.sort_by(|a, b| {
-        a.path
-            .as_os_str()
-            .as_bytes()
-            .cmp(b.path.as_os_str().as_bytes())
-    });
-    result.skipped.sort_by(|a, b| {
-        a.path
-            .as_os_str()
-            .as_bytes()
-            .cmp(b.path.as_os_str().as_bytes())
-    });
     Ok(result)
 }
 
@@ -108,7 +96,6 @@ fn visit(
     if reverse {
         entries.sort_by(|a, b| b.file_name().as_bytes().cmp(a.file_name().as_bytes()));
     }
-    entries.sort_by(|a, b| a.file_name().as_bytes().cmp(b.file_name().as_bytes()));
     for entry in entries {
         let name = entry.file_name();
         let name_bytes = name.as_bytes();

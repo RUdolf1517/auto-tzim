@@ -121,6 +121,16 @@ fn visit(
         if file_type.is_file() {
             out.files_seen += 1;
         }
+        if name_bytes.starts_with(b".tzim-") && name_bytes.ends_with(b".tmp") {
+            if file_type.is_file() {
+                *out.filtered_files.entry("orphan_temp".into()).or_default() += 1;
+            }
+            out.skipped.push(Skip {
+                path,
+                reason: "orphan_temp".into(),
+            });
+            continue;
+        }
         let exclusion = profile.exclude_globs.iter().find(|pattern| {
             glob(pattern.as_bytes(), raw)
                 || (file_type.is_dir() && glob(pattern.as_bytes(), &[raw, b"/"].concat()))

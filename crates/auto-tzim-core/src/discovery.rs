@@ -363,3 +363,180 @@ mod ordering_and_containment_tests {
         std::fs::remove_dir_all(base).unwrap();
     }
 }
+
+#[cfg(test)]
+mod corpus_tests {
+    use super::*;
+    use std::os::unix::ffi::OsStringExt;
+    use std::os::unix::fs::symlink;
+    use std::os::unix::net::UnixListener;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::Duration;
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    struct Fixture(PathBuf);
+    impl Fixture {
+        fn new() -> Self {
+            let p = std::env::temp_dir().join(format!(
+                "atz-corpus-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir(&p).unwrap();
+            Self(std::fs::canonicalize(p).unwrap())
+        }
+    }
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn special_files_links_temp_and_injected_age() {
+        let f = Fixture::new();
+        std::fs::write(f.0.join("first"), b"keep").unwrap();
+        std::fs::hard_link(f.0.join("first"), f.0.join("second")).unwrap();
+        std::fs::write(f.0.join("young"), b"keep young").unwrap();
+        std::fs::write(f.0.join(".tzim-123-456-0.tmp"), b"keep temp").unwrap();
+        std::fs::create_dir(f.0.join("inner")).unwrap();
+        for (name, target) in [
+            ("inside-file", "first"),
+            ("outside-file", "/etc/hostname"),
+            ("inside-dir", "inner"),
+            ("broken", "absent"),
+            ("loop-a", "loop-b"),
+            ("loop-b", "loop-a"),
+        ] {
+            symlink(target, f.0.join(name)).unwrap();
+        }
+        let _listener = UnixListener::bind(f.0.join("socket")).unwrap();
+        let profile = Folder {
+            include_hidden: true,
+            min_file_age_seconds: 3600,
+            ..Folder::default()
+        };
+        let now = SystemTime::now();
+        let result = walk(&f.0, &profile, now).unwrap();
+        assert_eq!(
+            result
+                .skipped
+                .iter()
+                .filter(|s| s.reason == "hardlink_skip")
+                .count(),
+            2
+        );
+        assert_eq!(
+            result
+                .skipped
+                .iter()
+                .filter(|s| s.reason == "skipped_unstable")
+                .count(),
+            1
+        );
+        assert_eq!(
+            result
+                .skipped
+                .iter()
+                .filter(|s| s.reason == "skipped_policy: symlink")
+                .count(),
+            6
+        );
+        assert!(result
+            .skipped
+            .iter()
+            .any(|s| s.path == Path::new("socket") && s.reason.starts_with("skipped_policy")));
+        assert_eq!(
+            result
+                .skipped
+                .iter()
+                .filter(|s| s.reason == "orphan_temp")
+                .count(),
+            1
+        );
+        assert!(result.candidates.is_empty());
+        let later = walk(&f.0, &profile, now + Duration::from_secs(3601)).unwrap();
+        assert_eq!(
+            later.candidates.iter().map(|c| &c.path).collect::<Vec<_>>(),
+            [Path::new("young")]
+        );
+        assert_eq!(
+            std::fs::read(f.0.join(".tzim-123-456-0.tmp")).unwrap(),
+            b"keep temp"
+        );
+        assert_eq!(std::fs::read(f.0.join("first")).unwrap(), b"keep");
+    }
+
+    #[test]
+    fn depth_limit_is_once_per_boundary_directory() {
+        let f = Fixture::new();
+        let mut p = f.0.clone();
+        for _ in 0..65 {
+            p.push("d");
+            std::fs::create_dir(&p).unwrap();
+        }
+        std::fs::write(p.join("not-visited"), b"x").unwrap();
+        let result = walk(&f.0, &Folder::default(), SystemTime::now()).unwrap();
+        assert_eq!(result.directories, 65);
+        assert_eq!(result.max_depth, 64);
+        assert_eq!(result.limits.get("depth 64"), Some(&1));
+        assert_eq!(
+            result
+                .skipped
+                .iter()
+                .filter(|s| s.reason == "depth_exceeded")
+                .count(),
+            1
+        );
+        assert!(result.candidates.is_empty());
+    }
+
+    #[test]
+    fn hostile_names_remain_bytes_and_are_sorted() {
+        let f = Fixture::new();
+        let names: &[&[u8]] = &[
+            b"plain.png",
+            b"with space.png",
+            b"two  spaces .png",
+            b"semi;colon.png",
+            b"quote'single.png",
+            b"quote\"double.png",
+            b"newline\nname.png",
+            b"tab\tname.png",
+            b"-leading-dash.png",
+            b"--json",
+            b"--",
+            b"-",
+            "emoji-🙂.png".as_bytes(),
+            "кириллица.png".as_bytes(),
+            "日本語.png".as_bytes(),
+            "combining-e\u{301}.png".as_bytes(),
+            b"bad\xff.png",
+        ];
+        let mut expected = Vec::new();
+        for name in names {
+            let path = std::ffi::OsString::from_vec(name.to_vec());
+            match std::fs::write(f.0.join(path), b"x") {
+                Ok(()) => expected.push(name.to_vec()),
+                Err(e) if *name == b"bad\xff.png" && e.raw_os_error() == Some(92) => {
+                    eprintln!("N-17 skipped: filesystem rejects non-UTF-8 names: {e}")
+                }
+                Err(e) => panic!("fixture creation: {e}"),
+            }
+        }
+        expected.sort();
+        let profile = Folder {
+            min_file_age_seconds: 0,
+            ..Folder::default()
+        };
+        let result = walk(&f.0, &profile, SystemTime::now()).unwrap();
+        assert_eq!(
+            result
+                .candidates
+                .iter()
+                .map(|c| c.path.as_os_str().as_bytes().to_vec())
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+}

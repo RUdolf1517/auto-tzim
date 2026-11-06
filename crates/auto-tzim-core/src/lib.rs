@@ -5,3 +5,5 @@ compile_error!("auto-tzim currently supports Unix platforms only");
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod config;
+
+pub mod hash;

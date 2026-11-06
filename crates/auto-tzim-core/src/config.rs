@@ -969,9 +969,9 @@ fn preserve_inline_profiles(
         if let Some(next) = new.folder.iter().find(|item| item.root == old_folder.root) {
             seen.push(next.root.clone());
             if next == old_folder {
-                let text = original.get(entry.span()).ok_or_else(|| {
-                    ConfigError::Internal("invalid folder source span".into())
-                })?;
+                let text = original
+                    .get(entry.span())
+                    .ok_or_else(|| ConfigError::Internal("invalid folder source span".into()))?;
                 items.push(text.to_owned());
             } else {
                 items.push(inline_folder(next)?);

@@ -280,7 +280,10 @@ mod tests {
     #[test]
     fn internal_error_maps_to_exit_seven() {
         assert_eq!(exit_code(&ConfigError::Internal("missing lock".into())), 7);
-        assert_eq!(exit_code(&ConfigError::Invalid(vec!["bad input".into()])), 2);
+        assert_eq!(
+            exit_code(&ConfigError::Invalid(vec!["bad input".into()])),
+            2
+        );
         assert_eq!(exit_code(&ConfigError::Locked("holder".into())), 8);
     }
 }

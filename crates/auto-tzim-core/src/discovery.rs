@@ -504,6 +504,28 @@ mod corpus_tests {
         assert!(result.candidates.is_empty());
     }
 
+    // Run explicitly by CI after its shell creates a real FIFO using mkfifo.
+    #[test]
+    #[ignore = "requires AT03_FIFO_ROOT with a FIFO created by CI"]
+    fn fifo_is_skipped_without_opening() {
+        use std::os::unix::fs::FileTypeExt;
+        let root = PathBuf::from(
+            std::env::var_os("AT03_FIFO_ROOT").expect("CI must provide FIFO fixture"),
+        );
+        let root = std::fs::canonicalize(root).unwrap();
+        assert!(std::fs::symlink_metadata(root.join("fifo"))
+            .unwrap()
+            .file_type()
+            .is_fifo());
+        let start = std::time::Instant::now();
+        let result = walk(&root, &Folder::default(), SystemTime::now()).unwrap();
+        assert!(start.elapsed() < Duration::from_secs(5));
+        assert!(result.candidates.is_empty());
+        assert!(result.skipped.iter().any(
+            |skip| skip.path == Path::new("fifo") && skip.reason.starts_with("skipped_policy")
+        ));
+    }
+
     #[test]
     fn ten_thousand_entries_record_elapsed_time() {
         let f = Fixture::new();

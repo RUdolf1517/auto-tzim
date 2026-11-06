@@ -70,6 +70,16 @@ jobs:
             python3 -c 'import os, pathlib; s=pathlib.Path(os.environ["RUNNER_TEMP"], "test-output").read_text(); print("::error title=Test failure::" + s[-3000:].replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))'
           fi
           exit "$status"
+      - name: FIFO no-read and large-directory evidence
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          mkfifo "$temp/fifo"
+          export AT03_FIFO_ROOT="$temp"
+          cargo test --locked -p auto-tzim-core fifo_is_skipped_without_opening -- --ignored --nocapture
+          cargo test --locked -p auto-tzim-core ten_thousand_entries_record_elapsed_time -- --nocapture
       - name: CLI contract
         shell: bash
         run: |

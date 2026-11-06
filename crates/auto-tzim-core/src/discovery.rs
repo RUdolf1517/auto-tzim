@@ -174,27 +174,26 @@ fn visit(
 
 // Simple glob over path bytes: '*' stays within a component, '**' may cross '/'.
 fn glob(pattern: &[u8], path: &[u8]) -> bool {
-    fn match_at(p: &[u8], s: &[u8]) -> bool {
-        if p.is_empty() {
-            return s.is_empty();
-        }
-        if p[0] == b'*' {
-            let double = p.get(1) == Some(&b'*');
-            let rest = &p[if double { 2 } else { 1 }..];
-            if double && rest.first() == Some(&b'/') && match_at(&rest[1..], s) {
-                return true;
+    // Dynamic programming bounds work by pattern length times path length,
+    // rather than recursively backtracking over adversarial wildcard patterns.
+    let mut table = vec![vec![false; path.len() + 1]; pattern.len() + 1];
+    table[pattern.len()][path.len()] = true;
+    for i in (0..pattern.len()).rev() {
+        for j in (0..=path.len()).rev() {
+            if pattern[i] == b'*' {
+                let double = pattern.get(i + 1) == Some(&b'*');
+                let next = i + if double { 2 } else { 1 };
+                table[i][j] = table[next][j]
+                    || (double && pattern.get(next) == Some(&b'/') && table[next + 1][j])
+                    || (j < path.len() && (double || path[j] != b'/') && table[i][j + 1]);
+            } else if j < path.len()
+                && (pattern[i] == path[j] || (pattern[i] == b'?' && path[j] != b'/'))
+            {
+                table[i][j] = table[i + 1][j + 1];
             }
-            if match_at(rest, s) {
-                return true;
-            }
-            return !s.is_empty() && (double || s[0] != b'/') && match_at(p, &s[1..]);
         }
-        if !s.is_empty() && (p[0] == s[0] || (p[0] == b'?' && s[0] != b'/')) {
-            return match_at(&p[1..], &s[1..]);
-        }
-        false
     }
-    match_at(pattern, path)
+    table[0][0]
 }
 
 #[cfg(test)]

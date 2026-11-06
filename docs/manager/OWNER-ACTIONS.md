@@ -410,19 +410,27 @@ setting for this conversation, not something to work around in the repository.
 
 ---
 
-## 6d. Close AT-02 in the tracker — **2026-11-05, needs you**
+## 6d. Close AT-02 in the tracker — **done, closed 2026-11-05 18:49:08Z by @RUdolf1517**
 
-**Why:** AT-02 is accepted and merged, but "issue write" is still 403 for me, so the issue stays open and the tracker now
-lies about the project: stage 2 is done and stage 3 is next.
+**What happened:** the owner closed `#2` three minutes after the merge, without a comment. The copy-paste command I prepared
+was then obsolete, and running it returns `! Issue #2 (AT-02 — Config and atomic storage) is already closed`.
 
-**What to run:**
+**One thing the closure does not carry:** the evidence line. `gh issue comment` is still `403 Resource not accessible by
+integration` for me, retested 2026-11-05, so the acceptance record lives in this repository instead —
+[STATUS-LOG](STATUS-LOG.md), [ROADMAP-ISSUES](ROADMAP-ISSUES.md) and [REVIEW-d0ac17e](reviews/REVIEW-d0ac17e.md) — and not
+in the thread. If it should be in the thread too, from a shell **inside this clone**:
 
 ```bash
-gh issue close 2 -c "AT-02 accepted at d0ac17e (run 42046562705, green on Linux and macOS), merged as 70ab3d0 via #34. Post-merge push-run 42087393439 green 5/5. Review: docs/manager/reviews/REVIEW-d0ac17e.md. Carried into AT-03: F-26, F-27."
+cd auto-tzim
+gh issue comment 2 -R RUdolf1517/auto-tzim -b "AT-02 accepted at d0ac17e (run 42046562705, green on Linux and macOS), merged as 70ab3d0 via #34. Post-merge push-run 42087393439 green 5/5. Review: docs/manager/reviews/REVIEW-d0ac17e.md. Carried into AT-03: F-26, F-27."
 ```
 
-**What it changes:** `#2` closes with the evidence line; nothing else. **What it does not change:** AT-03 does not start on a
-closed issue — it starts on your word in **#3**, and its first commit carries F-26 and F-27.
+**Why the earlier attempt failed, for the record:** `gh` resolves the repository from the working directory. Run outside a
+clone it stops with `failed to run git: fatal: not a git repository (or any of the parent directories): .git` — that is a
+missing `cd`, not a permissions problem, and `-R RUdolf1517/auto-tzim` makes the command location-independent.
+
+**What it does not change:** AT-03 does not start on a closed issue — it starts on your word in **#3**, and its first commit
+carries F-26 and F-27.
 
 ## 7. If the command does not run at all
 

@@ -121,6 +121,52 @@ mod tests {
         assert_ne!(plan_id().unwrap(), plan_id().unwrap());
     }
     #[test]
+    fn actual_mtime_changes_hash_without_changing_size() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        use std::time::{Duration, SystemTime};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "atz-hash-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let root = std::fs::canonicalize(root).unwrap();
+        let path = root.join("file");
+        std::fs::write(&path, b"same size").unwrap();
+        let profile = crate::config::Folder {
+            min_file_age_seconds: 0,
+            ..crate::config::Folder::default()
+        };
+        let now = SystemTime::now() + Duration::from_secs(60);
+        let scan = || {
+            crate::discovery::walk(&root, &profile, now)
+                .unwrap()
+                .candidates
+                .into_iter()
+                .map(|candidate| Row {
+                    candidate,
+                    argv: vec!["--".into(), "file".into()],
+                })
+                .collect::<Vec<_>>()
+        };
+        let first = scan();
+        assert_eq!(first.len(), 1);
+        let original = plan_hash(&first);
+        assert_eq!(original, plan_hash(&scan()));
+        let file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+        file.set_modified(SystemTime::now() - Duration::from_secs(10))
+            .unwrap();
+        let second = scan();
+        assert_eq!(
+            first[0].candidate.identity.size,
+            second[0].candidate.identity.size
+        );
+        assert_ne!(original, plan_hash(&second));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn encoding() {
         assert_eq!(base64(b""), "");
         assert_eq!(base64(b"f"), "Zg==");

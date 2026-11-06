@@ -114,7 +114,8 @@ fn visit(
         let name_bytes = name.as_bytes();
         let path = relative.join(&name);
         let full = root.join(&path);
-        let metadata = std::fs::metadata(&full).map_err(|e| format!("{}: {e}", full.display()))?;
+        let metadata =
+            std::fs::symlink_metadata(&full).map_err(|e| format!("{}: {e}", full.display()))?;
         let file_type = metadata.file_type();
         let raw = path.as_os_str().as_bytes();
         if file_type.is_file() {

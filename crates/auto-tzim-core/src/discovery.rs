@@ -203,3 +203,64 @@ mod tests {
         assert!(!glob(b"*.png", b"nested/a.png"));
     }
 }
+
+#[cfg(test)]
+mod walk_tests {
+    use super::*;
+    use std::os::unix::fs::symlink;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    struct Fixture(PathBuf);
+    impl Fixture {
+        fn new() -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "atz-discovery-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            Self(std::fs::canonicalize(path).unwrap())
+        }
+    }
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn recursive_sorted_excludes_and_non_recursive_coverage() {
+        let root = Fixture::new();
+        std::fs::create_dir(root.0.join("nested")).unwrap();
+        std::fs::create_dir(root.0.join(".git")).unwrap();
+        for path in ["z", "a", "nested/x", ".git/hidden", ".tzim-1-2-3.tmp"] {
+            std::fs::write(root.0.join(path), "data").unwrap();
+        }
+        symlink("nested", root.0.join("link")).unwrap();
+        let profile = Folder {
+            min_file_age_seconds: 0,
+            ..Folder::default()
+        };
+        let result = walk(&root.0, &profile, SystemTime::now()).unwrap();
+        assert_eq!(
+            result
+                .candidates
+                .iter()
+                .map(|x| x.path.as_os_str().as_bytes())
+                .collect::<Vec<_>>(),
+            [b"a".as_slice(), b"nested/x", b"z"]
+        );
+        assert_eq!(result.directories, 2);
+        assert_eq!(result.max_depth, 1);
+        assert_eq!(result.limits.get("excluded by .git/**"), Some(&1));
+        assert!(result.skipped.iter().any(|s| s.reason == "orphan_temp"));
+        assert!(result.skipped.iter().any(|s| s.reason.contains("symlink")));
+        let shallow = Folder {
+            recursive: false,
+            ..profile
+        };
+        let result = walk(&root.0, &shallow, SystemTime::now()).unwrap();
+        assert_eq!(result.candidates.len(), 2);
+        assert_eq!(result.limits.get("non-recursive"), Some(&1));
+    }
+}

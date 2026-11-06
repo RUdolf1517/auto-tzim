@@ -58,8 +58,8 @@ half-built on top of an unaccepted one.
 
 | # | Stage | Brief | State |
 | --- | --- | --- | --- |
-| 1 | **AT-02** — config, atomic storage, folder CRUD, **Part B** (the macOS queue), **F-18** (the metadata check) | [HANDOFF-AT-02](HANDOFF-AT-02.md) | **ready — start here** |
-| 2 | **AT-03** — safe discovery, stability, and the read-only candidate plan | [HANDOFF-AT-03](HANDOFF-AT-03.md) | brief ready |
+| 1 | **AT-02** — config, atomic storage, folder CRUD, **Part B** (the macOS queue), **F-18** (the metadata check) | [HANDOFF-AT-02](HANDOFF-AT-02.md) | **ACCEPTED 2026-11-05 at `d0ac17e`**, merged `70ab3d0`, run 42087393439 green in `main` |
+| 2 | **AT-03** — safe discovery, stability, and the read-only candidate plan | [HANDOFF-AT-03](HANDOFF-AT-03.md) · [KICKOFF](KICKOFF-AT-03.md) | **started 2026-11-06 — start here** |
 | 3 | **AT-04** — restricted `tzim` adapter, policy, planner | expand from [ROADMAP](ROADMAP-ISSUES.md) §AT-04 into a brief before starting; the harness's fake `tzim` is built here | queued |
 | 4 | **AT-05** — runner, state, history, cancellation, staging and the crash-safe install | queued; also owns `state/last-compression.json` and the `--time` cooldown ([D-47](DECISIONS.md)) | queued |
 | 5 | **AT-06** — CLI and the exit-code contract, including the path-first one-shot form and the batch rules | queued | queued |

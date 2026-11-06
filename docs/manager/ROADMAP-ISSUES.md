@@ -109,11 +109,12 @@ red run's SHA was verified as an ancestor of the commit that removed it — incl
 failed the acceptance test itself on both platforms. Two Low findings carried into AT-03: **F-26** (the internal-error
 branch returns `2`, the contract says `7`) and **F-27** (`structural_path` does syscalls despite the name).
 
-### AT-03 · Safe discovery, stability and the read-only candidate plan — **NEXT, brief ready**
+### AT-03 · Safe discovery, stability and the read-only candidate plan — **STARTED 2026-11-06**
 
-> Coder brief: [HANDOFF-AT-03](HANDOFF-AT-03.md) — 13 acceptance points, five negative controls, and the four numbers that
-> make a plan reproducible ([D-52](DECISIONS.md): id, hash, order, depth). AT-02 is accepted, so this stage is next; it
-> begins when the owner says so in #3, and its first commit carries F-26 and F-27.
+> Coder brief: [HANDOFF-AT-03](HANDOFF-AT-03.md) — **17 acceptance points**, five negative controls, and the four numbers
+> that make a plan reproducible ([D-52](DECISIONS.md): id, hash, order, depth). Starting message:
+> [KICKOFF-AT-03](KICKOFF-AT-03.md), issued on the owner's word *"кодеру работу дай"* (2026-11-06). The first commit
+> carries F-26 and F-27 from [REVIEW-d0ac17e](reviews/REVIEW-d0ac17e.md).
 
 **Scope.** `lstat` walk over each approved root of the batch ([D-57](DECISIONS.md)); sorted relative POSIX paths; depth limit; hidden files, mount
 boundaries, `exclude_globs`; regular files only; identity `(st_dev, st_ino, size, mtime_ns)`; `st_nlink > 1` ⇒

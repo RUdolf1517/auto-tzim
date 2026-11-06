@@ -4,8 +4,9 @@ Written 2026-11-02 at `main` = `6c55db2`. Coder's brief for **AT-03 only**, in t
 [HANDOFF-AT-01](HANDOFF-AT-01.md) and [HANDOFF-AT-02](HANDOFF-AT-02.md). It is not the handoff
 [format](HANDOFF-TEMPLATE.md) and does not replace it.
 
-**Status: queued behind AT-02.** Do not start until the AT-02 review says PASS — a discovery layer built on an unaccepted
-config schema is built on sand. Read [CODER-QUEUE](CODER-QUEUE.md) §0 first: it is Rust, and it is 1.89.0.
+**Status: STARTED 2026-11-06**, after AT-02 was accepted at `d0ac17e` ([REVIEW-d0ac17e](reviews/REVIEW-d0ac17e.md)). Read
+[CODER-QUEUE](CODER-QUEUE.md) §0 first: it is Rust, and it is 1.89.0. The copy-paste starting message is
+[KICKOFF-AT-03](KICKOFF-AT-03.md).
 
 ## 1. What AT-03 is for
 
@@ -59,6 +60,17 @@ Everything here is read-only, and read-only is not a property of good intentions
 | 14 | A batch is validated before anything is walked | `scan A B C` where `B` is a symlink / forbidden / inside `A`: exit `2` naming `B`, **zero plan files written** and no directory read from `A` or `C`; the same command with `C` a duplicate of `A` plans `A` once; `A` and `A/sub` together is `overlapping_roots`; a good batch writes 3 plan files with 3 different ids, 3 hashes and 3 roots, printed in the typed order, each plan's rows byte-identical to the same folder scanned alone ([D-57](DECISIONS.md)) |
 | 15 | The plan of a folder does not depend on its batch | scan `A` alone, then `A B`: the `A` plan hash is **identical** and only the id differs — a batch is a loop, not a merged document (D-52, D-57) |
 | 16 | The scope is stated, and it is recursive by default | a root with files only in subfolders: `scan DIR` finds them ([D-58](DECISIONS.md)); `scan DIR --no-recursive` finds none **and says so in one line** naming how many directories were not walked; with a mount point, a 65-deep branch and `.git/`, the summary names each limit and its count; a folder with zero candidates reports how many files were looked at and why none qualified — never an empty success |
+| 17 | An internal error exits `7`, not `2` | a unit test drives the `Internal` variant through the CLI mapping and asserts `7`; `git grep` shows **no** `ConfigError::Invalid` used for an internal condition, and no `unwrap`/`expect` on user input ([F-26](reviews/REVIEW-d0ac17e.md), `cli.md` §4) |
+
+## 3a. Two leftovers from AT-02, in your first commit
+
+Both are Low findings from [REVIEW-d0ac17e](reviews/REVIEW-d0ac17e.md). They are not AT-03 features, they are debts, and they
+are cheaper here than anywhere later.
+
+| Finding | What to do |
+| --- | --- |
+| **F-26** — an internal error exits `2`, the contract says `7` | `cli.md` §4 assigns `7` to "internal error: unreadable/corrupt state, unexpected exception"; the precedence table puts `7` above `2`. Add a typed `Internal` variant in the core and map it to `7` in the CLI. The branch in `main.rs` that reports "mutating command without config lock" is unreachable today, which is exactly why it should be right before something can reach it |
+| **F-27** — `structural_path` performs syscalls under a structural name | no code change. It resolves existing ancestors on purpose (two names for one directory must still be one folder) and falls back to a lexical form when the disk is absent. Leave it, and do not put anything expensive behind the "structural" name in AT-03 |
 
 ## 4. The negative controls are the deliverable
 

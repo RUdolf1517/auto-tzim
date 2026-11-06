@@ -48,6 +48,7 @@ Date of this board: **2026-10-29** (updated after the owner's charter v0.2).
 | [STATUS-LOG.md](STATUS-LOG.md) | Dated record of every manager action and decision, with artifacts |
 | [reviews/REVIEW-a4e9b1e.md](reviews/REVIEW-a4e9b1e.md) | Review of the AT-02 draft at `a4e9b1e` — what is verified, what blocks it |
 | [ANSWERS-AT-02-2026-11-04.md](ANSWERS-AT-02-2026-11-04.md) | The answers given to the coder's seven questions, as decisions |
+| [KICKOFF-AT-03.md](KICKOFF-AT-03.md) | The copy-paste starting message for AT-03, and the two questions it answers in advance |
 | [problems/](problems/README.md) | The three problem notes P-01…P-03, now **decided** — kept as the analysis behind D-02, D-04 and D-18/D-19 |
 | [ASSIGNMENT-AT-MVP-DRAFT.md](ASSIGNMENT-AT-MVP-DRAFT.md) | Charter §11 assignment for the MVP — **prepared, filed as #10, not started** |
 | [OWNER-ACTIONS.md](OWNER-ACTIONS.md) | The `gh` commands the owner has to run, why each is needed, and how to verify it |

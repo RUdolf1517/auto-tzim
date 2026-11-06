@@ -189,7 +189,7 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                     &path,
                     &settings,
                     lock.as_ref().ok_or_else(|| {
-                        invalid("internal error: mutating command without config lock")
+                        ConfigError::Internal("mutating command without config lock".into())
                     })?,
                 )?;
                 for folder in &added {
@@ -210,7 +210,7 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                     &path,
                     &settings,
                     lock.as_ref().ok_or_else(|| {
-                        invalid("internal error: mutating command without config lock")
+                        ConfigError::Internal("mutating command without config lock".into())
                     })?,
                 )?;
                 print!("{}", show(&settings.folder[i])?);
@@ -222,7 +222,7 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                     &path,
                     &settings,
                     lock.as_ref().ok_or_else(|| {
-                        invalid("internal error: mutating command without config lock")
+                        ConfigError::Internal("mutating command without config lock".into())
                     })?,
                 )?;
                 println!("enabled {}", settings.folder[i].name);
@@ -234,7 +234,7 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                     &path,
                     &settings,
                     lock.as_ref().ok_or_else(|| {
-                        invalid("internal error: mutating command without config lock")
+                        ConfigError::Internal("mutating command without config lock".into())
                     })?,
                 )?;
                 println!("disabled {}", settings.folder[i].name);
@@ -246,7 +246,7 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
                     &path,
                     &settings,
                     lock.as_ref().ok_or_else(|| {
-                        invalid("internal error: mutating command without config lock")
+                        ConfigError::Internal("mutating command without config lock".into())
                     })?,
                 )?;
                 println!("removed {}", removed.name);
@@ -256,15 +256,31 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
     Ok(())
 }
 
+fn exit_code(error: &ConfigError) -> i32 {
+    match error {
+        ConfigError::Internal(_) => 7,
+        ConfigError::Locked(_) => 8,
+        ConfigError::Invalid(_) | ConfigError::Io(_) => 2,
+    }
+}
+
 fn main() {
     config::record_process_start();
     if let Err(error) = execute(Cli::parse()) {
-        let code = if matches!(error, ConfigError::Locked(_)) {
-            8
-        } else {
-            2
-        };
+        let code = exit_code(&error);
         eprintln!("{error}");
         std::process::exit(code);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn internal_error_maps_to_exit_seven() {
+        assert_eq!(exit_code(&ConfigError::Internal("missing lock".into())), 7);
+        assert_eq!(exit_code(&ConfigError::Invalid(vec!["bad input".into()])), 2);
+        assert_eq!(exit_code(&ConfigError::Locked("holder".into())), 8);
     }
 }

@@ -449,6 +449,8 @@ mod validation_tests {
 #[derive(Debug)]
 pub enum ConfigError {
     Invalid(Vec<String>),
+    /// An unexpected internal failure, distinct from invalid user configuration.
+    Internal(String),
     Io(std::io::Error),
     /// Another process currently holds the configuration lock.
     Locked(String),
@@ -458,6 +460,7 @@ impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Invalid(errors) => write!(f, "{}", errors.join("\n")),
+            Self::Internal(error) => write!(f, "internal error: {error}"),
             Self::Io(error) => write!(f, "configuration I/O: {error}"),
             Self::Locked(holder) => write!(f, "configuration locked: {holder}"),
         }
@@ -786,7 +789,7 @@ pub fn save(
         Ok(original) => preserve_profiles(&original, &existing, config)?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             toml::to_string_pretty(config)
-                .map_err(|error| ConfigError::Invalid(vec![error.to_string()]))?
+                .map_err(|error| ConfigError::Internal(error.to_string()))?
         }
         Err(error) => return Err(error.into()),
     };
@@ -808,7 +811,7 @@ pub fn save(
     let (temporary, mut file) = loop {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|error| ConfigError::Invalid(vec![error.to_string()]))?
+            .map_err(|error| ConfigError::Internal(error.to_string()))?
             .as_nanos();
         let name = format!(".config.toml.{timestamp}.{attempt}.tmp");
         let temporary = dir.join(name);
@@ -861,7 +864,7 @@ fn create_private_directory(path: &std::path::Path) -> Result<(), ConfigError> {
 
 /// Serialize one folder profile for display.
 pub fn format_folder(folder: &Folder) -> Result<String, ConfigError> {
-    toml::to_string_pretty(folder).map_err(|error| ConfigError::Invalid(vec![error.to_string()]))
+    toml::to_string_pretty(folder).map_err(|error| ConfigError::Internal(error.to_string()))
 }
 
 // Keep the user's original bytes outside the folder blocks being modified.
@@ -967,7 +970,7 @@ fn preserve_inline_profiles(
             seen.push(next.root.clone());
             if next == old_folder {
                 let text = original.get(entry.span()).ok_or_else(|| {
-                    ConfigError::Invalid(vec!["invalid folder source span".into()])
+                    ConfigError::Internal("invalid folder source span".into())
                 })?;
                 items.push(text.to_owned());
             } else {
@@ -987,7 +990,7 @@ fn preserve_inline_profiles(
 
 fn inline_folder(folder: &Folder) -> Result<String, ConfigError> {
     let value = toml::Value::try_from(folder)
-        .map_err(|error| ConfigError::Invalid(vec![format!("cannot serialize folder: {error}")]))?;
+        .map_err(|error| ConfigError::Internal(format!("cannot serialize folder: {error}")))?;
     Ok(value.to_string())
 }
 
@@ -1157,7 +1160,7 @@ pub fn acquire_lock_file(path: &std::path::Path) -> Result<ConfigLock, ConfigErr
     let start_time = PROCESS_START
         .get_or_init(std::time::SystemTime::now)
         .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|error| ConfigError::Invalid(vec![format!("clock: {error}")]))?
+        .map_err(|error| ConfigError::Internal(format!("clock: {error}")))?
         .as_secs();
     // These fields are human-readable diagnostics only; ownership is the kernel lock.
     let host = std::env::var("HOSTNAME").ok();

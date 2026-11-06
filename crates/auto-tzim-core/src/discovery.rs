@@ -336,7 +336,7 @@ mod ordering_and_containment_tests {
         std::fs::create_dir_all(&root).unwrap();
         std::fs::create_dir_all(&outside).unwrap();
         let root = std::fs::canonicalize(root).unwrap();
-        for name in ["z", "A", "a"] {
+        for name in ["z", "B", "a"] {
             std::fs::write(root.join(name), b"x").unwrap();
         }
         std::fs::write(outside.join("file"), b"outside").unwrap();
@@ -357,7 +357,7 @@ mod ordering_and_containment_tests {
                 .iter()
                 .map(|c| c.path.as_os_str().as_bytes())
                 .collect::<Vec<_>>(),
-            [b"A".as_slice(), b"a", b"z"]
+            [b"B".as_slice(), b"a", b"z"]
         );
         assert_eq!(
             normal

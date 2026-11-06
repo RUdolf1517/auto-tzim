@@ -75,6 +75,37 @@ built-in list, path comparison only, documented as best-effort, escapable with o
 behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
 ones are resolved). Each would have been baked into stored data by the first commit.
 
+### Decided — a folder means the folder and everything in it
+
+The owner asked whether `auto-tzim ~/Downloads` walks the subfolders. The answer was *no, unless you pass `--recursive`* —
+and that default was wrong in the quietest possible way. Downloads with 41 images at the top level and 1 300 below would plan
+the 41, print a summary and never mention the rest: not skipped, not refused, simply never looked at. The user reads "done",
+sees a disk that did not shrink, and concludes the program does not work. Every other refusal in this project is loud.
+
+[D-58](docs/manager/DECISIONS.md): `recursive` defaults to **`true`**, `--no-recursive` limits a run to the top level, and
+every scan/run summary **states the scope** — directories walked, deepest level, and each limit that applied with its count
+(`3 subfolders not walked (mount point)`), including the reason when zero candidates were found. Non-recursive was never the
+safe reading; the boundaries that matter — no symlinks, no mount points, depth 64, `.git` excluded, cloud roots refused,
+plan and identity re-check before any install — all stay exactly where they were.
+
+Also fixed while there: the [D-46](docs/manager/DECISIONS.md) row that still described `--time 24` as a file-age filter, which
+[D-47](docs/manager/DECISIONS.md) had already corrected to a cooldown after the owner said so.
+
+### Decided — five folders, five plans: the batch rule reaches the read-only path
+
+The owner asked the question the documents should have answered themselves: *"почему обход папки? их же может быть
+несколько"*. Several — and both the AT-03 brief ("`lstat` on every entry of one approved root") and `cli.md` §2.5
+(`scan [PATH | --folder NAME]`) were written in the singular. [D-49](docs/manager/DECISIONS.md) had already decided batches
+for `run`; the read-only path never got the same treatment, and a coder reading the brief would have built a single-root tool
+and had to rewrite the planner.
+
+[D-57](docs/manager/DECISIONS.md): `scan` / `auto-tzim PATH… --dry-run` takes several paths, validates **all of them before a
+directory is read**, writes **no plan file anywhere** if one is refused (exit `2`), plans a duplicate root once, refuses
+overlap with `overlapping_roots`, and prints in the order typed. Each folder gets its own plan — own id, own hash, own
+`plans/<plan_id>.json`, each naming its canonical root — because `--plan ID` binds one folder and D-52's hash covers one
+tree's rows. Two acceptance points were added to the brief: a refused batch leaves no plan behind, and scanning `A` alone
+produces the same hash as scanning `A B`.
+
 ### Decided — validation splits in two, so an unplugged disk cannot brick the config
 
 Reviewing `b1b6d5a` found the trap my own D-54 answer had set: `load()` validates the whole config, and that validation asked

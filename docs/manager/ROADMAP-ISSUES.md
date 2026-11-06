@@ -115,7 +115,7 @@ branch returns `2`, the contract says `7`) and **F-27** (`structural_path` does 
 > make a plan reproducible ([D-52](DECISIONS.md): id, hash, order, depth). AT-02 is accepted, so this stage is next; it
 > begins when the owner says so in #3, and its first commit carries F-26 and F-27.
 
-**Scope.** `lstat` walk over one approved root; sorted relative POSIX paths; depth limit; hidden files, mount
+**Scope.** `lstat` walk over each approved root of the batch ([D-57](DECISIONS.md)); sorted relative POSIX paths; depth limit; hidden files, mount
 boundaries, `exclude_globs`; regular files only; identity `(st_dev, st_ino, size, mtime_ns)`; `st_nlink > 1` ⇒
 `hardlink_skip`; age ⇒ `skipped_unstable`; `.tzim-*.tmp` never planned; canonical containment re-check; the candidate
 plan of D-04 with plan id and plan hash (D-20).

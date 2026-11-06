@@ -42,7 +42,8 @@ subcommand; otherwise it is a path, and it must be a directory that exists (anyt
 | `--time <HOURS>` | `0` — every invocation may compress | the **cooldown** ([D-47](manager/DECISIONS.md)): compress this folder at most once in this many hours. `0` disables it. Integer, 0–100 000 |
 | `--force` | off | ignore the cooldown for this run; the cooldown is then restarted from now |
 | `--dry-run` | off | plan only. This is **our** flag; `tzim --dry-run` stays forbidden (D-04) |
-| `--name`, `--recursive`, `--formats`, `--exclude` | the profile's values | per-run overrides; they are used for this run and **not** written back to the config |
+| `--recursive` / `--no-recursive` | recursive — a named folder means the folder and everything in it | walk subfolders, or the top level only ([D-58](manager/DECISIONS.md)); a per-run override, not written back |
+| `--name`, `--formats`, `--exclude` | the profile's values | per-run overrides; they are used for this run and **not** written back to the config |
 | `--plan <ID>` | — | bind this run to an earlier plan record; if the tree no longer matches it, exit `6` before anything is installed |
 
 ### 0.2 Several paths are one batch
@@ -158,7 +159,7 @@ Parses and validates **without touching state**: it takes no lock and creates no
 atomic rename, so a reader needs no lock to see a whole file ([D-54](manager/DECISIONS.md), F-21). Exit `0` valid, `2` invalid with **every** error listed (not just the
 first), each naming the field, the rule and a suggested correction.
 
-### 2.3 `folder add PATH [PATH…] [--name NAME] [--recursive] [--allow-cloud-sync] [--formats LIST] [--exclude GLOB]...`
+### 2.3 `folder add PATH [PATH…] [--name NAME] [--no-recursive] [--allow-cloud-sync] [--formats LIST] [--exclude GLOB]...`
 
 **Optional.** Remembering a folder is a convenience, not a prerequisite: `auto-tzim PATH` works on a folder the config has
 never seen ([D-46](manager/DECISIONS.md)). What `add` buys is a stored name and stored defaults, so the path stops being
@@ -179,13 +180,21 @@ refuses a name another folder already holds. `show` prints the profile plus its 
 the whole result before writing, so a rejected edit leaves the file byte-identical. `remove` deletes the profile and its cached eligibility records — never a user file
 — and prints what was removed.
 
-### 2.5 `scan [PATH | --folder NAME]` — the read-only candidate plan
+### 2.5 `scan [PATH… | --folder NAME]…` — the read-only candidate plan
 
 `auto-tzim PATH --dry-run` is the same thing with the path first; `scan` stays for scripts that prefer a verb.
 
+**Several paths are one batch** (§0.2, [D-57](manager/DECISIONS.md)): every path is validated before a directory is read, one
+refusal is exit `2` with nothing scanned **and no plan file written anywhere**, a duplicate canonical root is planned once, an
+overlapping root is `overlapping_roots`, and output follows the order typed. Each folder gets **its own plan** — its own id,
+its own hash, its own `plans/<plan_id>.json` naming its canonical root — because `--plan ID` binds one folder (§2.6) and the
+hash covers one tree's rows ([D-52](manager/DECISIONS.md)). A batch is the same walk repeated per root, with validation done
+once, up front. `--folder` may be repeated.
+
 Builds the plan and **starts no file-processing `tzim`**. Specifically:
 
-- runs discovery, stability and policy, and calls `tzim --version` once per run;
+- runs discovery, stability and policy, and calls `tzim --version` once per run — in v0.1, once the adapter exists (AT-04);
+  until then a scan spawns **nothing at all**, which the AT-03 brief makes acceptance point 5;
 - never passes a target path to `tzim`, never passes `--dry-run`, never passes `--formats` when `formats = []`;
 - writes nothing inside the target root and does not need write access there;
 - emits one `planned` row per candidate with path, size, identity, the policy decision and the argv a future apply would

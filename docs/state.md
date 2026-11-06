@@ -121,9 +121,12 @@ is resolvable by re-reading the filesystem — which is what [recovery](recovery
 
 ### 3.4 `plans/<plan_id>.json` and `plans/log.jsonl`
 
-A plan file is written once and **never modified**; its lifecycle is a row in `log.jsonl` (`used`, `superseded`). This is
-what makes D-20's "any difference is exit `6`, never close enough" auditable after the fact: the plan the user approved is
-still on disk, byte for byte, next to the hash it was compared against.
+One file **per folder**, written once and **never modified**; its lifecycle is a row in `log.jsonl` (`used`,
+`superseded`). A batch of three folders produces three plan files, three ids and three hashes, each recording its own
+canonical root ([D-57](manager/DECISIONS.md)) — never one blob covering several trees.
+
+This is what makes D-20's "any difference is exit `6`, never close enough" auditable after the fact: the plan the user
+approved is still on disk, byte for byte, next to the hash it was compared against.
 
 ### 3.5 `last-compression.json` — the cooldown
 

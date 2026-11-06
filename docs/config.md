@@ -50,7 +50,7 @@ Every field is listed; nothing is implicit.
 | `name` | string | the folder's basename at add time | **the folder's identifier**, and the only handle any command takes ([D-43](manager/DECISIONS.md)). 1–120 characters after trimming, no control characters, no leading or trailing space. Must be unique — compared case-insensitively, stored as typed. `folder edit OLD --name NEW` renames; see §7 |
 | `root` | string | required | absolute, existing directory; canonicalised; must not be `/`, `$HOME` itself, or a system directory; must not contain `AUTO_TZIM_HOME` (D-08) |
 | `enabled` | bool | `true` | a disabled folder is not scanned and not run |
-| `recursive` | bool | `false` | `false` means the top level only |
+| `recursive` | bool | **`true`** | `true` (default) walks subfolders; `false` means the top level only ([D-58](manager/DECISIONS.md)). The summary states which one applied, and how many directories were walked |
 | `include_hidden` | bool | `false` | hidden files and directories; `.tzim-*.tmp` stays excluded even when this is `true` (R-14) |
 | `cross_filesystems` | bool | `false` | whether discovery may cross a mount point; `false` refuses and records the boundary |
 | `follow_symlinks` | bool | `false` | **immutable in v0.1**: any value other than `false` is rejected, because the walk is `lstat`-based by design |
@@ -100,7 +100,7 @@ allowed_major_versions = [0]
 name = "Project images"
 root = "/Users/example/Pictures/project"
 enabled = true
-recursive = false
+recursive = true
 include_hidden = false
 cross_filesystems = false
 follow_symlinks = false

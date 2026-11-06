@@ -23,17 +23,17 @@ Everything here is read-only, and read-only is not a property of good intentions
 | Item | Requirement |
 | --- | --- |
 | Where the code lives | `auto-tzim-core`: `discovery.rs` (the walk), `stability.rs` (identity and age), `planner.rs` (the plan), plus a `hash.rs` for SHA-256 ([D-52](DECISIONS.md)). No new crate, no new dependency |
-| Walk | `lstat` on every entry of one approved root. **Never** `stat`, never follow a link: a symlink is a candidate for `skipped_policy`, not a door |
+| Walk | `lstat` on every entry of **each approved root in the batch** — several paths are one batch ([D-49](DECISIONS.md), [D-57](DECISIONS.md)); the walk itself is per root, identical each time. **Never** `stat`, never follow a link: a symlink is a candidate for `skipped_policy`, not a door |
 | Order | byte-wise sorted entry names per directory, rows sorted byte-wise by relative POSIX path. Not locale, not case-insensitive ([D-52](DECISIONS.md)) |
 | Depth | **64 levels** below the root; level 65 is `depth_exceeded`, recorded once per directory, not once per file |
-| Scope rules | `recursive` (top level only when false), `include_hidden`, `cross_filesystems` (do not cross a mount point when false, and record the boundary once), `exclude_globs` on the POSIX relative path, `**` spans directories, no braces, no negation |
+| Scope rules | `recursive` **defaults to `true`** — a named folder means the folder and everything in it; `false` walks the top level only ([D-58](DECISIONS.md)); `include_hidden`, `cross_filesystems` (do not cross a mount point when false, and record the boundary once), `exclude_globs` on the POSIX relative path, `**` spans directories, no braces, no negation |
 | Always excluded | `.tzim-*…*.tmp`, at any depth, **even with `include_hidden = true`** (corpus `K-12`, R-14). Never deleted, never reported as an error |
 | Regular files only | FIFOs, sockets, device nodes, directories, symlinks: `skipped_policy` with a reason, never an error, never a read. A symlink loop must not hang (corpus `K-05`, 5 s bound) |
 | Identity | `(st_dev, st_ino, size, mtime_ns)` captured once at discovery via `std::os::unix::fs::MetadataExt`; `st_nlink > 1` ⇒ `hardlink_skip` **before** anything else |
 | Age | younger than `min_file_age_seconds` ⇒ `skipped_unstable`. The clock is **injected** ([D-14](DECISIONS.md)): `stability.rs` takes a "now", never calls `SystemTime::now()` inside the decision |
 | Containment re-check | after canonicalising each candidate's parent, assert it is still inside the canonical root. A path that escapes is a **hard abort**, not a skip (this is the `..`/swap defence, R-01/R-02) |
-| The plan | an ordered list of rows + a plan id + a plan hash, exactly as [D-52](DECISIONS.md) defines them; written to `plans/<plan_id>.json` **once**, never modified |
-| CLI surface | `auto-tzim PATH --dry-run` and `scan [PATH \| --folder NAME]`: print the plan, install nothing, write nothing inside the root. `--json` is AT-06 — print human text only |
+| The plan | **one per folder**: an ordered list of rows + a plan id + a plan hash, exactly as [D-52](DECISIONS.md) defines them; written to `plans/<plan_id>.json` **once**, never modified, recording its canonical root ([D-57](DECISIONS.md)) |
+| CLI surface | `auto-tzim PATH… --dry-run` and `scan [PATH… \| --folder NAME]…`: several paths are one batch, `--folder` may be repeated; print one plan per folder in the order typed, install nothing, write nothing inside any root. `--json` is AT-06 — human text only |
 | What the plan may claim | every row is `planned`, and nothing else. No "will be smaller", no "optimizable", no savings, no predicted size ([D-23](DECISIONS.md), charter §8.4) |
 | Not in this stage | no `tzim` invocation **at all** — not `--version`, not `--capabilities` (those arrive with the adapter in AT-04); no staging, no runner, no install, no lock, no history rows, no cooldown |
 
@@ -56,6 +56,9 @@ Everything here is read-only, and read-only is not a property of good intentions
 | 11 | The plan hash reacts to the right things | touch one file ⇒ different hash; change one argv ⇒ different hash; run twice untouched ⇒ same hash; the plan id, the clock and the mode must **not** change the hash ([D-52](DECISIONS.md)) |
 | 12 | The hash itself is right | SHA-256 test vectors from FIPS 180-4: empty input, `abc`, and one 1 MiB input with a recorded digest |
 | 13 | Nothing is claimed | grep the plan output for `save`, `smaller`, `optimiz`, `%` — no row and no summary may contain a predicted outcome (D-23) |
+| 14 | A batch is validated before anything is walked | `scan A B C` where `B` is a symlink / forbidden / inside `A`: exit `2` naming `B`, **zero plan files written** and no directory read from `A` or `C`; the same command with `C` a duplicate of `A` plans `A` once; `A` and `A/sub` together is `overlapping_roots`; a good batch writes 3 plan files with 3 different ids, 3 hashes and 3 roots, printed in the typed order, each plan's rows byte-identical to the same folder scanned alone ([D-57](DECISIONS.md)) |
+| 15 | The plan of a folder does not depend on its batch | scan `A` alone, then `A B`: the `A` plan hash is **identical** and only the id differs — a batch is a loop, not a merged document (D-52, D-57) |
+| 16 | The scope is stated, and it is recursive by default | a root with files only in subfolders: `scan DIR` finds them ([D-58](DECISIONS.md)); `scan DIR --no-recursive` finds none **and says so in one line** naming how many directories were not walked; with a mount point, a 65-deep branch and `.git/`, the summary names each limit and its count; a folder with zero candidates reports how many files were looked at and why none qualified — never an empty success |
 
 ## 4. The negative controls are the deliverable
 

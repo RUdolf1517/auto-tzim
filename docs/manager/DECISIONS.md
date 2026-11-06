@@ -62,6 +62,8 @@ invent it; the owner may change it without cost), **superseded**.
 | D-54 | **AT-02's seven grey areas decided**: an explicit `mode = "auto"` is valid (only the *default* is `confirm`); a non-empty `tzim_path` must exist, be a file and be executable; `--allow-cloud-sync` / `--no-allow-cloud-sync` exist on `folder add\|edit`; the permissions control is accepted as a whole-protection check with one added repair test; lock metadata is diagnostics only (`started_at`, host omitted when unknown); stale temp cleanup is safe **because** the config lock is held; and `config validate` takes no lock and creates nothing | **adopted (manager default, 2026-11-03)** — answers the coder's open questions on PR #34 | `config.md` §3; `cli.md` §2.2–2.4; `state.md` §5 | AT-02 |
 | D-55 | **`macos-15-intel` may be measured as a diagnostic, never switched to silently**; the runner decision stays open and the AT-02 merge does not depend on GitHub's macOS capacity | **adopted (manager default, 2026-11-03)** — answer to the coder's D-51 question | R-27; [D-51](DECISIONS.md) | AT-02 onward |
 | D-56 | **Validation splits in two**: *structure* (parsed into the model: schema, enums, names, duplicates, path shape, forbidden roots, cloud-sync rule, reserved features, ranges) is checked on **every** load and save; *environment* (the root exists, is a directory, is not a symlink, canonicalises; `tzim_path` exists and is executable) is checked only by `config validate`, by `folder add`, and at run time — an unplugged disk must not make the tool unrepairable | **adopted (manager default, 2026-11-04)** — amends [D-54](DECISIONS.md) item 2, after the review of `b1b6d5a` found the trap | `config.md` §5; `cli.md` §2.2–2.4 | AT-02 |
+| D-57 | **The read-only plan is per folder, inside a batch**: `scan` / `auto-tzim PATH… --dry-run` takes several paths ([D-49](DECISIONS.md) applies unchanged), every path is validated before a single directory is read, one refusal ⇒ exit `2` with **nothing scanned and no plan file written**, duplicates are de-duplicated on the canonical root, overlap is `overlapping_roots`, and each folder gets **its own plan id, own hash and own `plans/<plan_id>.json`**, printed in the order typed | **adopted (manager default, 2026-11-06)** — the brief and `cli.md` §2.5 were written in the singular; the owner caught it | `cli.md` §0.2, §2.5; `state.md` §3.4; [HANDOFF-AT-03](HANDOFF-AT-03.md) | AT-03 |
+| D-58 | **A named folder means the folder and everything in it**: `recursive` defaults to **`true`**, `--no-recursive` limits a run to the top level, `folder add --no-recursive` stores that choice, and every scan/run summary **states the scope** (directories walked, deepest level, subdirectories skipped) so "nothing found" is never silent | **adopted (manager default, 2026-11-06)** — the previous default (`false`, top level only) made the ordinary invocation find nothing in a downloads folder and say so quietly | `config.md` §3; `cli.md` §0, §2.3; [HANDOFF-AT-03](HANDOFF-AT-03.md) | AT-03 |
 
 ---
 
@@ -1036,7 +1038,7 @@ a batch optimiser people do not use.
 | What the owner asked for | Where it lands |
 | --- | --- |
 | `auto-tzim <PATH>` | the path is the first argument; no subcommand, no profile required (§0 of `cli.md`) |
-| `--time 24` | only files whose last modification is at least 24 hours old; integer hours, `0` disables the filter |
+| `--time 24` | the **cooldown** — compress this folder at most once every 24 hours ([D-47](DECISIONS.md)); integer hours, `0` disables it. *This row used to say "only files older than 24 hours", which was my wrong first reading and is corrected here* |
 | `--auto` | install without asking; the same thing `--mode auto` meant, with a shorter name |
 
 **What this does not change, and would not change if the owner asked.** The plan is still built on every run, hashed and
@@ -1470,3 +1472,81 @@ flag on the read-only commands, not a return to the trap.
 ancestors through `canonicalize_with_missing` so two names for the same directory are still one folder, and falls back to a
 lexical form when the disk is absent — that is what keeps an unplugged root from failing. A later reader should not assume
 "structural" is I/O-free, and should not put anything expensive behind it.
+
+## D-57 · One folder, one plan — even when the command names five
+
+**Status: adopted (manager default, 2026-11-06).** The owner asked the obvious question about the AT-03 brief: *"почему обход
+папки? их же может быть несколько"*. They can, and the brief said otherwise — `HANDOFF-AT-03.md` was written as "`lstat` on
+every entry of one approved root", and `cli.md` §2.5 was headed `scan [PATH | --folder NAME]`. [D-49](DECISIONS.md) had
+already answered this for `run`; the read-only path never got the same treatment, and a coder reading AT-03 would have built a
+single-root tool.
+
+**The rules, all of them inherited from [D-49](DECISIONS.md) §0.2 and made explicit for the plan:**
+
+| Question | Answer |
+| --- | --- |
+| Does `scan` take several paths? | **yes** — `auto-tzim a b c --dry-run`, and `--folder` may be repeated. One path is the common case, not the only one |
+| When is the batch validated? | **before any directory is read.** Every path: forbidden root, symlink, cloud sync, `AUTO_TZIM_HOME` containment, overlap. One refusal ⇒ exit `2`, the message names the path, **nothing is scanned anywhere** |
+| Is a plan file written for the good folders when one path is refused? | **no.** "Nothing is processed anywhere" includes not leaving half a batch of plan files that authorise a later apply |
+| Two paths, one inside the other | exit `2`, `overlapping_roots`, both named — a file in both would be planned twice |
+| The same root twice | de-duplicated on the canonical path, planned **once**, printed once |
+| Order of output | the order typed on the command line. Rows inside a plan stay byte-wise sorted ([D-52](DECISIONS.md)); sorting the *folders* would hide which one the user named first |
+| How many plans? | **one per folder** — own plan id, own hash, own `plans/<plan_id>.json`, each recording its canonical root |
+| Why not one plan for the batch? | `--plan ID` binds **one** folder (`cli.md` §2.6); a batch-wide id could not authorise a per-folder apply, and D-52's hash is defined over one tree's rows — mixing two trees would make the hash change when the *batch* changed, which is exactly what D-52 says a hash must not react to |
+| What does `--json` do | not in AT-03 (AT-06). Human text only, and it prints each folder's rows under that folder's heading |
+| Exit code | `0` when every folder produced a plan, `2` on any validation refusal. A folder with zero candidates is still a plan, still `0` |
+
+**What this does not change:** the walk itself is unchanged — `lstat`, never `stat`, never follow a link, 64 levels, `.tzim-*…*.tmp`
+excluded everywhere, rows sorted byte-wise, no `tzim` spawned. A batch is that walk repeated over each root, with the
+validation done once, up front.
+
+**Reversal:** if a later stage needs a batch-wide record, it is an addition (`batch_id` on each plan file, as `state.md` §3.1
+already does for runs), not a merge of the plans.
+
+## D-58 · A folder means the folder and everything in it
+
+**Status: adopted (manager default, 2026-11-06).** Amends the `recursive` default in [config](../config.md) §3.
+
+The owner asked whether a folder is walked recursively, and the honest answer was *no, unless you pass `--recursive`*. That is
+the wrong default for the tool the project is, and the failure it causes is quiet:
+
+```sh
+auto-tzim ~/Downloads --auto          # 41 images in the top level, 1 300 in subfolders
+```
+
+With `recursive = false` that run plans the 41 and prints a summary. The 1 300 files are not skipped, not refused, not
+mentioned — they were never looked at. The user reads "done", sees a disk that did not shrink, and concludes the program does
+not work. Every other refusal in this project is loud; this one was silent, which makes it the worst kind.
+
+The scope question is really *"what did I point at?"*. When somebody types `~/Downloads` they mean the folder they can see in
+a file manager, with its subfolders. Non-recursive is the surprising reading, not the safe one — and the safety it appears to
+buy is already provided by the rules that live in the walk: `.git`/`.hg`/`.svn` excluded by default, depth 64, mount points
+refused, symlinks never followed, cloud-sync roots refused, plan + confirm + identity re-check before any install.
+
+| Question | Answer |
+| --- | --- |
+| Default | **`recursive = true`** — the folder and everything below it |
+| Top level only | `--no-recursive` on a run; `folder add --no-recursive` stores it |
+| The one-shot form | `auto-tzim DIR` is recursive; `auto-tzim DIR --no-recursive` is not |
+| Existing configs | a config that never mentioned `recursive` starts walking deeper after this change. That is the intended reading of "the folder", and it is said in [CHANGELOG](../../CHANGELOG.md) rather than slipped in |
+| Does recursion widen what can be modified? | yes, and that is why the summary must state the scope (below), and why every other boundary stays where it is |
+| Are mounted disks crossed | no — `cross_filesystems = false` is unchanged; the boundary is recorded once |
+| Symlinks | never followed, at any depth ([D-45](DECISIONS.md)) |
+
+**The summary must state the scope**, in both modes, in one line each:
+
+```text
+downloads   /home/user/Downloads   41 files at the top level, 1 300 below, 12 directories walked
+```
+
+and, when a limit did something, it says which: `3 subfolders not walked (mount point)`, `1 not walked (depth 64)`,
+`14 not walked (excluded by .git/**)`. A run that plans zero candidates says why: `0 candidates — 1 341 files looked at,
+none with a supported format`.
+
+**Why not "recursive by default, and also print a warning"?** A warning is a thing people learn to scroll past. The scope line
+is not a warning, it is the answer to the question the user asked by typing the path, and it is printed whether or not
+anything went wrong.
+
+**Reversal:** `recursive = false` stays a stored value, so a user who wants the old behaviour gets it exactly with
+`--no-recursive` or the config field. If it turns out that people are surprised in the *other* direction — "I did not mean
+that deep" — the answer is the scope line, not a silent narrower walk.

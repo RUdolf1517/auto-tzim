@@ -116,6 +116,9 @@ fn visit(
             std::fs::symlink_metadata(&full).map_err(|e| format!("{}: {e}", full.display()))?;
         let file_type = metadata.file_type();
         let raw = path.as_os_str().as_bytes();
+        if file_type.is_file() {
+            out.files_seen += 1;
+        }
         if name_bytes.starts_with(b".tzim-") && name_bytes.ends_with(b".tmp") {
             out.skipped.push(Skip {
                 path,
@@ -143,6 +146,9 @@ fn visit(
             continue;
         }
         if !profile.include_hidden && name_bytes.starts_with(b".") {
+            if file_type.is_dir() {
+                limit(out, "hidden directory".into());
+            }
             continue;
         }
         if file_type.is_symlink() {
@@ -153,6 +159,10 @@ fn visit(
         } else if file_type.is_dir() {
             if !profile.recursive {
                 limit(out, "non-recursive".into());
+                out.skipped.push(Skip {
+                    path,
+                    reason: "skipped_policy: non-recursive directory".into(),
+                });
                 continue;
             }
             if depth >= 64 {
@@ -167,13 +177,16 @@ fn visit(
                 limit(out, "mount point".into());
                 out.skipped.push(Skip {
                     path,
-                    reason: "mount_point".into(),
+                    reason: "skipped_policy: mount point".into(),
                 });
                 continue;
             }
             visit(root, &path, depth + 1, options, out)?;
+            out.skipped.push(Skip {
+                path,
+                reason: "skipped_policy: directory".into(),
+            });
         } else if file_type.is_file() {
-            out.files_seen += 1;
             check_parent(root, &full)?;
             let identity = Identity::from_metadata(&metadata);
             if let Some(reason) = stability::refusal(&identity, now, profile.min_file_age_seconds) {

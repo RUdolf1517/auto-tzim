@@ -48,7 +48,7 @@ Mechanics that follow from Rust, and are review items:
 | **The handoff block** | [HANDOFF-TEMPLATE](HANDOFF-TEMPLATE.md), every line filled, pasted into the PR |
 | **Negative controls** | Every stage names the check that would fail if the feature were broken, and shows it going red **on purpose**, with the run id |
 | **You do not merge** | `Merge/Release performed by coder: no`. The owner merges; the manager reviews |
-| **You do not edit the gate documents** | `GATES.md`, `DECISIONS.md`, the corpus expectations, the acceptance rows. If one is wrong, that is a finding in the PR, not an edit |
+| **You do not edit the gate documents** | `GATES.md`, `DECISIONS.md`, the corpus expectations, the acceptance rows — and that includes the `HANDOFF-*.md` briefs you work from, which are the manager's copy of the contract. If one is wrong, that is a finding in the PR, not an edit: an edit to the acceptance rows makes the review compare the code against a contract the coder just rewrote |
 
 ## 2. The queue
 

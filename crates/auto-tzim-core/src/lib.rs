@@ -11,3 +11,4 @@ pub mod discovery;
 pub mod hash;
 pub mod planner;
 pub mod stability;
+pub mod summary;

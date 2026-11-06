@@ -29,6 +29,8 @@ pub struct Discovery {
     pub max_depth: usize,
     pub files_seen: u64,
     pub limits: BTreeMap<String, u64>,
+    /// Files filtered before stability, including hidden or excluded files.
+    pub filtered_files: BTreeMap<String, u64>,
 }
 
 /// Walk a canonical root without opening candidate files.
@@ -120,6 +122,9 @@ fn visit(
             out.files_seen += 1;
         }
         if name_bytes.starts_with(b".tzim-") && name_bytes.ends_with(b".tmp") {
+            if file_type.is_file() {
+                *out.filtered_files.entry("orphan_temp".into()).or_default() += 1;
+            }
             out.skipped.push(Skip {
                 path,
                 reason: "orphan_temp".into(),
@@ -136,6 +141,11 @@ fn visit(
                     ))
         });
         if let Some(pattern) = exclusion {
+            if file_type.is_file() {
+                *out.filtered_files
+                    .entry(format!("excluded by {pattern}"))
+                    .or_default() += 1;
+            }
             if file_type.is_dir() {
                 limit(out, format!("excluded by {pattern}"));
             }
@@ -146,6 +156,9 @@ fn visit(
             continue;
         }
         if !profile.include_hidden && name_bytes.starts_with(b".") {
+            if file_type.is_file() {
+                *out.filtered_files.entry("hidden".into()).or_default() += 1;
+            }
             if file_type.is_dir() {
                 limit(out, "hidden directory".into());
             }

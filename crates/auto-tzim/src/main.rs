@@ -35,8 +35,10 @@ enum ConfigCommand {
 struct ProfileOptions {
     #[arg(long)]
     name: Option<String>,
-    #[arg(long)]
+    #[arg(long, conflicts_with = "no_recursive")]
     recursive: bool,
+    #[arg(long, conflicts_with = "recursive")]
+    no_recursive: bool,
     #[arg(long)]
     formats: Option<String>,
     #[arg(long)]
@@ -93,6 +95,8 @@ fn apply_options(folder: &mut Folder, options: &ProfileOptions) {
     }
     if options.recursive {
         folder.recursive = true;
+    } else if options.no_recursive {
+        folder.recursive = false;
     }
     if let Some(formats) = &options.formats {
         folder.formats = if formats.is_empty() {

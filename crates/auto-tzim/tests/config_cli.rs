@@ -1025,3 +1025,26 @@ fn structural_validation_still_rejects_invalid_unavailable_profiles() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("must be absolute"));
 }
+
+#[test]
+fn recursive_default_and_explicit_profile_override() {
+    let sandbox = Sandbox::new();
+    let first = sandbox.folder("first");
+    let second = sandbox.folder("second");
+    assert!(sandbox
+        .run(&["folder", "add", first.to_str().unwrap()])
+        .status
+        .success());
+    assert!(
+        String::from_utf8_lossy(&sandbox.run(&["folder", "show", "first"]).stdout)
+            .contains("recursive = true")
+    );
+    assert!(sandbox
+        .run(&["folder", "add", second.to_str().unwrap(), "--no-recursive"])
+        .status
+        .success());
+    assert!(
+        String::from_utf8_lossy(&sandbox.run(&["folder", "show", "second"]).stdout)
+            .contains("recursive = false")
+    );
+}

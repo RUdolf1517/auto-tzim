@@ -42,7 +42,7 @@ pub struct Folder {
     pub root: PathBuf,
     #[serde(default = "enabled_by_default")]
     pub enabled: bool,
-    #[serde(default)]
+    #[serde(default = "enabled_by_default")]
     pub recursive: bool,
     #[serde(default)]
     pub include_hidden: bool,
@@ -95,7 +95,7 @@ impl Default for Folder {
             name: String::new(),
             root: PathBuf::new(),
             enabled: true,
-            recursive: false,
+            recursive: true,
             include_hidden: false,
             cross_filesystems: false,
             follow_symlinks: false,
@@ -127,7 +127,7 @@ mod tests {
         assert_eq!(config.installation.allowed_major_versions, [0]);
         let folder = &config.folder[0];
         assert!(folder.enabled);
-        assert!(!folder.recursive);
+        assert!(folder.recursive);
         assert_eq!(folder.min_file_age_seconds, 60);
         assert_eq!(folder.jobs, 1);
         assert_eq!(folder.min_free_bytes, 268_435_456);

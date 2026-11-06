@@ -603,6 +603,11 @@ pub fn validate_config(config: &Config) -> Vec<String> {
                 errors.push(format!("{label}.root: duplicate_root"));
             }
         }
+        if folder.root.to_str().is_none() {
+            errors.push(format!(
+                "{label}.root: path is not representable in TOML as UTF-8"
+            ));
+        }
         if let Err(reason) = validate_root_structure(&folder.root, folder.allow_cloud_sync) {
             errors.push(format!("{label}.root: {reason}"));
         }

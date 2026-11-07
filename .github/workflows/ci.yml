@@ -80,6 +80,14 @@ jobs:
           export AT03_FIFO_ROOT="$temp"
           cargo test --locked -p auto-tzim-core fifo_is_skipped_without_opening -- --ignored --nocapture
           cargo test --locked -p auto-tzim-core ten_thousand_entries_record_elapsed_time -- --nocapture
+      - name: Partial AT-03 pipeline evidence
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked -p auto-tzim-core --test at03_pipeline -- --nocapture 2>&1 | tee "$RUNNER_TEMP/at03-partial"
+          evidence="$(grep '^AT03_PARTIAL_FIXTURE ' "$RUNNER_TEMP/at03-partial")"
+          test -n "$evidence"
+          echo "::notice title=AT-03 partial fixture::$evidence"
       - name: CLI contract
         shell: bash
         run: |

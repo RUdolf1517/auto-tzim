@@ -683,7 +683,7 @@ mod corpus_tests {
         let f = Fixture::new();
         let path = f.0.join("unreadable");
         std::fs::write(&path, b"unchanged").unwrap();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0)).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
         let profile = Folder {
             min_file_age_seconds: 0,
             ..Folder::default()

@@ -125,6 +125,12 @@ One file **per folder**, written once and **never modified**; its lifecycle is a
 `superseded`). A batch of three folders produces three plan files, three ids and three hashes, each recording its own
 canonical root ([D-57](manager/DECISIONS.md)) — never one blob covering several trees.
 
+**Publication is `hard_link`, not `rename`** ([D-60](manager/DECISIONS.md)): the temp file is written, `fs::hard_link(tmp, final)`
+creates the final name **only if it is free** (`EEXIST` means the id is taken ⇒ `plan_id_collision`, exit `7`), then the temp is
+unlinked and the directory fsynced. `rename` would silently overwrite a plan that already existed, which "written once and never
+modified" forbids; §2's "atomic replacement" therefore applies to the **mutable** files only (`run.json`,
+`last-compression.json`), and the immutable ones are *published*.
+
 This is what makes D-20's "any difference is exit `6`, never close enough" auditable after the fact: the plan the user
 approved is still on disk, byte for byte, next to the hash it was compared against.
 

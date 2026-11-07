@@ -272,24 +272,9 @@ fn execute(cli: Cli, matches: &clap::ArgMatches, path_first: bool) -> Result<(),
         };
         let profiles =
             batch::resolve_inputs(inputs, &settings, override_recursive).map_err(invalid)?;
-        let mut profiles = batch::preflight(profiles).map_err(invalid)?;
+        let profiles = batch::preflight(profiles).map_err(invalid)?;
         let identity = inspect_binary(&settings)?;
         print_identity(&identity);
-        if let Ok(auto_tzim_core::json::Value::Array(formats)) =
-            identity.capabilities.member("default_enabled_formats")
-        {
-            for profile in &mut profiles {
-                if profile.formats.is_empty() {
-                    profile.formats = formats
-                        .iter()
-                        .filter_map(|v| match v {
-                            auto_tzim_core::json::Value::String(s) => Some(s.clone()),
-                            _ => None,
-                        })
-                        .collect();
-                }
-            }
-        }
         let now = std::time::SystemTime::now();
         let discovered = batch::discover(profiles, now).map_err(|error| match error {
             batch::BatchError::Invalid(message) => invalid(message),

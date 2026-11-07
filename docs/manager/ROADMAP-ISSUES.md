@@ -109,12 +109,19 @@ red run's SHA was verified as an ancestor of the commit that removed it — incl
 failed the acceptance test itself on both platforms. Two Low findings carried into AT-03: **F-26** (the internal-error
 branch returns `2`, the contract says `7`) and **F-27** (`structural_path` does syscalls despite the name).
 
-### AT-03 · Safe discovery, stability and the read-only candidate plan — **STARTED 2026-11-06**
+### AT-03 · Safe discovery, stability and the read-only candidate plan — **COMPLETE 2026-11-07, draft `#46` unmerged**
 
 > Coder brief: [HANDOFF-AT-03](HANDOFF-AT-03.md) — **17 acceptance points**, five negative controls, and the four numbers
 > that make a plan reproducible ([D-52](DECISIONS.md): id, hash, order, depth). Starting message:
 > [KICKOFF-AT-03](KICKOFF-AT-03.md), issued on the owner's word *"кодеру работу дай"* (2026-11-06). The first commit
 > carries F-26 and F-27 from [REVIEW-d0ac17e](reviews/REVIEW-d0ac17e.md).
+
+**Outcome.** PASS at `f4016d03` on Linux and macOS (run `42416157628`), accepted by the owner on 2026-11-07, recorded in
+[REVIEW-f4016d0](reviews/REVIEW-f4016d0.md). The two scans of an unchanged tree carry identical `rows` and an equal
+`plan_hash` with different ids and clocks, recomputed by the reviewer from the raw plan bytes; five negative controls ran red
+on the claimed SHAs and every revert restores the pre-control tree exactly. Draft `#46` is deliberately unmerged. Two
+obligations moved to AT-08, where they are blocking: the per-ID corpus accounting over all 120 IDs, and a checksummed
+artifact bundle with an internal `head_sha`.
 
 **Scope.** `lstat` walk over each approved root of the batch ([D-57](DECISIONS.md)); sorted relative POSIX paths; depth limit; hidden files, mount
 boundaries, `exclude_globs`; regular files only; identity `(st_dev, st_ino, size, mtime_ns)`; `st_nlink > 1` ⇒

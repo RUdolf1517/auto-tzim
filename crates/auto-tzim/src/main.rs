@@ -184,10 +184,29 @@ fn execute(cli: Cli, matches: &clap::ArgMatches, path_first: bool) -> Result<(),
         };
         let profiles =
             batch::resolve_inputs(inputs, &settings, override_recursive).map_err(invalid)?;
-        batch::preflight(profiles).map_err(invalid)?;
-        return Err(ConfigError::Internal(
-            "scan plan contract is not finalized".into(),
-        ));
+        let now = std::time::SystemTime::now();
+        let discovered = batch::discover(profiles, now).map_err(|error| match error {
+            batch::BatchError::Invalid(message) => invalid(message),
+            batch::BatchError::Discovery(message) if message.contains("tree_changed") => {
+                ConfigError::TreeChanged(message)
+            }
+            batch::BatchError::Discovery(message) => ConfigError::Internal(message),
+        })?;
+        let plans = auto_tzim_core::planner::build_plans(discovered, |folder, candidate| {
+            Ok(auto_tzim_core::planner::arguments(folder, candidate))
+        })
+        .map_err(|error| ConfigError::Internal(format!("plan creation: {error:?}")))?;
+        let config_path = config::config_path()?;
+        let state_home = config_path
+            .parent()
+            .ok_or_else(|| ConfigError::Internal("missing state directory".into()))?;
+        let plans_dir = state_home.join("state/plans");
+        for plan in &plans {
+            auto_tzim_core::planner::publish(&plans_dir, plan, std::time::SystemTime::now())
+                .map_err(|e| ConfigError::Internal(format!("plan publication: {e}")))?;
+            print!("{}", auto_tzim_core::summary::plan(plan));
+        }
+        return Ok(());
     }
 
     let path = config::config_path()?;
@@ -336,6 +355,7 @@ fn execute(cli: Cli, matches: &clap::ArgMatches, path_first: bool) -> Result<(),
 fn exit_code(error: &ConfigError) -> i32 {
     match error {
         ConfigError::Internal(_) => 7,
+        ConfigError::TreeChanged(_) => 6,
         ConfigError::Locked(_) => 8,
         ConfigError::Invalid(_) | ConfigError::Io(_) => 2,
     }

@@ -8,7 +8,7 @@ use std::os::unix::ffi::OsStrExt;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Row {
     pub candidate: Candidate,
-    pub argv: Vec<String>,
+    pub argv: Vec<std::ffi::OsString>,
 }
 
 /// An in-memory plan for a single canonical root. This type does not publish files.
@@ -35,7 +35,7 @@ pub fn build_plans<F>(
     arguments: F,
 ) -> Result<Vec<Plan>, BuildError>
 where
-    F: FnMut(&crate::config::Folder, &Candidate) -> Result<Vec<String>, String>,
+    F: FnMut(&crate::config::Folder, &Candidate) -> Result<Vec<std::ffi::OsString>, String>,
 {
     build_plans_with_ids(discoveries, arguments, plan_id)
 }
@@ -46,7 +46,7 @@ fn build_plans_with_ids<F, G>(
     mut next_id: G,
 ) -> Result<Vec<Plan>, BuildError>
 where
-    F: FnMut(&crate::config::Folder, &Candidate) -> Result<Vec<String>, String>,
+    F: FnMut(&crate::config::Folder, &Candidate) -> Result<Vec<std::ffi::OsString>, String>,
     G: FnMut() -> std::io::Result<String>,
 {
     let mut plans = Vec::with_capacity(discoveries.len());
@@ -66,16 +66,12 @@ where
                 .as_bytes()
                 .cmp(b.candidate.path.as_os_str().as_bytes())
         });
-        let mut unique = None;
-        for _ in 0..16 {
-            let id = next_id().map_err(BuildError::Entropy)?;
-            if ids.insert(id.clone()) {
-                unique = Some(id);
-                break;
-            }
+        let id = next_id().map_err(BuildError::Entropy)?;
+        if !ids.insert(id.clone()) {
+            return Err(BuildError::Entropy(std::io::Error::other(
+                "plan_id_collision",
+            )));
         }
-        let id = unique
-            .ok_or_else(|| BuildError::Entropy(std::io::Error::other("repeated plan IDs")))?;
         let hash = plan_hash(&rows);
         plans.push(Plan {
             id,
@@ -86,6 +82,20 @@ where
         });
     }
     Ok(plans)
+}
+
+/// Construct the profile-owned argv described by D-59, preserving path bytes.
+pub fn arguments(folder: &crate::config::Folder, candidate: &Candidate) -> Vec<std::ffi::OsString> {
+    let mut args = Vec::new();
+    if !folder.formats.is_empty() {
+        let mut formats = folder.formats.clone();
+        formats.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+        args.push("--formats".into());
+        args.push(formats.join(",").into());
+    }
+    args.push("--".into());
+    args.push(candidate.path.as_os_str().to_owned());
+    args
 }
 
 /// Return canonical JSON lines in D-52's fixed key and bytewise path order.
@@ -105,7 +115,10 @@ pub fn canonical_rows(rows: &[Row]) -> String {
         let argv = row
             .argv
             .iter()
-            .map(|item| json_string(item))
+            .map(|item| match item.to_str() {
+                Some(value) => json_string(value),
+                None => format!("{{\"b64\":{}}}", json_string(&base64(item.as_bytes()))),
+            })
             .collect::<Vec<_>>()
             .join(",");
         output.push_str(&format!("{{\"path_raw_b64\":{},\"size\":{},\"dev\":{},\"ino\":{},\"mtime_ns\":{},\"argv\":[{}]}}\n", json_string(&path), id.size, id.dev, id.ino, id.mtime_ns, argv));
@@ -236,7 +249,7 @@ mod tests {
     }
 
     #[test]
-    fn id_collision_retries_and_entropy_errors_fail_closed() {
+    fn id_collision_and_entropy_errors_fail_closed() {
         let roots = || {
             vec![
                 (
@@ -249,17 +262,17 @@ mod tests {
                 ),
             ]
         };
-        let mut ids = ["first", "first", "second"].into_iter();
-        let plans = build_plans_with_ids(
+        let mut calls = 0;
+        let error = build_plans_with_ids(
             roots(),
             |_, _| Ok(Vec::new()),
-            || Ok(ids.next().unwrap().into()),
+            || {
+                calls += 1;
+                Ok("same".into())
+            },
         )
-        .unwrap();
-        assert_eq!(plans[0].id, "first");
-        assert_eq!(plans[1].id, "second");
-        let error =
-            build_plans_with_ids(roots(), |_, _| Ok(Vec::new()), || Ok("same".into())).unwrap_err();
+        .unwrap_err();
+        assert_eq!(calls, 2);
         assert!(matches!(error, BuildError::Entropy(_)));
         let error = build_plans_with_ids(
             roots(),
@@ -366,4 +379,127 @@ mod tests {
         assert_eq!(base64(b"foo"), "Zm9v");
         assert_eq!(json_string("a\n\"\\"), "\"a\\u000a\\\"\\\\\"");
     }
+}
+
+/// Serialize a plan record. The hash is computed only from D-52 canonical rows.
+pub fn document(plan: &Plan, created: std::time::SystemTime) -> std::io::Result<String> {
+    let duration = created
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| std::io::Error::other("clock before Unix epoch"))?;
+    let created = timestamp(duration.as_secs(), duration.subsec_nanos());
+    let canonical = canonical_rows(&plan.rows);
+    let mut rows = Vec::with_capacity(plan.rows.len());
+    let mut sorted: Vec<_> = plan.rows.iter().collect();
+    sorted.sort_by(|a, b| {
+        a.candidate
+            .path
+            .as_os_str()
+            .as_bytes()
+            .cmp(b.candidate.path.as_os_str().as_bytes())
+    });
+    for (line, row) in canonical.lines().zip(sorted) {
+        let prefix = line
+            .strip_suffix('}')
+            .ok_or_else(|| std::io::Error::other("invalid canonical row"))?;
+        rows.push(format!(
+            "{prefix},\"path\":{},\"status\":\"planned\"}}",
+            json_string(&row.candidate.path.to_string_lossy())
+        ));
+    }
+    let skipped = plan
+        .discovery
+        .skipped
+        .iter()
+        .map(|skip| {
+            format!(
+                "{{\"path\":{},\"path_raw_b64\":{},\"reason\":{}}}",
+                json_string(&skip.path.to_string_lossy()),
+                json_string(&base64(skip.path.as_os_str().as_bytes())),
+                json_string(&skip.reason)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    Ok(format!("{{\"schema\":1,\"plan_id\":{},\"created\":{},\"root\":{},\"root_raw_b64\":{},\"plan_hash\":{},\"rows\":[{}],\"skipped\":[{}]}}\n", json_string(&plan.id), json_string(&created), json_string(&plan.root.to_string_lossy()), json_string(&base64(plan.root.as_os_str().as_bytes())), json_string(&plan.hash), rows.join(","), skipped))
+}
+
+// UTC civil date conversion, Gregorian calendar; no external time dependency.
+fn timestamp(seconds: u64, nanos: u32) -> String {
+    let days = (seconds / 86_400) as i64 + 719_468;
+    let era = days / 146_097;
+    let day_of_era = days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
+    let mut year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
+    year += i64::from(month <= 2);
+    let time = seconds % 86_400;
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{nanos:09}Z",
+        time / 3600,
+        (time % 3600) / 60,
+        time % 60
+    )
+}
+
+/// Publish an immutable plan using create-new temp and a no-overwrite hard link.
+pub fn publish(
+    plans_dir: &std::path::Path,
+    plan: &Plan,
+    created: std::time::SystemTime,
+) -> std::io::Result<std::path::PathBuf> {
+    use std::io::Write;
+    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+    fn private_dir(path: &std::path::Path) -> std::io::Result<()> {
+        if path.is_dir() {
+            return Ok(());
+        }
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            private_dir(parent)?;
+        }
+        match std::fs::DirBuilder::new().mode(0o700).create(path) {
+            Ok(()) => std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && path.is_dir() => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+    if plan.id.len() != 32
+        || !plan
+            .id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
+        return Err(std::io::Error::other("invalid plan id"));
+    }
+    let bytes = document(plan, created)?;
+    private_dir(plans_dir)?;
+    let final_path = plans_dir.join(format!("{}.json", plan.id));
+    let temp = plans_dir.join(format!("{}.json.tmp", plan.id));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&temp)?;
+    let result = (|| {
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        file.write_all(bytes.as_bytes())?;
+        file.sync_all()?;
+        std::fs::hard_link(&temp, &final_path).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::AlreadyExists {
+                std::io::Error::other("plan_id_collision")
+            } else {
+                e
+            }
+        })?;
+        std::fs::remove_file(&temp)?;
+        std::fs::File::open(plans_dir)?.sync_all()?;
+        Ok(final_path)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temp);
+    }
+    result
 }

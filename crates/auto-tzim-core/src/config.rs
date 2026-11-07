@@ -451,6 +451,8 @@ pub enum ConfigError {
     Invalid(Vec<String>),
     /// An unexpected internal failure, distinct from invalid user configuration.
     Internal(String),
+    /// The target tree changed while scanning.
+    TreeChanged(String),
     Io(std::io::Error),
     /// Another process currently holds the configuration lock.
     Locked(String),
@@ -461,6 +463,7 @@ impl std::fmt::Display for ConfigError {
         match self {
             Self::Invalid(errors) => write!(f, "{}", errors.join("\n")),
             Self::Internal(error) => write!(f, "internal error: {error}"),
+            Self::TreeChanged(error) => write!(f, "{error}"),
             Self::Io(error) => write!(f, "configuration I/O: {error}"),
             Self::Locked(holder) => write!(f, "configuration locked: {holder}"),
         }
@@ -630,6 +633,9 @@ pub fn validate_config(config: &Config) -> Vec<String> {
         }
         if !(1..=21_600).contains(&folder.timeout_seconds) {
             errors.push(format!("{label}.timeout_seconds: expected 1–21600"));
+        }
+        if folder.exclude_globs.iter().any(String::is_empty) {
+            errors.push(format!("{label}.exclude_globs: empty pattern"));
         }
         for format in &folder.formats {
             if !["png", "gzip", "zip", "ico", "jpeg", "tiff", "zlib"].contains(&format.as_str()) {

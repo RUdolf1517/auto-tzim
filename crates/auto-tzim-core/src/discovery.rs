@@ -3,7 +3,7 @@ use crate::config::Folder;
 use crate::stability::{self, Identity};
 use std::collections::BTreeMap;
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -26,6 +26,8 @@ pub struct Skip {
 pub struct Discovery {
     pub candidates: Vec<Candidate>,
     pub skipped: Vec<Skip>,
+    /// Diagnostics not represented as plan rows, such as orphan temps.
+    pub diagnostics: Vec<Skip>,
     pub directories: u64,
     pub max_depth: usize,
     pub files_seen: u64,
@@ -46,6 +48,26 @@ fn walk_with_order(
     now: SystemTime,
     reverse: bool,
 ) -> Result<Discovery, String> {
+    walk_with_hook_and_order(root, profile, now, reverse, &|_| {})
+}
+
+/// Inject a callback between enumeration and directory identity recheck.
+pub fn walk_with_hook(
+    root: &Path,
+    profile: &Folder,
+    now: SystemTime,
+    hook: &dyn Fn(&Path),
+) -> Result<Discovery, String> {
+    walk_with_hook_and_order(root, profile, now, false, hook)
+}
+
+fn walk_with_hook_and_order(
+    root: &Path,
+    profile: &Folder,
+    now: SystemTime,
+    reverse: bool,
+    hook: &dyn Fn(&Path),
+) -> Result<Discovery, String> {
     let metadata = std::fs::symlink_metadata(root).map_err(|e| format!("root: {e}"))?;
     if !metadata.file_type().is_dir() {
         return Err(format!("root is not a directory: {}", root.display()));
@@ -58,6 +80,7 @@ fn walk_with_order(
         profile,
         now,
         reverse,
+        hook,
     };
     visit(
         root,
@@ -91,6 +114,7 @@ struct WalkOptions<'a> {
     profile: &'a Folder,
     now: SystemTime,
     reverse: bool,
+    hook: &'a dyn Fn(&Path),
 }
 
 fn visit(
@@ -106,6 +130,7 @@ fn visit(
         profile,
         now,
         reverse,
+        hook,
     } = *options;
     let dir = root.join(relative);
     check_directory(root, &dir, expected)?;
@@ -117,6 +142,7 @@ fn visit(
         .map_err(|e| format!("{}: {e}", dir.display()))?;
     // Detect many swaps that occurred during enumeration. This is not an
     // atomic no-follow guarantee: an attacker can still replace and restore it.
+    hook(&dir);
     check_directory(root, &dir, expected)?;
     if reverse {
         entries.sort_by(|a, b| b.file_name().as_bytes().cmp(a.file_name().as_bytes()));
@@ -138,19 +164,12 @@ fn visit(
             if file_type.is_file() {
                 *out.filtered_files.entry("orphan_temp".into()).or_default() += 1;
             }
-            out.skipped.push(Skip {
-                path,
-                reason: "orphan_temp".into(),
-            });
-            continue;
-        }
-        // Hard-linked ordinary files are refused before configurable scope or
-        // age policy; the mandatory orphan-temp rule above remains separate.
-        if file_type.is_file() && metadata.nlink() > 1 {
-            out.skipped.push(Skip {
-                path,
-                reason: "hardlink_skip".into(),
-            });
+            if out.diagnostics.is_empty() {
+                out.diagnostics.push(Skip {
+                    path,
+                    reason: "orphan_temp".into(),
+                });
+            }
             continue;
         }
         let exclusion = profile.exclude_globs.iter().find(|pattern| {
@@ -238,6 +257,14 @@ fn visit(
                     path,
                     reason: reason.into(),
                 });
+            } else if !format_selected(name_bytes, &profile.formats) {
+                *out.filtered_files
+                    .entry("format_not_selected".into())
+                    .or_default() += 1;
+                out.skipped.push(Skip {
+                    path,
+                    reason: "skipped_policy: format_not_selected".into(),
+                });
             } else {
                 out.candidates.push(Candidate { path, identity });
             }
@@ -262,6 +289,27 @@ fn visit(
     Ok(())
 }
 
+fn format_selected(name: &[u8], formats: &[String]) -> bool {
+    if formats.is_empty() {
+        return true;
+    }
+    let Some(dot) = name.iter().rposition(|&byte| byte == b'.') else {
+        return false;
+    };
+    let extension = name[dot + 1..].to_ascii_lowercase();
+    let kind = match extension.as_slice() {
+        b"png" => "png",
+        b"gz" => "gzip",
+        b"zip" => "zip",
+        b"ico" => "ico",
+        b"jpg" | b"jpeg" => "jpeg",
+        b"tif" | b"tiff" => "tiff",
+        b"zlib" => "zlib",
+        _ => return false,
+    };
+    formats.iter().any(|format| format == kind)
+}
+
 // Best-effort race detection only: path-based std APIs cannot make this check
 // atomic with read_dir. An authoritative no-follow primitive is still needed.
 fn check_directory(root: &Path, dir: &Path, expected: &Identity) -> Result<(), String> {
@@ -269,15 +317,21 @@ fn check_directory(root: &Path, dir: &Path, expected: &Identity) -> Result<(), S
     let current = Identity::from_metadata(&metadata);
     if !metadata.file_type().is_dir() || current.dev != expected.dev || current.ino != expected.ino
     {
-        return Err(format!("directory changed during scan: {}", dir.display()));
+        return Err(format!(
+            "tree_changed: directory changed during scan: {}",
+            dir.display()
+        ));
     }
     let canonical = std::fs::canonicalize(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     if !canonical.starts_with(root) {
-        return Err(format!("containment violation: {}", dir.display()));
+        return Err(format!(
+            "tree_changed: containment violation: {}",
+            dir.display()
+        ));
     }
     if canonical != dir {
         return Err(format!(
-            "directory path changed during scan: {}",
+            "tree_changed: directory path changed during scan: {}",
             dir.display()
         ));
     }
@@ -292,10 +346,16 @@ fn check_parent(root: &Path, full: &Path) -> Result<(), String> {
     let resolved =
         std::fs::canonicalize(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     if !resolved.starts_with(root) {
-        return Err(format!("containment violation: {}", full.display()));
+        return Err(format!(
+            "tree_changed: containment violation: {}",
+            full.display()
+        ));
     }
     if resolved != parent {
-        return Err(format!("parent changed during scan: {}", full.display()));
+        return Err(format!(
+            "tree_changed: parent changed during scan: {}",
+            full.display()
+        ));
     }
     Ok(())
 }
@@ -442,7 +502,7 @@ mod walk_tests {
         assert_eq!(result.directories, 2);
         assert_eq!(result.max_depth, 1);
         assert_eq!(result.limits.get("excluded by .git/**"), Some(&1));
-        assert!(result.skipped.iter().any(|s| s.reason == "orphan_temp"));
+        assert!(result.diagnostics.iter().any(|s| s.reason == "orphan_temp"));
         assert!(result.skipped.iter().any(|s| s.reason.contains("symlink")));
         let shallow = Folder {
             recursive: false,
@@ -624,7 +684,7 @@ mod corpus_tests {
             .any(|s| s.path == Path::new("socket") && s.reason == "skipped_policy: socket"));
         assert_eq!(
             result
-                .skipped
+                .diagnostics
                 .iter()
                 .filter(|s| s.reason == "orphan_temp")
                 .count(),
@@ -641,30 +701,6 @@ mod corpus_tests {
             b"keep temp"
         );
         assert_eq!(std::fs::read(f.0.join("first")).unwrap(), b"keep");
-    }
-
-    #[test]
-    fn hardlinks_take_precedence_over_hidden_glob_and_age() {
-        let f = Fixture::new();
-        let first = f.0.join(".hidden");
-        std::fs::write(&first, b"shared").unwrap();
-        std::fs::hard_link(&first, f.0.join("excluded")).unwrap();
-        let profile = Folder {
-            exclude_globs: vec!["excluded".into()],
-            min_file_age_seconds: 3600,
-            ..Folder::default()
-        };
-        let result = walk(&f.0, &profile, SystemTime::now()).unwrap();
-        assert!(result.candidates.is_empty());
-        assert_eq!(
-            result
-                .skipped
-                .iter()
-                .filter(|s| s.reason == "hardlink_skip")
-                .count(),
-            2
-        );
-        assert!(result.filtered_files.is_empty());
     }
 
     #[test]
@@ -690,7 +726,7 @@ mod corpus_tests {
         );
         assert_eq!(
             result
-                .skipped
+                .diagnostics
                 .iter()
                 .filter(|row| row.reason == "orphan_temp")
                 .count(),

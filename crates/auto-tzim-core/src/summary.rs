@@ -22,7 +22,7 @@ pub fn plan(plan: &crate::planner::Plan) -> String {
         let argv = row
             .argv
             .iter()
-            .map(|arg| json_string(arg))
+            .map(|arg| json_string(&arg.to_string_lossy()))
             .collect::<Vec<_>>()
             .join(", ");
         let _ = writeln!(
@@ -36,6 +36,9 @@ pub fn plan(plan: &crate::planner::Plan) -> String {
         let reason = json_string(&skip.reason);
         let raw = base64(skip.path.as_os_str().as_bytes());
         let _ = writeln!(text, "skipped {path} path_raw_b64={raw} reason={reason}");
+    }
+    for diagnostic in &plan.discovery.diagnostics {
+        let _ = writeln!(text, "diagnostic: {}", diagnostic.reason.escape_debug());
     }
     text.push_str(&scope(&plan.discovery));
     text

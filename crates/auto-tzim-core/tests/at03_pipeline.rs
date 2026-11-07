@@ -131,7 +131,7 @@ fn reproducible_partial_fixture_across_discovery_planning_and_rendering() {
     );
     assert_eq!(
         first
-            .skipped
+            .diagnostics
             .iter()
             .filter(|s| s.reason == "orphan_temp")
             .count(),
@@ -149,7 +149,7 @@ fn reproducible_partial_fixture_across_discovery_planning_and_rendering() {
     let plans = planner::build_plans(vec![(profile.clone(), first)], |_, candidate| {
         Ok(vec![
             "fixture-only".into(),
-            candidate.path.to_string_lossy().into_owned(),
+            candidate.path.as_os_str().to_owned(),
         ])
     })
     .unwrap();

@@ -105,6 +105,36 @@ jobs:
             printf "argument=%s exit=%s stdout=<empty> stderr:\n" "$arg" "$status"
             cat stderr.txt
           done
+      - name: AT-03 real scan evidence
+        shell: bash
+        run: |
+          set -o pipefail
+          temp="$(mktemp -d)"
+          trap 'chmod -R u+w "$temp"; rm -rf "$temp"' EXIT
+          mkdir -p "$temp/root/nested" "$temp/home" "$temp/settings"
+          printf first > "$temp/root/a.png"
+          printf second > "$temp/root/nested/b.png"
+          touch -t 202001010000 "$temp/root/a.png" "$temp/root/nested/b.png"
+          export HOME="$temp/home" AUTO_TZIM_HOME="$temp/settings"
+          find "$temp/root" -print | LC_ALL=C sort > "$temp/list.before"
+          find "$temp/root" -type f -exec shasum -a 256 {} \; | LC_ALL=C sort > "$temp/hash.before"
+          target/debug/auto-tzim scan "$temp/root" > "$temp/first.out"
+          chmod -R a-w "$temp/root"
+          target/debug/auto-tzim "$temp/root" --dry-run > "$temp/second.out"
+          find "$temp/root" -print | LC_ALL=C sort > "$temp/list.after"
+          find "$temp/root" -type f -exec shasum -a 256 {} \; | LC_ALL=C sort > "$temp/hash.after"
+          cmp "$temp/list.before" "$temp/list.after"
+          cmp "$temp/hash.before" "$temp/hash.after"
+          test "$(find "$temp/settings/state/plans" -name '*.json' | wc -l | tr -d ' ')" = 2
+          files=("$temp/settings/state/plans/"*.json)
+          test "$(jq -c '.rows' "${files[0]}")" = "$(jq -c '.rows' "${files[1]}")"
+          expected="$(jq -r '.plan_hash' "${files[0]}")"
+          test "$expected" = "$(jq -r '.plan_hash' "${files[1]}")"
+          actual="$(jq -c '.rows[] | {path_raw_b64,size,dev,ino,mtime_ns,argv}' "${files[0]}" | shasum -a 256 | cut -d ' ' -f1)"
+          test "$expected" = "$actual"
+          test "$(jq '.rows | length' "${files[0]}")" = 2
+          test "$(jq -r '.plan_id' "${files[0]}")" != "$(jq -r '.plan_id' "${files[1]}")"
+          echo "::notice title=AT-03 real scan::planned=2 scans=2 roots_unchanged=yes readonly=success canonical_hash=$expected ids=different"
       - name: Record aggregate validation evidence
         shell: bash
         run: |

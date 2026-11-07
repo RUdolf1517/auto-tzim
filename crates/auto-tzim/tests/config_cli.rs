@@ -1082,3 +1082,17 @@ fn scan_invalid_batch_refuses_before_creating_state() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("overlapping_roots"));
     assert!(!s.root.join("config").exists());
 }
+
+#[test]
+fn invalid_batch_reports_second_root_even_when_first_cannot_be_read() {
+    use std::os::unix::fs::PermissionsExt;
+    let s = Sandbox::new();
+    let first = s.folder("unreadable-root");
+    let missing = s.root.join("not-present");
+    fs::set_permissions(&first, fs::Permissions::from_mode(0o000)).unwrap();
+    let out = s.run(&["scan", first.to_str().unwrap(), missing.to_str().unwrap()]);
+    fs::set_permissions(&first, fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("not-present"));
+    assert!(!s.root.join("config").exists());
+}

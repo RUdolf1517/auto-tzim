@@ -32,10 +32,22 @@ pub enum BuildError {
 /// Exact future arguments are injected by the caller, not inferred here.
 pub fn build_plans<F>(
     discoveries: Vec<(crate::config::Folder, crate::discovery::Discovery)>,
-    mut arguments: F,
+    arguments: F,
 ) -> Result<Vec<Plan>, BuildError>
 where
     F: FnMut(&crate::config::Folder, &Candidate) -> Result<Vec<String>, String>,
+{
+    build_plans_with_ids(discoveries, arguments, plan_id)
+}
+
+fn build_plans_with_ids<F, G>(
+    discoveries: Vec<(crate::config::Folder, crate::discovery::Discovery)>,
+    mut arguments: F,
+    mut next_id: G,
+) -> Result<Vec<Plan>, BuildError>
+where
+    F: FnMut(&crate::config::Folder, &Candidate) -> Result<Vec<String>, String>,
+    G: FnMut() -> std::io::Result<String>,
 {
     let mut plans = Vec::with_capacity(discoveries.len());
     let mut ids = std::collections::HashSet::new();
@@ -56,7 +68,7 @@ where
         });
         let mut unique = None;
         for _ in 0..16 {
-            let id = plan_id().map_err(BuildError::Entropy)?;
+            let id = next_id().map_err(BuildError::Entropy)?;
             if ids.insert(id.clone()) {
                 unique = Some(id);
                 break;
@@ -221,6 +233,41 @@ mod tests {
             Err("argument refusal".into())
         });
         assert!(matches!(failed, Err(BuildError::Arguments(_))));
+    }
+
+    #[test]
+    fn id_collision_retries_and_entropy_errors_fail_closed() {
+        let roots = || {
+            vec![
+                (
+                    crate::config::Folder::default(),
+                    crate::discovery::Discovery::default(),
+                ),
+                (
+                    crate::config::Folder::default(),
+                    crate::discovery::Discovery::default(),
+                ),
+            ]
+        };
+        let mut ids = ["first", "first", "second"].into_iter();
+        let plans = build_plans_with_ids(
+            roots(),
+            |_, _| Ok(Vec::new()),
+            || Ok(ids.next().unwrap().into()),
+        )
+        .unwrap();
+        assert_eq!(plans[0].id, "first");
+        assert_eq!(plans[1].id, "second");
+        let error =
+            build_plans_with_ids(roots(), |_, _| Ok(Vec::new()), || Ok("same".into())).unwrap_err();
+        assert!(matches!(error, BuildError::Entropy(_)));
+        let error = build_plans_with_ids(
+            roots(),
+            |_, _| Ok(Vec::new()),
+            || Err(std::io::Error::other("unavailable")),
+        )
+        .unwrap_err();
+        assert!(matches!(error, BuildError::Entropy(_)));
     }
 
     #[test]

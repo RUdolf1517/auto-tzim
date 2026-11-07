@@ -1064,6 +1064,17 @@ fn scan_invalid_batch_refuses_before_creating_state() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("missing"));
     assert!(!s.root.join("config").exists());
+    let link = s.root.join("alias");
+    std::os::unix::fs::symlink(&a, &link).unwrap();
+    let out = s.run(&[
+        "scan",
+        c.to_str().unwrap(),
+        link.to_str().unwrap(),
+        a.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("root_is_symlink"));
+    assert!(!s.root.join("config").exists());
     let child = a.join("child");
     fs::create_dir(&child).unwrap();
     let out = s.run(&[a.to_str().unwrap(), child.to_str().unwrap(), "--dry-run"]);

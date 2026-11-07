@@ -11,6 +11,71 @@ pub struct Row {
     pub argv: Vec<String>,
 }
 
+/// An in-memory plan for a single canonical root. This type does not publish files.
+#[derive(Debug)]
+pub struct Plan {
+    pub id: String,
+    pub root: std::path::PathBuf,
+    pub hash: String,
+    pub rows: Vec<Row>,
+    pub discovery: crate::discovery::Discovery,
+}
+
+/// Failure while assembling already-discovered roots.
+#[derive(Debug)]
+pub enum BuildError {
+    Arguments(String),
+    Entropy(std::io::Error),
+}
+
+/// Assemble one plan per root without invoking a process or writing plan files.
+/// Exact future arguments are injected by the caller, not inferred here.
+pub fn build_plans<F>(
+    discoveries: Vec<(crate::config::Folder, crate::discovery::Discovery)>,
+    mut arguments: F,
+) -> Result<Vec<Plan>, BuildError>
+where
+    F: FnMut(&crate::config::Folder, &Candidate) -> Result<Vec<String>, String>,
+{
+    let mut plans = Vec::with_capacity(discoveries.len());
+    let mut ids = std::collections::HashSet::new();
+    for (folder, discovery) in discoveries {
+        let mut rows = Vec::with_capacity(discovery.candidates.len());
+        for candidate in &discovery.candidates {
+            rows.push(Row {
+                candidate: candidate.clone(),
+                argv: arguments(&folder, candidate).map_err(BuildError::Arguments)?,
+            });
+        }
+        rows.sort_by(|a, b| {
+            a.candidate
+                .path
+                .as_os_str()
+                .as_bytes()
+                .cmp(b.candidate.path.as_os_str().as_bytes())
+        });
+        let mut unique = None;
+        for _ in 0..16 {
+            let id = plan_id().map_err(BuildError::Entropy)?;
+            if ids.insert(id.clone()) {
+                unique = Some(id);
+                break;
+            }
+        }
+        let id = unique
+            .ok_or_else(|| BuildError::Entropy(std::io::Error::other("repeated plan IDs")))?;
+        let hash = plan_hash(&rows);
+        plans.push(Plan {
+            id,
+            root: folder.root,
+            hash,
+            rows,
+            discovery,
+        });
+    }
+    Ok(plans)
+}
+
 /// Return canonical JSON lines in D-52's fixed key and bytewise path order.
 pub fn canonical_rows(rows: &[Row]) -> String {
     let mut rows: Vec<_> = rows.iter().collect();
@@ -120,6 +185,44 @@ mod tests {
         assert_ne!(base, plan_hash(&[changed]));
         assert_ne!(plan_id().unwrap(), plan_id().unwrap());
     }
+    #[test]
+    fn in_memory_plans_are_per_root_ordered_and_do_not_depend_on_batch() {
+        let a = row().candidate;
+        let mut b = a.clone();
+        b.path = "a.png".into();
+        let found = || crate::discovery::Discovery {
+            candidates: vec![a.clone(), b.clone()],
+            ..crate::discovery::Discovery::default()
+        };
+        let folder = |path: &str| crate::config::Folder {
+            root: path.into(),
+            ..crate::config::Folder::default()
+        };
+        let argument = |_: &crate::config::Folder, _: &Candidate| Ok(vec!["test-only".into()]);
+        let alone = build_plans(vec![(folder("/a"), found())], argument).unwrap();
+        let batch = build_plans(
+            vec![(folder("/a"), found()), (folder("/b"), found())],
+            argument,
+        )
+        .unwrap();
+        assert_eq!(batch.len(), 2);
+        assert_eq!(batch[0].root, PathBuf::from("/a"));
+        assert_eq!(batch[1].root, PathBuf::from("/b"));
+        assert_ne!(batch[0].id, batch[1].id);
+        assert_ne!(alone[0].id, batch[0].id);
+        assert_eq!(alone[0].hash, batch[0].hash);
+        assert_eq!(
+            canonical_rows(&alone[0].rows),
+            canonical_rows(&batch[0].rows)
+        );
+        assert_eq!(batch[0].rows[0].candidate.path, PathBuf::from("a.png"));
+        assert_eq!(batch[0].rows[1].candidate.path, PathBuf::from("x.png"));
+        let failed = build_plans(vec![(folder("/a"), found())], |_, _| {
+            Err("argument refusal".into())
+        });
+        assert!(matches!(failed, Err(BuildError::Arguments(_))));
+    }
+
     #[test]
     fn actual_mtime_changes_hash_without_changing_size() {
         use std::sync::atomic::{AtomicU64, Ordering};

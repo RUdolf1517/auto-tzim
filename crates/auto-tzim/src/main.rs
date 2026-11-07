@@ -203,6 +203,7 @@ fn inspect_state(state: &std::path::Path) -> Result<String, ConfigError> {
         Err(error) => return Err(err(error)),
     };
     let runs = state.join("runs");
+    let mut tail_recovered = false;
     match std::fs::read_dir(&runs) {
         Ok(entries) => {
             for entry in entries {
@@ -210,13 +211,37 @@ fn inspect_state(state: &std::path::Path) -> Result<String, ConfigError> {
                 let header = std::fs::read(entry.path().join("run.json")).map_err(err)?;
                 auto_tzim_core::json::parse(&header)
                     .map_err(|e| ConfigError::Internal(format!("run header: {e}")))?;
+                for name in ["files.jsonl", "journal.jsonl"] {
+                    let file = entry.path().join(name);
+                    let bytes = match std::fs::read(&file) {
+                        Ok(bytes) => bytes,
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                        Err(e) => return Err(err(e)),
+                    };
+                    let mut lines: Vec<_> = bytes.split(|b| *b == b'\n').collect();
+                    if lines.last() == Some(&&b""[..]) {
+                        lines.pop();
+                    }
+                    for (index, line) in lines.iter().enumerate() {
+                        if let Err(error) = auto_tzim_core::json::parse(line) {
+                            if index + 1 == lines.len() {
+                                tail_recovered = true;
+                            } else {
+                                return Err(ConfigError::Internal(format!(
+                                    "{}: invalid non-tail line: {error}",
+                                    file.display()
+                                )));
+                            }
+                        }
+                    }
+                }
             }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
         Err(error) => return Err(err(error)),
     }
     Ok(format!(
-        "schema={schema} runs=readable tail_recovery=not checked (no runner at AT-04)"
+        "schema={schema} runs=readable tail_recovered={tail_recovered}"
     ))
 }
 

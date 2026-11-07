@@ -1713,7 +1713,7 @@ fn at04_adapter_corpus_versions_schemas_and_tripwires() {
             id: "A-11/extra",
             vars: vec![(
                 "AT04_CAPABILITIES",
-                AT04_CAPS.replace('{', "{\"extra\":true,"),
+                AT04_CAPS.replacen('{', "{\"extra\":true,", 1),
             )],
             exit: 0,
             calls: 2,
@@ -1814,4 +1814,119 @@ fn at04_missing_and_non_executable_binary_refused() {
             String::from_utf8_lossy(&out.stderr)
         );
     }
+}
+
+#[test]
+fn at04_doctor_identity_and_exit_codes() {
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let fake = s.fake_tzim();
+    let expected_hash = Command::new("shasum")
+        .args(["-a", "256"])
+        .arg(&fake)
+        .output()
+        .unwrap();
+    assert!(expected_hash.status.success());
+    let expected_hash = String::from_utf8(expected_hash.stdout).unwrap();
+    let hash = expected_hash.split_whitespace().next().unwrap();
+    let out = s.run_scenario(&["doctor"], &[("AT04_STDIN_CHECK", "1")]);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8(out.stdout).unwrap();
+    for part in [
+        format!("path={}", fake.display()),
+        format!("realpath={}", fs::canonicalize(&fake).unwrap().display()),
+        format!("size={}", fs::metadata(&fake).unwrap().len()),
+        format!("sha256={hash}"),
+        "version=0.16.1".into(),
+        "capabilities_schema=1".into(),
+        "result_schema=2".into(),
+        "adapter=tzim-0.16".into(),
+    ] {
+        assert!(text.contains(&part), "missing {part}: {text}");
+    }
+    assert_eq!(
+        fs::read_to_string(s.root.join("tzim-calls")).unwrap(),
+        "--version\n--capabilities\n"
+    );
+    let bad_binary = s.run_scenario(&["doctor"], &[("AT04_VERSION", "tzim 0.17.0\n")]);
+    assert_eq!(bad_binary.status.code(), Some(3));
+    fs::write(s.config(), "malformed [[[").unwrap();
+    assert_eq!(s.run_scenario(&["doctor"], &[]).status.code(), Some(2));
+    fs::write(
+        s.config(),
+        format!(
+            "schema=1\n[installation]\ntzim_path={:?}\n",
+            fake.to_str().unwrap()
+        ),
+    )
+    .unwrap();
+    fs::create_dir_all(s.root.join("config/state")).unwrap();
+    fs::write(s.root.join("config/state/schema.json"), b"invalid").unwrap();
+    assert_eq!(s.run_scenario(&["doctor"], &[]).status.code(), Some(7));
+}
+
+#[test]
+fn at04_shared_probe_timeout_is_bounded() {
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let root = s.folder("root");
+    let now = std::time::Instant::now();
+    let out = s.run_scenario(
+        &["scan", root.to_str().unwrap()],
+        &[("AT04_DELAY_MS", "6000")],
+    );
+    let elapsed = now.elapsed();
+    assert_eq!(out.status.code(), Some(3));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("timeout after"));
+    assert!(elapsed < std::time::Duration::from_secs(14), "{elapsed:?}");
+    assert_eq!(
+        fs::read_to_string(s.root.join("tzim-calls")).unwrap(),
+        "--version\n--capabilities\n"
+    );
+    assert!(!s.root.join("config/state/plans").exists());
+    eprintln!(
+        "AT04_TIMEOUT elapsed_ms={} exit=3 calls=2",
+        elapsed.as_millis()
+    );
+}
+
+#[test]
+fn at04_empty_profile_ignores_binary_default_formats_p01() {
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let root = s.folder("root");
+    let image = root.join("-leading.png");
+    fs::write(&image, b"not read").unwrap();
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&image)
+        .unwrap()
+        .set_modified(SystemTime::now() - std::time::Duration::from_secs(120))
+        .unwrap();
+    let out = s.run_scenario(
+        &["scan", root.to_str().unwrap()],
+        &[("AT04_CAPABILITIES", AT04_CAPS)],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let plan = fs::read_dir(s.root.join("config/state/plans"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let plan = fs::read_to_string(plan).unwrap();
+    assert!(
+        plan.contains("\"argv\":[\"--\",\"-leading.png\"]"),
+        "{plan}"
+    );
+    assert!(!plan.contains("--formats"));
 }

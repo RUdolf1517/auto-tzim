@@ -92,6 +92,10 @@ jobs:
           set -o pipefail
           cargo test --locked -p auto-tzim-core real_proc_mount_boundary_is_reported_without_crossing -- --nocapture 2>&1 | tee "$RUNNER_TEMP/at03-mount"
           echo "::notice title=AT-03 mount::$(grep '^AT03_MOUNT ' "$RUNNER_TEMP/at03-mount" || echo 'not run: /proc not a separate filesystem')"
+      - name: Report mount boundary platform skip
+        if: runner.os != 'Linux'
+        run: |
+          echo '::notice title=AT-03 mount::not run on macOS: fixture uses Linux /proc mount'
       - name: Partial AT-03 pipeline evidence
         shell: bash
         run: |
@@ -121,6 +125,31 @@ jobs:
           set -o pipefail
           cargo test --locked -p auto-tzim --test config_cli at03_names_corpus_emits_one_planned_row_per_constructible_name -- --nocapture 2>&1 | tee "$RUNNER_TEMP/at03-names"
           echo "::notice title=AT-03 names::$(grep '^AT03_NAMES ' "$RUNNER_TEMP/at03-names")"
+      - name: Report macOS filesystem-specific partial skips
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked -p auto-tzim-core hostile_names_remain_bytes_and_are_sorted -- --nocapture 2>&1 | tee "$RUNNER_TEMP/at04-macos-names"
+          cargo test --locked -p auto-tzim --test config_cli non_utf8_directory_name_does_not_panic -- --nocapture 2>&1 | tee -a "$RUNNER_TEMP/at04-macos-names"
+          if grep -q 'N-17 skipped' "$RUNNER_TEMP/at04-macos-names"; then
+            echo '::notice title=macOS filesystem skip::N-17 non-UTF-8 name rejected by filesystem (EILSEQ 92); other names tested.'
+          fi
+          if grep -q 'non-UTF-8 directory creation skipped' "$RUNNER_TEMP/at04-macos-names"; then
+            echo '::notice title=macOS filesystem skip::non-UTF-8 directory rejected by filesystem (EILSEQ 92); missing-path CLI still tested.'
+          fi
+      - name: AT-04 adapter evidence
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked -p auto-tzim --test config_cli at04_adapter_corpus_versions_schemas_and_tripwires -- --nocapture 2>&1 | tee "$RUNNER_TEMP/at04-cases"
+          cargo test --locked -p auto-tzim --test config_cli at04_missing_and_non_executable_binary_refused -- --nocapture 2>&1 | tee -a "$RUNNER_TEMP/at04-cases"
+          cargo test --locked -p auto-tzim --test config_cli at04_shared_probe_timeout_is_bounded -- --nocapture 2>&1 | tee -a "$RUNNER_TEMP/at04-cases"
+          cargo test --locked -p auto-tzim --test config_cli at04_doctor_identity_and_exit_codes -- --nocapture 2>&1 | tee -a "$RUNNER_TEMP/at04-cases"
+          cargo test --locked -p auto-tzim --test config_cli at04_empty_profile_ignores_binary_default_formats_p01
+          cargo test --locked -p auto-tzim-core reason_and_note_are_opaque -- --nocapture 2>&1 | tee -a "$RUNNER_TEMP/at04-cases"
+          grep '^AT04_' "$RUNNER_TEMP/at04-cases" > "$RUNNER_TEMP/at04-raw"
+          python3 -c 'import base64,os,pathlib,zlib; data=base64.b64encode(zlib.compress(pathlib.Path(os.environ["RUNNER_TEMP"], "at04-raw").read_bytes(),9)).decode(); assert len(data) <= 20000, "evidence exceeds GitHub step annotation limit"; [print(f"::notice title=AT-04 raw zlib {i//2000:03d}::{data[i:i+2000]}") for i in range(0,len(data),2000)]'
       - name: AT-03 real scan evidence
         shell: bash
         run: |
@@ -132,6 +161,8 @@ jobs:
           printf second > "$temp/root/nested/b.png"
           touch -t 202001010000 "$temp/root/a.png" "$temp/root/nested/b.png"
           export HOME="$temp/home" AUTO_TZIM_HOME="$temp/settings"
+          cargo build --locked -p auto-tzim-harness
+          printf "schema=1\n[installation]\ntzim_path='%s'\n" "$PWD/target/debug/auto-tzim-harness" > "$AUTO_TZIM_HOME/config.toml"
           find "$temp/root" -print | LC_ALL=C sort > "$temp/list.before"
           find "$temp/root" -type f -exec shasum -a 256 {} \; | LC_ALL=C sort > "$temp/hash.before"
           target/debug/auto-tzim scan "$temp/root" > "$temp/first.out"

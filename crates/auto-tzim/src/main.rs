@@ -27,6 +27,8 @@ enum Command {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Inspect the configured binary and local state.
+    Doctor,
     /// Validate the configuration.
     Config {
         #[command(subcommand)]
@@ -157,6 +159,92 @@ fn scan_inputs(matches: &clap::ArgMatches) -> Vec<RootInput> {
     inputs.into_iter().map(|(_, input)| input).collect()
 }
 
+fn inspect_binary(settings: &Config) -> Result<auto_tzim_core::adapter::Identity, ConfigError> {
+    auto_tzim_core::adapter::inspect(std::path::Path::new(&settings.installation.tzim_path))
+        .map_err(|error| ConfigError::IncompatibleTzim(error.to_string()))
+}
+
+fn print_identity(identity: &auto_tzim_core::adapter::Identity) {
+    println!("tzim: path={} realpath={} size={} sha256={} version={} capabilities_schema={} result_schema={} adapter={}",
+        identity.path.display(), identity.realpath.display(), identity.size, identity.sha256,
+        identity.version, identity.capabilities_schema, identity.result_schema, identity.adapter);
+}
+
+fn inspect_state(state: &std::path::Path) -> Result<String, ConfigError> {
+    let err = |error: std::io::Error| {
+        ConfigError::Internal(format!("state {}: {error}", state.display()))
+    };
+    match std::fs::read_dir(state) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok("not initialized".into())
+        }
+        Err(error) => return Err(err(error)),
+        Ok(entries) => {
+            for entry in entries {
+                entry.map_err(err)?;
+            }
+        }
+    }
+    let schema = match std::fs::read(state.join("schema.json")) {
+        Ok(bytes) => {
+            let value = auto_tzim_core::json::parse(&bytes)
+                .map_err(|e| ConfigError::Internal(format!("state schema: {e}")))?;
+            let number = value
+                .integer("schema")
+                .map_err(|e| ConfigError::Internal(format!("state schema: {e}")))?;
+            if number != 1 {
+                return Err(ConfigError::Internal(format!(
+                    "unsupported state schema: {number}"
+                )));
+            }
+            "1"
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => "not initialized",
+        Err(error) => return Err(err(error)),
+    };
+    let runs = state.join("runs");
+    let mut tail_recovered = false;
+    match std::fs::read_dir(&runs) {
+        Ok(entries) => {
+            for entry in entries {
+                let entry = entry.map_err(err)?;
+                let header = std::fs::read(entry.path().join("run.json")).map_err(err)?;
+                auto_tzim_core::json::parse(&header)
+                    .map_err(|e| ConfigError::Internal(format!("run header: {e}")))?;
+                for name in ["files.jsonl", "journal.jsonl"] {
+                    let file = entry.path().join(name);
+                    let bytes = match std::fs::read(&file) {
+                        Ok(bytes) => bytes,
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                        Err(e) => return Err(err(e)),
+                    };
+                    let mut lines: Vec<_> = bytes.split(|b| *b == b'\n').collect();
+                    if lines.last() == Some(&&b""[..]) {
+                        lines.pop();
+                    }
+                    for (index, line) in lines.iter().enumerate() {
+                        if let Err(error) = auto_tzim_core::json::parse(line) {
+                            if index + 1 == lines.len() {
+                                tail_recovered = true;
+                            } else {
+                                return Err(ConfigError::Internal(format!(
+                                    "{}: invalid non-tail line: {error}",
+                                    file.display()
+                                )));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+        Err(error) => return Err(err(error)),
+    }
+    Ok(format!(
+        "schema={schema} runs=readable tail_recovered={tail_recovered}"
+    ))
+}
+
 fn execute(cli: Cli, matches: &clap::ArgMatches, path_first: bool) -> Result<(), ConfigError> {
     if let Command::Scan {
         no_recursive,
@@ -184,6 +272,9 @@ fn execute(cli: Cli, matches: &clap::ArgMatches, path_first: bool) -> Result<(),
         };
         let profiles =
             batch::resolve_inputs(inputs, &settings, override_recursive).map_err(invalid)?;
+        let profiles = batch::preflight(profiles).map_err(invalid)?;
+        let identity = inspect_binary(&settings)?;
+        print_identity(&identity);
         let now = std::time::SystemTime::now();
         let discovered = batch::discover(profiles, now).map_err(|error| match error {
             batch::BatchError::Invalid(message) => invalid(message),
@@ -214,6 +305,29 @@ fn execute(cli: Cli, matches: &clap::ArgMatches, path_first: bool) -> Result<(),
         return Ok(());
     }
 
+    if matches!(&cli.command, Command::Doctor) {
+        let path = config::config_path()?;
+        let settings = config::load(&path)?;
+        let state = path
+            .parent()
+            .ok_or_else(|| ConfigError::Internal("missing state parent".into()))?
+            .join("state");
+        let state_status = inspect_state(&state)?;
+        let identity = inspect_binary(&settings)?;
+        print_identity(&identity);
+        println!(
+            "platform: {} {}",
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        );
+        println!("config: {} schema={}", path.display(), settings.schema);
+        println!("state: {} {}", state.display(), state_status);
+        println!(
+            "capabilities (description of this binary, not a guarantee): {:?}",
+            identity.capabilities
+        );
+        return Ok(());
+    }
     let path = config::config_path()?;
     let mutating = !matches!(
         &cli.command,
@@ -229,6 +343,7 @@ fn execute(cli: Cli, matches: &clap::ArgMatches, path_first: bool) -> Result<(),
     };
     let mut settings = config::load(&path)?;
     match cli.command {
+        Command::Doctor => return Err(ConfigError::Internal("doctor dispatch failure".into())),
         Command::Scan { .. } => return Err(ConfigError::Internal("scan dispatch failure".into())),
         Command::Config {
             command: ConfigCommand::Validate,
@@ -360,6 +475,7 @@ fn execute(cli: Cli, matches: &clap::ArgMatches, path_first: bool) -> Result<(),
 fn exit_code(error: &ConfigError) -> i32 {
     match error {
         ConfigError::Internal(_) => 7,
+        ConfigError::IncompatibleTzim(_) => 3,
         ConfigError::TreeChanged(_) => 6,
         ConfigError::Locked(_) => 8,
         ConfigError::Invalid(_) | ConfigError::Io(_) => 2,
@@ -374,6 +490,7 @@ fn main() {
             && arg != "config"
             && arg != "folder"
             && arg != "scan"
+            && arg != "doctor"
     });
     if path_first {
         args.insert(1, "scan".into());

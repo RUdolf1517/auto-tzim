@@ -132,6 +132,7 @@ jobs:
           cargo test --locked -p auto-tzim --test config_cli at04_adapter_corpus_versions_schemas_and_tripwires -- --nocapture 2>&1 | tee "$RUNNER_TEMP/at04-cases"
           cargo test --locked -p auto-tzim --test config_cli at04_missing_and_non_executable_binary_refused -- --nocapture 2>&1 | tee -a "$RUNNER_TEMP/at04-cases"
           cargo test --locked -p auto-tzim --test config_cli at04_shared_probe_timeout_is_bounded -- --nocapture 2>&1 | tee -a "$RUNNER_TEMP/at04-cases"
+          cargo test --locked -p auto-tzim --test config_cli at04_doctor_identity_and_exit_codes -- --nocapture 2>&1 | tee -a "$RUNNER_TEMP/at04-cases"
           cargo test --locked -p auto-tzim --test config_cli at04_empty_profile_ignores_binary_default_formats_p01
           cargo test --locked -p auto-tzim-core reason_and_note_are_opaque -- --nocapture 2>&1 | tee -a "$RUNNER_TEMP/at04-cases"
           grep '^AT04_' "$RUNNER_TEMP/at04-cases" > "$RUNNER_TEMP/at04-raw"

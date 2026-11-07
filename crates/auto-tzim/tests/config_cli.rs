@@ -1858,6 +1858,12 @@ fn at04_doctor_identity_and_exit_codes() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
+    eprintln!();
+    eprintln!(
+        "AT04_DOCTOR exit=0 independent_sha256={hash} stdout_b64={} stderr_b64={}",
+        auto_tzim_core::planner::base64(&out.stdout),
+        auto_tzim_core::planner::base64(&out.stderr)
+    );
     let text = String::from_utf8(out.stdout).unwrap();
     for part in [
         format!("path={}", fake.display()),
@@ -1889,6 +1895,19 @@ fn at04_doctor_identity_and_exit_codes() {
     .unwrap();
     fs::create_dir_all(s.root.join("config/state")).unwrap();
     fs::write(s.root.join("config/state/schema.json"), b"invalid").unwrap();
+    assert_eq!(s.run_scenario(&["doctor"], &[]).status.code(), Some(7));
+    eprintln!("AT04_DOCTOR_MATRIX exit_success=0 incompatible=3 bad_config=2 bad_state=7");
+    fs::write(s.root.join("config/state/schema.json"), br#"{"schema":1}"#).unwrap();
+    let run = s.root.join("config/state/runs/run1");
+    fs::create_dir_all(&run).unwrap();
+    fs::write(run.join("run.json"), br#"{"schema":1}"#).unwrap();
+    let journal = run.join("files.jsonl");
+    fs::write(&journal, b"{}\n{\"incomplete\":").unwrap();
+    let recovered = s.run_scenario(&["doctor"], &[]);
+    assert!(recovered.status.success());
+    assert!(String::from_utf8_lossy(&recovered.stdout).contains("tail_recovered=true"));
+    assert_eq!(fs::read(&journal).unwrap(), b"{}\n{\"incomplete\":");
+    fs::write(&journal, b"bad\n{}\n").unwrap();
     assert_eq!(s.run_scenario(&["doctor"], &[]).status.code(), Some(7));
 }
 

@@ -146,7 +146,7 @@ fn version(bytes: &[u8]) -> Result<String, Incompatible> {
         .map(|s| s.parse::<u64>())
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| failure(format!("--version: out of range {text:?}")))?;
-    if numbers[0] != 0 || numbers[1] != 16 {
+    if numbers[0] != 0 || (numbers[1] != 16 && numbers[1] != 17) {
         return Err(failure(format!("--version: unsupported {semver}")));
     }
     Ok(semver.into())

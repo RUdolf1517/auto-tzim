@@ -1025,3 +1025,516 @@ fn structural_validation_still_rejects_invalid_unavailable_profiles() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("must be absolute"));
 }
+
+#[test]
+fn recursive_default_and_explicit_profile_override() {
+    let sandbox = Sandbox::new();
+    let first = sandbox.folder("first");
+    let second = sandbox.folder("second");
+    assert!(sandbox
+        .run(&["folder", "add", first.to_str().unwrap()])
+        .status
+        .success());
+    assert!(
+        String::from_utf8_lossy(&sandbox.run(&["folder", "show", "first"]).stdout)
+            .contains("recursive = true")
+    );
+    assert!(sandbox
+        .run(&["folder", "add", second.to_str().unwrap(), "--no-recursive"])
+        .status
+        .success());
+    assert!(
+        String::from_utf8_lossy(&sandbox.run(&["folder", "show", "second"]).stdout)
+            .contains("recursive = false")
+    );
+}
+
+#[test]
+fn scan_invalid_batch_refuses_before_creating_state() {
+    let s = Sandbox::new();
+    let a = s.folder("a");
+    let c = s.folder("c");
+    let bad = s.root.join("missing");
+    let out = s.run(&[
+        "scan",
+        a.to_str().unwrap(),
+        bad.to_str().unwrap(),
+        c.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("missing"));
+    assert!(!s.root.join("config").exists());
+    let link = s.root.join("alias");
+    std::os::unix::fs::symlink(&a, &link).unwrap();
+    let out = s.run(&[
+        "scan",
+        c.to_str().unwrap(),
+        link.to_str().unwrap(),
+        a.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("root_is_symlink"));
+    assert!(!s.root.join("config").exists());
+    let child = a.join("child");
+    fs::create_dir(&child).unwrap();
+    let out = s.run(&[a.to_str().unwrap(), child.to_str().unwrap(), "--dry-run"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("overlapping_roots"));
+    assert!(!s.root.join("config").exists());
+}
+
+#[test]
+fn invalid_batch_reports_second_root_even_when_first_cannot_be_read() {
+    use std::os::unix::fs::PermissionsExt;
+    let s = Sandbox::new();
+    let first = s.folder("unreadable-root");
+    let missing = s.root.join("not-present");
+    fs::set_permissions(&first, fs::Permissions::from_mode(0o000)).unwrap();
+    let out = s.run(&["scan", first.to_str().unwrap(), missing.to_str().unwrap()]);
+    fs::set_permissions(&first, fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("not-present"));
+    assert!(!s.root.join("config").exists());
+}
+
+#[test]
+fn valid_scan_publishes_two_immutable_plans_with_equal_hashes() {
+    use std::time::Duration;
+    let s = Sandbox::new();
+    let root = s.folder("pictures");
+    let image = root.join("image.png");
+    fs::write(&image, b"original").unwrap();
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&image)
+        .unwrap()
+        .set_modified(SystemTime::now() - Duration::from_secs(120))
+        .unwrap();
+    let mut hashes = Vec::new();
+    for invocation in 0..2 {
+        let out = if invocation == 0 {
+            s.run(&["scan", root.to_str().unwrap()])
+        } else {
+            s.run(&[root.to_str().unwrap(), "--dry-run"])
+        };
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let output = String::from_utf8(out.stdout).unwrap();
+        assert!(output.contains("planned \"image.png\""));
+        hashes.push(
+            output
+                .lines()
+                .find_map(|line| line.strip_prefix("plan hash: "))
+                .unwrap()
+                .to_owned(),
+        );
+    }
+    assert_eq!(hashes[0], hashes[1]);
+    assert_eq!(fs::read(&image).unwrap(), b"original");
+    let files: Vec<_> = fs::read_dir(s.root.join("config/state/plans"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    assert_eq!(files.len(), 2);
+    assert_ne!(files[0], files[1]);
+    let first = fs::read_to_string(&files[0]).unwrap();
+    let second = fs::read_to_string(&files[1]).unwrap();
+    assert_ne!(first, second);
+    for text in [first, second] {
+        assert!(text.contains(&hashes[0]));
+        assert!(text.contains("\"status\":\"planned\""));
+        assert!(text.contains("\"argv\":[\"--\",\"image.png\"]"));
+    }
+}
+
+#[test]
+fn scan_direct_non_utf8_root_records_exact_bytes() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    let s = Sandbox::new();
+    let root = s.root.join(OsString::from_vec(b"raw-\xff".to_vec()));
+    match fs::create_dir(&root) {
+        Ok(()) => (),
+        Err(error) if error.raw_os_error() == Some(92) => {
+            eprintln!("non-UTF-8 root skipped: filesystem rejects the name: {error}");
+            return;
+        }
+        Err(error) => panic!("fixture setup: {error}"),
+    }
+    let out = Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
+        .env("HOME", s.root.join("home"))
+        .env("AUTO_TZIM_HOME", s.root.join("config"))
+        .arg("scan")
+        .arg(&root)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let plan = fs::read_dir(s.root.join("config/state/plans"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let text = fs::read_to_string(plan).unwrap();
+    let canonical = fs::canonicalize(&root).unwrap();
+    use std::os::unix::ffi::OsStrExt;
+    let encoded = auto_tzim_core::planner::base64(canonical.as_os_str().as_bytes());
+    assert!(text.contains(&format!("\"root_raw_b64\":\"{encoded}\"")));
+    assert!(text.contains("\"root\":"));
+}
+
+#[test]
+fn scan_profile_formats_filter_without_reading_and_build_sorted_argv() {
+    use std::time::Duration;
+    let s = Sandbox::new();
+    let root = s.folder("pictures");
+    for name in ["a.PNG", "b.gz", "c.zip"] {
+        let path = root.join(name);
+        fs::write(&path, b"not a real image").unwrap();
+        fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(120))
+            .unwrap();
+    }
+    let added = s.run(&[
+        "folder",
+        "add",
+        root.to_str().unwrap(),
+        "--formats",
+        "png,gzip",
+    ]);
+    assert!(
+        added.status.success(),
+        "{}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    let out = s.run(&["scan", "--folder", "pictures"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert!(text.contains("planned \"a.PNG\""));
+    assert!(text.contains("planned \"b.gz\""));
+    assert!(text.contains("format_not_selected"));
+    assert!(!text.contains("planned \"c.zip\""));
+    let plan = fs::read_dir(s.root.join("config/state/plans"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let text = fs::read_to_string(plan).unwrap();
+    assert!(text.contains("\"argv\":[\"--formats\",\"gzip,png\",\"--\",\"a.PNG\"]"));
+}
+
+#[test]
+fn valid_scan_never_spawns_tzim_or_interprets_hostile_names() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::Duration;
+    let s = Sandbox::new();
+    let root = s.folder("pictures");
+    for name in ["dollar$(touch ats_pwned).png", "back`touch ats_pwned2`.png"] {
+        let path = root.join(name);
+        fs::write(&path, b"x").unwrap();
+        fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(120))
+            .unwrap();
+    }
+    let counter = s.root.join("tzim-called");
+    let fake = s.root.join("fake-tzim");
+    fs::write(
+        &fake,
+        format!("#!/bin/sh\nprintf called > '{}'\n", counter.display()),
+    )
+    .unwrap();
+    fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
+    fs::create_dir_all(s.root.join("config")).unwrap();
+    fs::write(
+        s.config(),
+        format!(
+            "schema=1\n[installation]\ntzim_path={:?}\n",
+            fake.to_str().unwrap()
+        ),
+    )
+    .unwrap();
+    let out = s.run(&["scan", root.to_str().unwrap()]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(
+        text.lines()
+            .filter(|line| line.starts_with("planned "))
+            .count(),
+        2
+    );
+    assert!(!counter.exists());
+    for name in ["ats_pwned", "ats_pwned2"] {
+        assert!(!root.join(name).exists());
+        assert!(!std::path::Path::new(name).exists());
+    }
+}
+
+#[test]
+fn empty_exclusion_glob_is_rejected_at_config_load() {
+    let s = Sandbox::new();
+    let root = s.folder("pictures");
+    fs::create_dir_all(s.root.join("config")).unwrap();
+    fs::write(s.config(), format!("schema=1\n[installation]\n[[folder]]\nname='pictures'\nroot={:?}\nexclude_globs=['']\n", root.to_str().unwrap())).unwrap();
+    let out = s.run(&["scan", "--folder", "pictures"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("exclude_globs: empty pattern"));
+    assert!(!s.root.join("config/state/plans").exists());
+}
+
+#[test]
+fn three_roots_are_ordered_deduplicated_and_independent() {
+    use std::time::Duration;
+    let s = Sandbox::new();
+    let roots: Vec<_> = ["alpha", "beta", "gamma"]
+        .into_iter()
+        .map(|name| s.folder(name))
+        .collect();
+    for (i, root) in roots.iter().enumerate() {
+        let path = root.join(format!("file{i}.png"));
+        fs::write(&path, b"x").unwrap();
+        fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(120))
+            .unwrap();
+    }
+    let out = s.run(&[
+        "scan",
+        roots[1].to_str().unwrap(),
+        roots[0].to_str().unwrap(),
+        roots[2].to_str().unwrap(),
+        roots[0].to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let roots_order: Vec<_> = stdout
+        .lines()
+        .filter(|line| line.starts_with("root: "))
+        .collect();
+    assert_eq!(roots_order.len(), 3);
+    for (line, root) in roots_order.iter().zip([&roots[1], &roots[0], &roots[2]]) {
+        assert!(line.contains(root.to_str().unwrap()));
+    }
+    let plans_dir = s.root.join("config/state/plans");
+    let plans: Vec<_> = fs::read_dir(&plans_dir)
+        .unwrap()
+        .map(|entry| fs::read_to_string(entry.unwrap().path()).unwrap())
+        .collect();
+    assert_eq!(plans.len(), 3);
+    let original = plans
+        .iter()
+        .find(|text| text.contains(roots[0].to_str().unwrap()))
+        .unwrap();
+    let rows = |text: &str| {
+        text.split_once("\"rows\":[")
+            .unwrap()
+            .1
+            .split_once("],\"skipped\":")
+            .unwrap()
+            .0
+            .to_owned()
+    };
+    let hash = |text: &str| {
+        text.split_once("\"plan_hash\":\"")
+            .unwrap()
+            .1
+            .split('"')
+            .next()
+            .unwrap()
+            .to_owned()
+    };
+    let distinct_hashes: std::collections::HashSet<_> =
+        plans.iter().map(String::as_str).map(hash).collect();
+    assert_eq!(distinct_hashes.len(), 3);
+    let out = s.run(&["scan", roots[0].to_str().unwrap()]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let all: Vec<_> = fs::read_dir(&plans_dir)
+        .unwrap()
+        .map(|entry| fs::read_to_string(entry.unwrap().path()).unwrap())
+        .collect();
+    assert_eq!(all.len(), 4);
+    let repeat = all
+        .iter()
+        .find(|text| text.contains(roots[0].to_str().unwrap()) && *text != original)
+        .unwrap();
+    assert_eq!(rows(original), rows(repeat));
+    assert_eq!(hash(original), hash(repeat));
+}
+
+#[test]
+fn scan_rejects_root_containing_default_state_directory() {
+    let s = Sandbox::new();
+    #[cfg(target_os = "macos")]
+    let root = s.root.join("home/Library");
+    #[cfg(not(target_os = "macos"))]
+    let root = s.root.join("home/.config");
+    fs::create_dir_all(&root).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
+        .env("HOME", s.root.join("home"))
+        .env_remove("AUTO_TZIM_HOME")
+        .env_remove("XDG_CONFIG_HOME")
+        .arg("scan")
+        .arg(&root)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("state_inside_root"));
+    assert!(fs::read_dir(root).unwrap().next().is_none());
+}
+
+#[test]
+fn at03_names_corpus_emits_one_planned_row_per_constructible_name() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    use std::time::Duration;
+    let s = Sandbox::new();
+    let root = s.folder("names");
+    let names: &[&[u8]] = &[
+        b"plain.png",
+        b"with space.png",
+        b"two  spaces .png",
+        b"semi;colon.png",
+        b"dollar$(touch ats_pwned).png",
+        b"back`touch ats_pwned2`.png",
+        b"quote'single.png",
+        b"quote\"double.png",
+        b"newline\nname.png",
+        b"tab\tname.png",
+        b"-leading-dash.png",
+        b"--json",
+        b"--",
+        b"-",
+        "emoji-🙂.png".as_bytes(),
+        "кириллица.png".as_bytes(),
+        "日本語.png".as_bytes(),
+        "combining-e\u{301}.png".as_bytes(),
+        b"bad\xff.png",
+    ];
+    let mut created = 0;
+    let mut created_names = Vec::new();
+    for name in names {
+        let path = root.join(OsString::from_vec(name.to_vec()));
+        match fs::write(&path, b"x") {
+            Ok(()) => {
+                fs::OpenOptions::new()
+                    .write(true)
+                    .open(path)
+                    .unwrap()
+                    .set_modified(SystemTime::now() - Duration::from_secs(120))
+                    .unwrap();
+                created += 1;
+                created_names.push(name.to_vec());
+            }
+            Err(error) if *name == b"bad\xff.png" && error.raw_os_error() == Some(92) => {
+                eprintln!("N-17 skipped: filesystem rejects non-UTF-8 name: {error}");
+            }
+            Err(error) => panic!("fixture: {error}"),
+        }
+    }
+    let out = s.run(&["scan", root.to_str().unwrap()]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(
+        text.lines()
+            .filter(|line| line.starts_with("planned "))
+            .count(),
+        created
+    );
+    let plan_path = fs::read_dir(s.root.join("config/state/plans"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let plan = fs::read_to_string(plan_path).unwrap();
+    for name in &created_names {
+        let encoded = auto_tzim_core::planner::base64(name);
+        let field = format!("\"path_raw_b64\":\"{encoded}\"");
+        assert_eq!(plan.matches(&field).count(), 1, "raw path {encoded}");
+        let arg = match std::str::from_utf8(name) {
+            Ok(value) => auto_tzim_core::planner::json_string(value),
+            Err(_) => format!("{{\"b64\":\"{encoded}\"}}"),
+        };
+        assert!(
+            plan.contains(&format!("\"argv\":[\"--\",{arg}]")),
+            "argv for {encoded}"
+        );
+    }
+    for name in ["ats_pwned", "ats_pwned2"] {
+        assert!(!root.join(name).exists());
+        assert!(!std::path::Path::new(name).exists());
+    }
+    eprintln!(
+        "AT03_NAMES planned={created} corpus_names=19 non_utf8_skipped={}",
+        19 - created
+    );
+}
+
+#[test]
+fn orphan_temps_are_never_rows_and_reported_once_per_batch() {
+    let s = Sandbox::new();
+    let roots = [s.folder("a"), s.folder("b")];
+    for root in &roots {
+        fs::write(root.join(".tzim-1.tmp"), b"keep").unwrap();
+    }
+    let out = s.run(&[
+        "scan",
+        roots[0].to_str().unwrap(),
+        roots[1].to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(
+        text.lines()
+            .filter(|line| *line == "diagnostic: orphan_temp")
+            .count(),
+        1
+    );
+    for root in &roots {
+        assert_eq!(fs::read(root.join(".tzim-1.tmp")).unwrap(), b"keep");
+    }
+    for entry in fs::read_dir(s.root.join("config/state/plans")).unwrap() {
+        let text = fs::read_to_string(entry.unwrap().path()).unwrap();
+        assert!(!text.contains("orphan_temp"));
+        assert!(!text.contains(".tzim-1.tmp"));
+    }
+}

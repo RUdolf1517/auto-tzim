@@ -42,7 +42,7 @@ pub struct Folder {
     pub root: PathBuf,
     #[serde(default = "enabled_by_default")]
     pub enabled: bool,
-    #[serde(default)]
+    #[serde(default = "enabled_by_default")]
     pub recursive: bool,
     #[serde(default)]
     pub include_hidden: bool,
@@ -95,7 +95,7 @@ impl Default for Folder {
             name: String::new(),
             root: PathBuf::new(),
             enabled: true,
-            recursive: false,
+            recursive: true,
             include_hidden: false,
             cross_filesystems: false,
             follow_symlinks: false,
@@ -127,7 +127,7 @@ mod tests {
         assert_eq!(config.installation.allowed_major_versions, [0]);
         let folder = &config.folder[0];
         assert!(folder.enabled);
-        assert!(!folder.recursive);
+        assert!(folder.recursive);
         assert_eq!(folder.min_file_age_seconds, 60);
         assert_eq!(folder.jobs, 1);
         assert_eq!(folder.min_free_bytes, 268_435_456);
@@ -449,6 +449,10 @@ mod validation_tests {
 #[derive(Debug)]
 pub enum ConfigError {
     Invalid(Vec<String>),
+    /// An unexpected internal failure, distinct from invalid user configuration.
+    Internal(String),
+    /// The target tree changed while scanning.
+    TreeChanged(String),
     Io(std::io::Error),
     /// Another process currently holds the configuration lock.
     Locked(String),
@@ -458,6 +462,8 @@ impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Invalid(errors) => write!(f, "{}", errors.join("\n")),
+            Self::Internal(error) => write!(f, "internal error: {error}"),
+            Self::TreeChanged(error) => write!(f, "{error}"),
             Self::Io(error) => write!(f, "configuration I/O: {error}"),
             Self::Locked(holder) => write!(f, "configuration locked: {holder}"),
         }
@@ -600,6 +606,11 @@ pub fn validate_config(config: &Config) -> Vec<String> {
                 errors.push(format!("{label}.root: duplicate_root"));
             }
         }
+        if folder.root.to_str().is_none() {
+            errors.push(format!(
+                "{label}.root: path is not representable in TOML as UTF-8"
+            ));
+        }
         if let Err(reason) = validate_root_structure(&folder.root, folder.allow_cloud_sync) {
             errors.push(format!("{label}.root: {reason}"));
         }
@@ -622,6 +633,9 @@ pub fn validate_config(config: &Config) -> Vec<String> {
         }
         if !(1..=21_600).contains(&folder.timeout_seconds) {
             errors.push(format!("{label}.timeout_seconds: expected 1–21600"));
+        }
+        if folder.exclude_globs.iter().any(String::is_empty) {
+            errors.push(format!("{label}.exclude_globs: empty pattern"));
         }
         for format in &folder.formats {
             if !["png", "gzip", "zip", "ico", "jpeg", "tiff", "zlib"].contains(&format.as_str()) {
@@ -786,7 +800,7 @@ pub fn save(
         Ok(original) => preserve_profiles(&original, &existing, config)?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             toml::to_string_pretty(config)
-                .map_err(|error| ConfigError::Invalid(vec![error.to_string()]))?
+                .map_err(|error| ConfigError::Internal(error.to_string()))?
         }
         Err(error) => return Err(error.into()),
     };
@@ -808,7 +822,7 @@ pub fn save(
     let (temporary, mut file) = loop {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|error| ConfigError::Invalid(vec![error.to_string()]))?
+            .map_err(|error| ConfigError::Internal(error.to_string()))?
             .as_nanos();
         let name = format!(".config.toml.{timestamp}.{attempt}.tmp");
         let temporary = dir.join(name);
@@ -861,7 +875,7 @@ fn create_private_directory(path: &std::path::Path) -> Result<(), ConfigError> {
 
 /// Serialize one folder profile for display.
 pub fn format_folder(folder: &Folder) -> Result<String, ConfigError> {
-    toml::to_string_pretty(folder).map_err(|error| ConfigError::Invalid(vec![error.to_string()]))
+    toml::to_string_pretty(folder).map_err(|error| ConfigError::Internal(error.to_string()))
 }
 
 // Keep the user's original bytes outside the folder blocks being modified.
@@ -966,9 +980,9 @@ fn preserve_inline_profiles(
         if let Some(next) = new.folder.iter().find(|item| item.root == old_folder.root) {
             seen.push(next.root.clone());
             if next == old_folder {
-                let text = original.get(entry.span()).ok_or_else(|| {
-                    ConfigError::Invalid(vec!["invalid folder source span".into()])
-                })?;
+                let text = original
+                    .get(entry.span())
+                    .ok_or_else(|| ConfigError::Internal("invalid folder source span".into()))?;
                 items.push(text.to_owned());
             } else {
                 items.push(inline_folder(next)?);
@@ -987,7 +1001,7 @@ fn preserve_inline_profiles(
 
 fn inline_folder(folder: &Folder) -> Result<String, ConfigError> {
     let value = toml::Value::try_from(folder)
-        .map_err(|error| ConfigError::Invalid(vec![format!("cannot serialize folder: {error}")]))?;
+        .map_err(|error| ConfigError::Internal(format!("cannot serialize folder: {error}")))?;
     Ok(value.to_string())
 }
 
@@ -1157,7 +1171,7 @@ pub fn acquire_lock_file(path: &std::path::Path) -> Result<ConfigLock, ConfigErr
     let start_time = PROCESS_START
         .get_or_init(std::time::SystemTime::now)
         .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|error| ConfigError::Invalid(vec![format!("clock: {error}")]))?
+        .map_err(|error| ConfigError::Internal(format!("clock: {error}")))?
         .as_secs();
     // These fields are human-readable diagnostics only; ownership is the kernel lock.
     let host = std::env::var("HOSTNAME").ok();

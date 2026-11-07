@@ -3,7 +3,7 @@ use crate::config::Folder;
 use crate::stability::{self, Identity};
 use std::collections::BTreeMap;
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::FileTypeExt;
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -144,6 +144,15 @@ fn visit(
             });
             continue;
         }
+        // Hard-linked ordinary files are refused before configurable scope or
+        // age policy; the mandatory orphan-temp rule above remains separate.
+        if file_type.is_file() && metadata.nlink() > 1 {
+            out.skipped.push(Skip {
+                path,
+                reason: "hardlink_skip".into(),
+            });
+            continue;
+        }
         let exclusion = profile.exclude_globs.iter().find(|pattern| {
             glob(pattern.as_bytes(), raw)
                 || (file_type.is_dir() && glob(pattern.as_bytes(), &[raw, b"/"].concat()))
@@ -215,13 +224,6 @@ fn visit(
             });
         } else if file_type.is_file() {
             let identity = Identity::from_metadata(&metadata);
-            if identity.links > 1 {
-                out.skipped.push(Skip {
-                    path,
-                    reason: "hardlink_skip".into(),
-                });
-                continue;
-            }
             if !profile.cross_filesystems && identity.dev != root_dev {
                 *out.filtered_files.entry("mount point".into()).or_default() += 1;
                 out.skipped.push(Skip {
@@ -639,6 +641,30 @@ mod corpus_tests {
             b"keep temp"
         );
         assert_eq!(std::fs::read(f.0.join("first")).unwrap(), b"keep");
+    }
+
+    #[test]
+    fn hardlinks_take_precedence_over_hidden_glob_and_age() {
+        let f = Fixture::new();
+        let first = f.0.join(".hidden");
+        std::fs::write(&first, b"shared").unwrap();
+        std::fs::hard_link(&first, f.0.join("excluded")).unwrap();
+        let profile = Folder {
+            exclude_globs: vec!["excluded".into()],
+            min_file_age_seconds: 3600,
+            ..Folder::default()
+        };
+        let result = walk(&f.0, &profile, SystemTime::now()).unwrap();
+        assert!(result.candidates.is_empty());
+        assert_eq!(
+            result
+                .skipped
+                .iter()
+                .filter(|s| s.reason == "hardlink_skip")
+                .count(),
+            2
+        );
+        assert!(result.filtered_files.is_empty());
     }
 
     #[test]

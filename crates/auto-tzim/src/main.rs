@@ -1,5 +1,6 @@
+use auto_tzim_core::batch::{self, RootInput};
 use auto_tzim_core::config::{self, Config, ConfigError, Folder};
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use std::ffi::OsString;
 use std::path::PathBuf;
 
@@ -13,6 +14,19 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Inspect folders without invoking tzim or changing their contents.
+    Scan {
+        #[arg(value_parser = clap::builder::ValueParser::os_string())]
+        paths: Vec<OsString>,
+        #[arg(long, value_name = "NAME")]
+        folder: Vec<String>,
+        #[arg(long, conflicts_with = "recursive")]
+        no_recursive: bool,
+        #[arg(long, conflicts_with = "no_recursive")]
+        recursive: bool,
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Validate the configuration.
     Config {
         #[command(subcommand)]
@@ -117,7 +131,65 @@ fn show(folder: &Folder) -> Result<String, ConfigError> {
     config::format_folder(folder)
 }
 
-fn execute(cli: Cli) -> Result<(), ConfigError> {
+fn scan_inputs(matches: &clap::ArgMatches) -> Vec<RootInput> {
+    let mut inputs = Vec::new();
+    if let (Some(indices), Some(values)) = (
+        matches.indices_of("paths"),
+        matches.get_many::<OsString>("paths"),
+    ) {
+        inputs.extend(
+            indices
+                .zip(values)
+                .map(|(i, value)| (i, RootInput::Path(PathBuf::from(value)))),
+        );
+    }
+    if let (Some(indices), Some(values)) = (
+        matches.indices_of("folder"),
+        matches.get_many::<String>("folder"),
+    ) {
+        inputs.extend(
+            indices
+                .zip(values)
+                .map(|(i, value)| (i, RootInput::Folder(value.clone()))),
+        );
+    }
+    inputs.sort_by_key(|(index, _)| *index);
+    inputs.into_iter().map(|(_, input)| input).collect()
+}
+
+fn execute(cli: Cli, matches: &clap::ArgMatches, path_first: bool) -> Result<(), ConfigError> {
+    if let Command::Scan {
+        no_recursive,
+        recursive,
+        dry_run,
+        ..
+    } = &cli.command
+    {
+        if path_first && !dry_run {
+            return Err(invalid(
+                "path-first invocation requires --dry-run at this stage",
+            ));
+        }
+        let matches = matches
+            .subcommand_matches("scan")
+            .ok_or_else(|| ConfigError::Internal("missing scan arguments".into()))?;
+        let inputs = scan_inputs(matches);
+        let settings = config::load(&config::config_path()?)?;
+        let override_recursive = if *recursive {
+            Some(true)
+        } else if *no_recursive {
+            Some(false)
+        } else {
+            None
+        };
+        let profiles =
+            batch::resolve_inputs(inputs, &settings, override_recursive).map_err(invalid)?;
+        batch::preflight(profiles).map_err(invalid)?;
+        return Err(ConfigError::Internal(
+            "scan plan contract is not finalized".into(),
+        ));
+    }
+
     let path = config::config_path()?;
     let mutating = !matches!(
         &cli.command,
@@ -133,6 +205,7 @@ fn execute(cli: Cli) -> Result<(), ConfigError> {
     };
     let mut settings = config::load(&path)?;
     match cli.command {
+        Command::Scan { .. } => return Err(ConfigError::Internal("scan dispatch failure".into())),
         Command::Config {
             command: ConfigCommand::Validate,
         } => {
@@ -270,7 +343,19 @@ fn exit_code(error: &ConfigError) -> i32 {
 
 fn main() {
     config::record_process_start();
-    if let Err(error) = execute(Cli::parse()) {
+    let mut args: Vec<OsString> = std::env::args_os().collect();
+    let path_first = args.get(1).is_some_and(|arg| {
+        !arg.as_encoded_bytes().starts_with(b"-")
+            && arg != "config"
+            && arg != "folder"
+            && arg != "scan"
+    });
+    if path_first {
+        args.insert(1, "scan".into());
+    }
+    let matches = Cli::command().get_matches_from(args);
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
+    if let Err(error) = execute(cli, &matches, path_first) {
         let code = exit_code(&error);
         eprintln!("{error}");
         std::process::exit(code);
@@ -280,6 +365,35 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scan_parser_preserves_interleaved_inputs() {
+        let matches = Cli::command()
+            .try_get_matches_from([
+                "auto-tzim",
+                "scan",
+                "/one",
+                "--folder",
+                "photos",
+                "/two",
+                "--folder",
+                "work",
+                "--no-recursive",
+            ])
+            .unwrap();
+        assert_eq!(
+            scan_inputs(matches.subcommand_matches("scan").unwrap()),
+            vec![
+                RootInput::Path("/one".into()),
+                RootInput::Folder("photos".into()),
+                RootInput::Path("/two".into()),
+                RootInput::Folder("work".into()),
+            ]
+        );
+        assert!(Cli::command()
+            .try_get_matches_from(["auto-tzim", "scan", "--recursive", "--no-recursive", "/one"])
+            .is_err());
+    }
 
     #[test]
     fn internal_error_maps_to_exit_seven() {

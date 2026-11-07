@@ -2,6 +2,40 @@
 use crate::config::{self, Folder};
 use std::path::PathBuf;
 
+/// One typed input, kept in the order in which the user supplied it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RootInput {
+    Path(PathBuf),
+    Folder(String),
+}
+
+/// Resolve named profiles without walking roots or mutating the configuration.
+/// The recursive override, when supplied, applies only to this scan.
+pub fn resolve_inputs(
+    inputs: Vec<RootInput>,
+    config: &config::Config,
+    recursive: Option<bool>,
+) -> Result<Vec<Folder>, String> {
+    inputs
+        .into_iter()
+        .map(|input| {
+            let mut profile = match input {
+                RootInput::Path(path) => direct(path),
+                RootInput::Folder(name) => config
+                    .folder
+                    .iter()
+                    .find(|folder| folder.name.to_lowercase() == name.to_lowercase())
+                    .cloned()
+                    .ok_or_else(|| format!("folder not found: {name}"))?,
+            };
+            if let Some(recursive) = recursive {
+                profile.recursive = recursive;
+            }
+            Ok(profile)
+        })
+        .collect()
+}
+
 /// Canonicalise and deduplicate roots in first-occurrence order, rejecting overlaps.
 pub fn preflight(profiles: Vec<Folder>) -> Result<Vec<Folder>, String> {
     let mut accepted: Vec<Folder> = Vec::new();
@@ -157,5 +191,52 @@ mod order_tests {
             ]
         );
         std::fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod input_tests {
+    use super::*;
+    #[test]
+    fn mixed_inputs_preserve_order_and_do_not_mutate_profiles() {
+        let folder = Folder {
+            name: "Pictures".into(),
+            root: PathBuf::from("/named"),
+            recursive: false,
+            ..Folder::default()
+        };
+        let config = config::Config {
+            schema: 1,
+            installation: config::Installation::default(),
+            folder: vec![folder.clone()],
+        };
+        let profiles = resolve_inputs(
+            vec![
+                RootInput::Path("/first".into()),
+                RootInput::Folder("pictures".into()),
+                RootInput::Path("/last".into()),
+            ],
+            &config,
+            Some(true),
+        )
+        .unwrap();
+        assert_eq!(
+            profiles
+                .iter()
+                .map(|p| p.root.as_path())
+                .collect::<Vec<_>>(),
+            [
+                std::path::Path::new("/first"),
+                std::path::Path::new("/named"),
+                std::path::Path::new("/last")
+            ]
+        );
+        assert!(profiles.iter().all(|p| p.recursive));
+        assert_eq!(config.folder[0], folder);
+        assert!(
+            resolve_inputs(vec![RootInput::Folder("missing".into())], &config, None)
+                .unwrap_err()
+                .contains("missing")
+        );
     }
 }

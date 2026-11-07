@@ -1370,6 +1370,9 @@ fn three_roots_are_ordered_deduplicated_and_independent() {
             .unwrap()
             .to_owned()
     };
+    let distinct_hashes: std::collections::HashSet<_> =
+        plans.iter().map(|plan| hash(plan)).collect();
+    assert_eq!(distinct_hashes.len(), 3);
     let out = s.run(&["scan", roots[0].to_str().unwrap()]);
     assert!(
         out.status.success(),

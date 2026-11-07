@@ -187,7 +187,7 @@ fn execute(cli: Cli, matches: &clap::ArgMatches, path_first: bool) -> Result<(),
         let now = std::time::SystemTime::now();
         let discovered = batch::discover(profiles, now).map_err(|error| match error {
             batch::BatchError::Invalid(message) => invalid(message),
-            batch::BatchError::Discovery(message) if message.contains("tree_changed") => {
+            batch::BatchError::Discovery(message) if message.starts_with("tree_changed:") => {
                 ConfigError::TreeChanged(message)
             }
             batch::BatchError::Discovery(message) => ConfigError::Internal(message),

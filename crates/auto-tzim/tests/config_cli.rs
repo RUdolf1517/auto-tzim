@@ -1479,3 +1479,37 @@ fn at03_names_corpus_emits_one_planned_row_per_constructible_name() {
         19 - created
     );
 }
+
+#[test]
+fn orphan_temps_are_never_rows_and_reported_once_per_batch() {
+    let s = Sandbox::new();
+    let roots = [s.folder("a"), s.folder("b")];
+    for root in &roots {
+        fs::write(root.join(".tzim-1.tmp"), b"keep").unwrap();
+    }
+    let out = s.run(&[
+        "scan",
+        roots[0].to_str().unwrap(),
+        roots[1].to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(
+        text.lines()
+            .filter(|line| *line == "diagnostic: orphan_temp")
+            .count(),
+        1
+    );
+    for root in &roots {
+        assert_eq!(fs::read(root.join(".tzim-1.tmp")).unwrap(), b"keep");
+    }
+    for entry in fs::read_dir(s.root.join("config/state/plans")).unwrap() {
+        let text = fs::read_to_string(entry.unwrap().path()).unwrap();
+        assert!(!text.contains("orphan_temp"));
+        assert!(!text.contains(".tzim-1.tmp"));
+    }
+}

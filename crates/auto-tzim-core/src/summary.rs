@@ -84,6 +84,11 @@ pub fn scope(discovery: &Discovery) -> String {
             text.push_str("no regular files qualified in the walked scope\n");
         } else {
             for (reason, count) in reasons {
+                let reason = if reason == "orphan_temp" {
+                    "excluded temporary file"
+                } else {
+                    reason
+                };
                 let reason = reason.escape_debug();
                 let _ = writeln!(text, "{count} files: {reason}");
             }

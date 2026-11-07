@@ -506,6 +506,51 @@ mod corpus_tests {
     }
 
     #[test]
+    fn read_only_tree_remains_byte_identical() {
+        use std::os::unix::fs::PermissionsExt;
+        let f = Fixture::new();
+        let child = f.0.join("nested");
+        std::fs::create_dir(&child).unwrap();
+        for (name, bytes) in [("a", b"one".as_slice()), ("nested/b", b"two".as_slice())] {
+            std::fs::write(f.0.join(name), bytes).unwrap();
+        }
+        let snapshot = || {
+            let mut result = Vec::new();
+            for dir in [&f.0, &child] {
+                let mut entries: Vec<_> = std::fs::read_dir(dir)
+                    .unwrap()
+                    .map(|e| e.unwrap().file_name())
+                    .collect();
+                entries.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+                result.push(entries);
+            }
+            let hashes = ["a", "nested/b"]
+                .map(|name| crate::hash::sha256(&std::fs::read(f.0.join(name)).unwrap()));
+            (result, hashes)
+        };
+        let before = snapshot();
+        let profile = Folder {
+            min_file_age_seconds: 0,
+            ..Folder::default()
+        };
+        let now = SystemTime::now();
+        let first = walk(&f.0, &profile, now).unwrap();
+        assert_eq!(snapshot(), before);
+        for path in [&f.0, &child] {
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o555)).unwrap();
+        }
+        for path in [f.0.join("a"), child.join("b")] {
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o444)).unwrap();
+        }
+        let second = walk(&f.0, &profile, now).unwrap();
+        assert_eq!(second.candidates, first.candidates);
+        assert_eq!(snapshot(), before);
+        for path in [&f.0, &child] {
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+    }
+
+    #[test]
     fn depth_limit_is_once_per_boundary_directory() {
         let f = Fixture::new();
         let mut p = f.0.clone();

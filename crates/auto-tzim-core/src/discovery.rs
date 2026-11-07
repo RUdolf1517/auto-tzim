@@ -970,26 +970,36 @@ mod corpus_tests {
             .any(|skip| skip.path == Path::new("fifo") && skip.reason == "skipped_policy: fifo"));
     }
 
-    // CI creates a device node only if the operating system permits it.
     #[test]
-    #[ignore = "requires AT03_DEVICE_ROOT with a device created by CI"]
-    fn device_is_skipped_without_opening() {
-        let root = PathBuf::from(
-            std::env::var_os("AT03_DEVICE_ROOT").expect("CI must provide device fixture"),
-        );
-        let root = std::fs::canonicalize(root).unwrap();
-        let kind = std::fs::symlink_metadata(root.join("device"))
+    fn existing_null_device_is_skipped_without_opening() {
+        let root = std::fs::canonicalize("/dev").expect("/dev is required on supported Unix CI");
+        let null = root.join("null");
+        let kind = std::fs::symlink_metadata(&null).unwrap().file_type();
+        assert!(kind.is_char_device());
+        let excludes = std::fs::read_dir(&root)
             .unwrap()
-            .file_type();
-        assert!(kind.is_char_device() || kind.is_block_device());
-        let result = walk(&root, &Folder::default(), SystemTime::now()).unwrap();
-        assert!(result.candidates.is_empty());
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .file_name()
+                    .into_string()
+                    .expect("device fixture names must be UTF-8")
+            })
+            .filter(|name| name != "null")
+            .collect();
+        let profile = Folder {
+            include_hidden: true,
+            exclude_globs: excludes,
+            ..Folder::default()
+        };
+        let result = walk(&root, &profile, SystemTime::now()).unwrap();
         assert!(result
             .skipped
             .iter()
-            .any(|skip| skip.path == Path::new("device")
-                && (skip.reason == "skipped_policy: character device"
-                    || skip.reason == "skipped_policy: block device")));
+            .any(|skip| skip.path == Path::new("null")
+                && skip.reason == "skipped_policy: character device"));
+        assert!(result.candidates.is_empty());
+        eprintln!("AT03_DEVICE /dev/null skipped_policy=character_device opened=no");
     }
 
     #[cfg(target_os = "linux")]

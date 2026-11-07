@@ -156,6 +156,17 @@ pub fn inspect(path: &Path) -> Result<Identity, Incompatible> {
     let realpath = path
         .canonicalize()
         .map_err(|e| failure(format!("{}: {e}", path.display())))?;
+    // Refuse special files before reading; a FIFO could otherwise block forever
+    // before either bounded probe is started.
+    use std::os::unix::fs::PermissionsExt;
+    let meta = std::fs::metadata(&realpath)
+        .map_err(|e| failure(format!("{}: {e}", realpath.display())))?;
+    if !meta.is_file() || meta.permissions().mode() & 0o111 == 0 {
+        return Err(failure(format!(
+            "{}: not an executable regular file",
+            realpath.display()
+        )));
+    }
     let binary =
         std::fs::read(&realpath).map_err(|e| failure(format!("{}: {e}", realpath.display())))?;
     let size = binary.len() as u64;

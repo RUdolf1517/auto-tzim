@@ -201,8 +201,23 @@ fn visit(
                 reason: "skipped_policy: directory".into(),
             });
         } else if file_type.is_file() {
-            check_parent(root, &full)?;
             let identity = Identity::from_metadata(&metadata);
+            if identity.links > 1 {
+                out.skipped.push(Skip {
+                    path,
+                    reason: "hardlink_skip".into(),
+                });
+                continue;
+            }
+            if !profile.cross_filesystems && identity.dev != root_dev {
+                *out.filtered_files.entry("mount point".into()).or_default() += 1;
+                out.skipped.push(Skip {
+                    path,
+                    reason: "skipped_policy: mount point".into(),
+                });
+                continue;
+            }
+            check_parent(root, &full)?;
             if let Some(reason) = stability::refusal(&identity, now, profile.min_file_age_seconds) {
                 out.skipped.push(Skip {
                     path,
@@ -503,6 +518,42 @@ mod corpus_tests {
             b"keep temp"
         );
         assert_eq!(std::fs::read(f.0.join("first")).unwrap(), b"keep");
+    }
+
+    #[test]
+    fn nested_temps_and_version_control_are_excluded_with_hidden_enabled() {
+        let f = Fixture::new();
+        std::fs::create_dir_all(f.0.join("sub/.git")).unwrap();
+        std::fs::write(f.0.join("sub/.git/config"), b"private").unwrap();
+        std::fs::write(f.0.join("sub/.tzim-99.tmp"), b"temp").unwrap();
+        std::fs::write(f.0.join("sub/.visible"), b"ordinary").unwrap();
+        let profile = Folder {
+            include_hidden: true,
+            min_file_age_seconds: 0,
+            ..Folder::default()
+        };
+        let result = walk(&f.0, &profile, SystemTime::now()).unwrap();
+        assert_eq!(
+            result
+                .candidates
+                .iter()
+                .map(|row| row.path.as_path())
+                .collect::<Vec<_>>(),
+            [Path::new("sub/.visible")]
+        );
+        assert_eq!(
+            result
+                .skipped
+                .iter()
+                .filter(|row| row.reason == "orphan_temp")
+                .count(),
+            1
+        );
+        assert_eq!(result.limits.get("excluded by .git/**"), Some(&1));
+        assert_eq!(
+            std::fs::read(f.0.join("sub/.tzim-99.tmp")).unwrap(),
+            b"temp"
+        );
     }
 
     #[test]

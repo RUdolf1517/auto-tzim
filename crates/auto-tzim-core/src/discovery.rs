@@ -3,6 +3,7 @@ use crate::config::Folder;
 use crate::stability::{self, Identity};
 use std::collections::BTreeMap;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -211,9 +212,20 @@ fn visit(
                 out.candidates.push(Candidate { path, identity });
             }
         } else {
+            let kind = if file_type.is_fifo() {
+                "fifo"
+            } else if file_type.is_socket() {
+                "socket"
+            } else if file_type.is_char_device() {
+                "character device"
+            } else if file_type.is_block_device() {
+                "block device"
+            } else {
+                "special file"
+            };
             out.skipped.push(Skip {
                 path,
-                reason: "skipped_policy: special file".into(),
+                reason: format!("skipped_policy: {kind}"),
             });
         }
     }
@@ -471,7 +483,7 @@ mod corpus_tests {
         assert!(result
             .skipped
             .iter()
-            .any(|s| s.path == Path::new("socket") && s.reason.starts_with("skipped_policy")));
+            .any(|s| s.path == Path::new("socket") && s.reason == "skipped_policy: socket"));
         assert_eq!(
             result
                 .skipped
@@ -534,9 +546,10 @@ mod corpus_tests {
         let result = walk(&root, &Folder::default(), SystemTime::now()).unwrap();
         assert!(start.elapsed() < Duration::from_secs(5));
         assert!(result.candidates.is_empty());
-        assert!(result.skipped.iter().any(
-            |skip| skip.path == Path::new("fifo") && skip.reason.starts_with("skipped_policy")
-        ));
+        assert!(result
+            .skipped
+            .iter()
+            .any(|skip| skip.path == Path::new("fifo") && skip.reason == "skipped_policy: fifo"));
     }
 
     #[test]

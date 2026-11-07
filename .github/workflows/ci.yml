@@ -125,6 +125,19 @@ jobs:
           set -o pipefail
           cargo test --locked -p auto-tzim --test config_cli at03_names_corpus_emits_one_planned_row_per_constructible_name -- --nocapture 2>&1 | tee "$RUNNER_TEMP/at03-names"
           echo "::notice title=AT-03 names::$(grep '^AT03_NAMES ' "$RUNNER_TEMP/at03-names")"
+      - name: Report macOS filesystem-specific partial skips
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked -p auto-tzim-core hostile_names_remain_bytes_and_are_sorted -- --nocapture 2>&1 | tee "$RUNNER_TEMP/at04-macos-names"
+          cargo test --locked -p auto-tzim --test config_cli non_utf8_directory_name_does_not_panic -- --nocapture 2>&1 | tee -a "$RUNNER_TEMP/at04-macos-names"
+          if grep -q 'N-17 skipped' "$RUNNER_TEMP/at04-macos-names"; then
+            echo '::notice title=macOS filesystem skip::N-17 non-UTF-8 name rejected by filesystem (EILSEQ 92); other names tested.'
+          fi
+          if grep -q 'non-UTF-8 directory creation skipped' "$RUNNER_TEMP/at04-macos-names"; then
+            echo '::notice title=macOS filesystem skip::non-UTF-8 directory rejected by filesystem (EILSEQ 92); missing-path CLI still tested.'
+          fi
       - name: AT-04 adapter evidence
         shell: bash
         run: |

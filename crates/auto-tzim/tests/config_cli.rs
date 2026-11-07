@@ -602,6 +602,7 @@ fn non_utf8_directory_name_does_not_panic() {
         if !cfg!(target_os = "macos") || error.raw_os_error() != Some(92) {
             panic!("creating non-UTF-8 test directory: {error}");
         }
+        eprintln!("macOS: non-UTF-8 directory creation skipped because APFS rejected the bytes: {error}; missing-path CLI still tested");
     }
     let output = Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
         .env("HOME", sandbox.root.join("home"))

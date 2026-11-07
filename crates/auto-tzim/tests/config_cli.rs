@@ -1189,3 +1189,104 @@ fn scan_direct_non_utf8_root_records_exact_bytes() {
     assert!(text.contains(&format!("\"root_raw_b64\":\"{encoded}\"")));
     assert!(text.contains("\"root\":"));
 }
+
+#[test]
+fn scan_profile_formats_filter_without_reading_and_build_sorted_argv() {
+    use std::time::Duration;
+    let s = Sandbox::new();
+    let root = s.folder("pictures");
+    for name in ["a.PNG", "b.gz", "c.zip"] {
+        let path = root.join(name);
+        fs::write(&path, b"not a real image").unwrap();
+        fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(120))
+            .unwrap();
+    }
+    let added = s.run(&[
+        "folder",
+        "add",
+        root.to_str().unwrap(),
+        "--formats",
+        "png,gzip",
+    ]);
+    assert!(
+        added.status.success(),
+        "{}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    let out = s.run(&["scan", "--folder", "pictures"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert!(text.contains("planned \"a.PNG\""));
+    assert!(text.contains("planned \"b.gz\""));
+    assert!(text.contains("format_not_selected"));
+    assert!(!text.contains("planned \"c.zip\""));
+    let plan = fs::read_dir(s.root.join("config/state/plans"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let text = fs::read_to_string(plan).unwrap();
+    assert!(text.contains("\"argv\":[\"--formats\",\"gzip,png\",\"--\",\"a.PNG\"]"));
+}
+
+#[test]
+fn valid_scan_never_spawns_tzim_or_interprets_hostile_names() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::Duration;
+    let s = Sandbox::new();
+    let root = s.folder("pictures");
+    for name in ["dollar$(touch ats_pwned).png", "back`touch ats_pwned2`.png"] {
+        let path = root.join(name);
+        fs::write(&path, b"x").unwrap();
+        fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(120))
+            .unwrap();
+    }
+    let counter = s.root.join("tzim-called");
+    let fake = s.root.join("fake-tzim");
+    fs::write(
+        &fake,
+        format!("#!/bin/sh\nprintf called > '{}'\n", counter.display()),
+    )
+    .unwrap();
+    fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
+    fs::create_dir_all(s.root.join("config")).unwrap();
+    fs::write(
+        s.config(),
+        format!(
+            "schema=1\n[installation]\ntzim_path={:?}\n",
+            fake.to_str().unwrap()
+        ),
+    )
+    .unwrap();
+    let out = s.run(&["scan", root.to_str().unwrap()]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(
+        text.lines()
+            .filter(|line| line.starts_with("planned "))
+            .count(),
+        2
+    );
+    assert!(!counter.exists());
+    for name in ["ats_pwned", "ats_pwned2"] {
+        assert!(!root.join(name).exists());
+        assert!(!std::path::Path::new(name).exists());
+    }
+}

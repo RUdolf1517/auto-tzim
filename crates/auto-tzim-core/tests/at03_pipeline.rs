@@ -223,6 +223,15 @@ fn publication_never_replaces_colliding_id_and_encodes_raw_root() {
     };
     let time = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
     let path = planner::publish(&plans_dir, &plan, time).unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    assert_eq!(
+        fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    assert_eq!(
+        fs::metadata(&plans_dir).unwrap().permissions().mode() & 0o777,
+        0o700
+    );
     let first = fs::read(&path).unwrap();
     let text = String::from_utf8(first.clone()).unwrap();
     assert!(text.contains("\"created\":\"2023-11-14T22:13:20.000000000Z\""));

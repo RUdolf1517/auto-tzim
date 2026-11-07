@@ -722,7 +722,12 @@ mod corpus_tests {
             ..Folder::default()
         };
         let now = SystemTime::now();
+        let started = std::time::Instant::now();
         let result = walk(&f.0, &profile, now).unwrap();
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "symlink loop did not finish within five seconds"
+        );
         assert_eq!(
             result
                 .skipped

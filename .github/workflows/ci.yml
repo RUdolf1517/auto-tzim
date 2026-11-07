@@ -121,6 +121,16 @@ jobs:
           set -o pipefail
           cargo test --locked -p auto-tzim --test config_cli at03_names_corpus_emits_one_planned_row_per_constructible_name -- --nocapture 2>&1 | tee "$RUNNER_TEMP/at03-names"
           echo "::notice title=AT-03 names::$(grep '^AT03_NAMES ' "$RUNNER_TEMP/at03-names")"
+      - name: AT-04 adapter evidence
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked -p auto-tzim --test config_cli at04_adapter_corpus_versions_schemas_and_tripwires -- --nocapture 2>&1 | tee "$RUNNER_TEMP/at04-cases"
+          cargo test --locked -p auto-tzim --test config_cli at04_missing_and_non_executable_binary_refused -- --nocapture 2>&1 | tee -a "$RUNNER_TEMP/at04-cases"
+          cargo test --locked -p auto-tzim --test config_cli at04_shared_probe_timeout_is_bounded -- --nocapture 2>&1 | tee -a "$RUNNER_TEMP/at04-cases"
+          cargo test --locked -p auto-tzim --test config_cli at04_empty_profile_ignores_binary_default_formats_p01
+          grep '^AT04_' "$RUNNER_TEMP/at04-cases" > "$RUNNER_TEMP/at04-raw"
+          python3 -c 'import base64,os,pathlib; data=base64.b64encode(pathlib.Path(os.environ["RUNNER_TEMP"], "at04-raw").read_bytes()).decode(); [print(f"::notice title=AT-04 raw {i//2000:03d}::{data[i:i+2000]}") for i in range(0,len(data),2000)]'
       - name: AT-03 real scan evidence
         shell: bash
         run: |

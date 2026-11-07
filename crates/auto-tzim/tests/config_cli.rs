@@ -1048,3 +1048,26 @@ fn recursive_default_and_explicit_profile_override() {
             .contains("recursive = false")
     );
 }
+
+#[test]
+fn scan_invalid_batch_refuses_before_creating_state() {
+    let s = Sandbox::new();
+    let a = s.folder("a");
+    let c = s.folder("c");
+    let bad = s.root.join("missing");
+    let out = s.run(&[
+        "scan",
+        a.to_str().unwrap(),
+        bad.to_str().unwrap(),
+        c.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("missing"));
+    assert!(!s.root.join("config").exists());
+    let child = a.join("child");
+    fs::create_dir(&child).unwrap();
+    let out = s.run(&[a.to_str().unwrap(), child.to_str().unwrap(), "--dry-run"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("overlapping_roots"));
+    assert!(!s.root.join("config").exists());
+}

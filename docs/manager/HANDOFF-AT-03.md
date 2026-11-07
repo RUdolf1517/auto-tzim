@@ -47,7 +47,7 @@ Everything here is read-only, and read-only is not a property of good intentions
 
 | # | Point | Evidence required |
 | --- | --- | --- |
-| 1 | Two scans of an unchanged tree are **byte-identical** | the two plan files side by side, `sha256sum` equal, and the plan **id** different — the id is an event, the hash is the content |
+| 1 | Two scans of an unchanged tree have the **same content** | the two plan files side by side: their `rows` arrays are identical byte for byte and `plan_hash` is equal, while `plan_id` and `created` differ — the id is an event, the hash is the content. The whole-file `sha256sum` therefore **differs** and is not the test: [D-59](DECISIONS.md) requires the id and the clock inside the document |
 | 2 | The plan is deterministic against a hostile enum order | a test that forces the directory-read order backwards (or a fake walker) and produces the same rows; state how the order was forced |
 | 3 | Nothing outside the root is ever planned | a root with `../escape`, a symlinked directory pointing out, and a symlink to `/etc/hostname`: no row outside the canonical root, in any of them |
 | 4 | The scan writes nothing | before/after listing **and** SHA-256 of every file in the root; a second run with the root made read-only must still succeed (`chmod -R a-w`, then restore) |

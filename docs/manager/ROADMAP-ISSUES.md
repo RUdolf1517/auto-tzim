@@ -109,7 +109,7 @@ red run's SHA was verified as an ancestor of the commit that removed it — incl
 failed the acceptance test itself on both platforms. Two Low findings carried into AT-03: **F-26** (the internal-error
 branch returns `2`, the contract says `7`) and **F-27** (`structural_path` does syscalls despite the name).
 
-### AT-03 · Safe discovery, stability and the read-only candidate plan — **COMPLETE 2026-11-07, draft `#46` unmerged**
+### AT-03 · Safe discovery, stability and the read-only candidate plan — **COMPLETE 2026-11-07, merged `960928f`**
 
 > Coder brief: [HANDOFF-AT-03](HANDOFF-AT-03.md) — **17 acceptance points**, five negative controls, and the four numbers
 > that make a plan reproducible ([D-52](DECISIONS.md): id, hash, order, depth). Starting message:
@@ -119,7 +119,8 @@ branch returns `2`, the contract says `7`) and **F-27** (`structural_path` does 
 **Outcome.** PASS at `f4016d03` on Linux and macOS (run `42416157628`), accepted by the owner on 2026-11-07, recorded in
 [REVIEW-f4016d0](reviews/REVIEW-f4016d0.md). The two scans of an unchanged tree carry identical `rows` and an equal
 `plan_hash` with different ids and clocks, recomputed by the reviewer from the raw plan bytes; five negative controls ran red
-on the claimed SHAs and every revert restores the pre-control tree exactly. Draft `#46` is deliberately unmerged. Two
+on the claimed SHAs and every revert restores the pre-control tree exactly. Merged as `960928f` on the owner's word
+*"слить"* (2026-11-07). Two
 obligations moved to AT-08, where they are blocking: the per-ID corpus accounting over all 120 IDs, and a checksummed
 artifact bundle with an internal `head_sha`.
 

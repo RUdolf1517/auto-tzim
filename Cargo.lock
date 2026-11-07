@@ -69,6 +69,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "auto-tzim-harness"
+version = "0.1.0"
+
+[[package]]
 name = "clap"
 version = "4.5.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -965,6 +965,28 @@ mod corpus_tests {
             .any(|skip| skip.path == Path::new("fifo") && skip.reason == "skipped_policy: fifo"));
     }
 
+    // CI creates a device node only if the operating system permits it.
+    #[test]
+    #[ignore = "requires AT03_DEVICE_ROOT with a device created by CI"]
+    fn device_is_skipped_without_opening() {
+        let root = PathBuf::from(
+            std::env::var_os("AT03_DEVICE_ROOT").expect("CI must provide device fixture"),
+        );
+        let root = std::fs::canonicalize(root).unwrap();
+        let kind = std::fs::symlink_metadata(root.join("device"))
+            .unwrap()
+            .file_type();
+        assert!(kind.is_char_device() || kind.is_block_device());
+        let result = walk(&root, &Folder::default(), SystemTime::now()).unwrap();
+        assert!(result.candidates.is_empty());
+        assert!(result
+            .skipped
+            .iter()
+            .any(|skip| skip.path == Path::new("device")
+                && (skip.reason == "skipped_policy: character device"
+                    || skip.reason == "skipped_policy: block device")));
+    }
+
     #[test]
     fn ten_thousand_entries_record_elapsed_time() {
         let f = Fixture::new();

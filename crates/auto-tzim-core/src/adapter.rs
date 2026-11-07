@@ -170,7 +170,7 @@ pub fn inspect(path: &Path) -> Result<Identity, Incompatible> {
     let result_schema = capabilities
         .integer("result_schema_version")
         .map_err(|e| failure(e.to_string()))?;
-    if result_schema != 2 {
+    if capabilities_schema != 1 || result_schema != 2 {
         return Err(failure(format!("version={version} capabilities_schema_version={capabilities_schema} result_schema_version={result_schema}")));
     }
     match capabilities

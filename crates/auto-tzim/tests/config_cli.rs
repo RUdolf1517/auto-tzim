@@ -1972,3 +1972,29 @@ fn at04_determinism_across_timezone_and_locale() {
     };
     assert_eq!(stable(&a.stdout), stable(&b.stdout));
 }
+
+#[test]
+fn at04_a10_forbidden_flag_tripwire_stays_cold() {
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let roots = [s.folder("a"), s.folder("b"), s.folder("c")];
+    let out = s.run_scenario(
+        &[
+            "scan",
+            roots[0].to_str().unwrap(),
+            roots[1].to_str().unwrap(),
+            roots[2].to_str().unwrap(),
+        ],
+        &[],
+    );
+    let log = fs::read_to_string(s.root.join("tzim-calls")).unwrap_or_default();
+    assert!(
+        out.status.success(),
+        "A-10 tripwire; log={log:?} stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        log, "--version\n--capabilities\n",
+        "A-10: two flag-only and zero path invocations"
+    );
+}

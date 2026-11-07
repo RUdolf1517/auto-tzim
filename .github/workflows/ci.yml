@@ -105,6 +105,12 @@ jobs:
             printf "argument=%s exit=%s stdout=<empty> stderr:\n" "$arg" "$status"
             cat stderr.txt
           done
+      - name: AT-03 hostile names evidence
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked -p auto-tzim --test config_cli at03_names_corpus_emits_one_planned_row_per_constructible_name -- --nocapture 2>&1 | tee "$RUNNER_TEMP/at03-names"
+          echo "::notice title=AT-03 names::$(grep '^AT03_NAMES ' "$RUNNER_TEMP/at03-names")"
       - name: AT-03 real scan evidence
         shell: bash
         run: |

@@ -1409,3 +1409,73 @@ fn scan_rejects_root_containing_default_state_directory() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("state_inside_root"));
     assert!(fs::read_dir(root).unwrap().next().is_none());
 }
+
+#[test]
+fn at03_names_corpus_emits_one_planned_row_per_constructible_name() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    use std::time::Duration;
+    let s = Sandbox::new();
+    let root = s.folder("names");
+    let names: &[&[u8]] = &[
+        b"plain.png",
+        b"with space.png",
+        b"two  spaces .png",
+        b"semi;colon.png",
+        b"dollar$(touch ats_pwned).png",
+        b"back`touch ats_pwned2`.png",
+        b"quote'single.png",
+        b"quote\"double.png",
+        b"newline\nname.png",
+        b"tab\tname.png",
+        b"-leading-dash.png",
+        b"--json",
+        b"--",
+        b"-",
+        "emoji-🙂.png".as_bytes(),
+        "кириллица.png".as_bytes(),
+        "日本語.png".as_bytes(),
+        "combining-e\u{301}.png".as_bytes(),
+        b"bad\xff.png",
+    ];
+    let mut created = 0;
+    for name in names {
+        let path = root.join(OsString::from_vec(name.to_vec()));
+        match fs::write(&path, b"x") {
+            Ok(()) => {
+                fs::OpenOptions::new()
+                    .write(true)
+                    .open(path)
+                    .unwrap()
+                    .set_modified(SystemTime::now() - Duration::from_secs(120))
+                    .unwrap();
+                created += 1;
+            }
+            Err(error) if *name == b"bad\xff.png" && error.raw_os_error() == Some(92) => {
+                eprintln!("N-17 skipped: filesystem rejects non-UTF-8 name: {error}");
+            }
+            Err(error) => panic!("fixture: {error}"),
+        }
+    }
+    let out = s.run(&["scan", root.to_str().unwrap()]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(
+        text.lines()
+            .filter(|line| line.starts_with("planned "))
+            .count(),
+        created
+    );
+    for name in ["ats_pwned", "ats_pwned2"] {
+        assert!(!root.join(name).exists());
+        assert!(!std::path::Path::new(name).exists());
+    }
+    eprintln!(
+        "AT03_NAMES planned={created} corpus_names=19 non_utf8_skipped={}",
+        19 - created
+    );
+}

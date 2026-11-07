@@ -132,6 +132,8 @@ jobs:
           printf second > "$temp/root/nested/b.png"
           touch -t 202001010000 "$temp/root/a.png" "$temp/root/nested/b.png"
           export HOME="$temp/home" AUTO_TZIM_HOME="$temp/settings"
+          cargo build --locked -p auto-tzim-harness
+          printf "schema=1\n[installation]\ntzim_path='%s'\n" "$PWD/target/debug/auto-tzim-harness" > "$AUTO_TZIM_HOME/config.toml"
           find "$temp/root" -print | LC_ALL=C sort > "$temp/list.before"
           find "$temp/root" -type f -exec shasum -a 256 {} \; | LC_ALL=C sort > "$temp/hash.before"
           target/debug/auto-tzim scan "$temp/root" > "$temp/first.out"

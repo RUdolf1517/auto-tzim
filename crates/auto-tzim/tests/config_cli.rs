@@ -28,9 +28,55 @@ impl Sandbox {
         Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
             .env("HOME", self.root.join("home"))
             .env("AUTO_TZIM_HOME", self.root.join("config"))
+            .env("AT04_LOG", self.root.join("tzim-calls"))
             .args(args)
             .output()
             .unwrap()
+    }
+    fn fake_tzim(&self) -> PathBuf {
+        static FAKE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+        FAKE.get_or_init(|| {
+            let output =
+                std::env::temp_dir().join(format!("auto-tzim-fake-{}", std::process::id()));
+            let source =
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../auto-tzim-harness/src/main.rs");
+            let result = Command::new("rustc")
+                .args(["--edition", "2021"])
+                .arg(source)
+                .arg("-o")
+                .arg(&output)
+                .output()
+                .expect("build fake");
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+            output
+        })
+        .clone()
+    }
+    fn configure_tzim(&self) {
+        fs::create_dir_all(self.root.join("config")).unwrap();
+        let existing = fs::read_to_string(self.config())
+            .unwrap_or_else(|_| "schema=1\n[installation]\n".into());
+        let line = format!("tzim_path = {:?}", self.fake_tzim().to_str().unwrap());
+        let content = if existing.contains("tzim_path = ") {
+            existing
+                .lines()
+                .map(|s| {
+                    if s.starts_with("tzim_path = ") {
+                        line.as_str()
+                    } else {
+                        s
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        } else {
+            existing.replacen("[installation]", &format!("[installation]\n{line}"), 1)
+        };
+        fs::write(self.config(), content).unwrap();
     }
     fn config(&self) -> PathBuf {
         self.root.join("config/config.toml")
@@ -1101,6 +1147,7 @@ fn invalid_batch_reports_second_root_even_when_first_cannot_be_read() {
 fn valid_scan_publishes_two_immutable_plans_with_equal_hashes() {
     use std::time::Duration;
     let s = Sandbox::new();
+    s.configure_tzim();
     let root = s.folder("pictures");
     let image = root.join("image.png");
     fs::write(&image, b"original").unwrap();
@@ -1155,6 +1202,7 @@ fn scan_direct_non_utf8_root_records_exact_bytes() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
     let s = Sandbox::new();
+    s.configure_tzim();
     let root = s.root.join(OsString::from_vec(b"raw-\xff".to_vec()));
     match fs::create_dir(&root) {
         Ok(()) => (),
@@ -1217,6 +1265,7 @@ fn scan_profile_formats_filter_without_reading_and_build_sorted_argv() {
         "{}",
         String::from_utf8_lossy(&added.stderr)
     );
+    s.configure_tzim();
     let out = s.run(&["scan", "--folder", "pictures"]);
     assert!(
         out.status.success(),
@@ -1239,8 +1288,7 @@ fn scan_profile_formats_filter_without_reading_and_build_sorted_argv() {
 }
 
 #[test]
-fn valid_scan_never_spawns_tzim_or_interprets_hostile_names() {
-    use std::os::unix::fs::PermissionsExt;
+fn valid_scan_only_probes_tzim_and_never_interprets_hostile_names() {
     use std::time::Duration;
     let s = Sandbox::new();
     let root = s.folder("pictures");
@@ -1254,23 +1302,8 @@ fn valid_scan_never_spawns_tzim_or_interprets_hostile_names() {
             .set_modified(SystemTime::now() - Duration::from_secs(120))
             .unwrap();
     }
-    let counter = s.root.join("tzim-called");
-    let fake = s.root.join("fake-tzim");
-    fs::write(
-        &fake,
-        format!("#!/bin/sh\nprintf called > '{}'\n", counter.display()),
-    )
-    .unwrap();
-    fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
-    fs::create_dir_all(s.root.join("config")).unwrap();
-    fs::write(
-        s.config(),
-        format!(
-            "schema=1\n[installation]\ntzim_path={:?}\n",
-            fake.to_str().unwrap()
-        ),
-    )
-    .unwrap();
+    s.configure_tzim();
+    let counter = s.root.join("tzim-calls");
     let out = s.run(&["scan", root.to_str().unwrap()]);
     assert!(
         out.status.success(),
@@ -1284,7 +1317,10 @@ fn valid_scan_never_spawns_tzim_or_interprets_hostile_names() {
             .count(),
         2
     );
-    assert!(!counter.exists());
+    assert_eq!(
+        fs::read_to_string(counter).unwrap(),
+        "--version\n--capabilities\n"
+    );
     for name in ["ats_pwned", "ats_pwned2"] {
         assert!(!root.join(name).exists());
         assert!(!std::path::Path::new(name).exists());
@@ -1307,6 +1343,7 @@ fn empty_exclusion_glob_is_rejected_at_config_load() {
 fn three_roots_are_ordered_deduplicated_and_independent() {
     use std::time::Duration;
     let s = Sandbox::new();
+    s.configure_tzim();
     let roots: Vec<_> = ["alpha", "beta", "gamma"]
         .into_iter()
         .map(|name| s.folder(name))
@@ -1332,6 +1369,10 @@ fn three_roots_are_ordered_deduplicated_and_independent() {
         out.status.success(),
         "{}",
         String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(s.root.join("tzim-calls")).unwrap(),
+        "--version\n--capabilities\n"
     );
     let stdout = String::from_utf8(out.stdout).unwrap();
     let roots_order: Vec<_> = stdout
@@ -1419,6 +1460,7 @@ fn at03_names_corpus_emits_one_planned_row_per_constructible_name() {
     use std::os::unix::ffi::OsStringExt;
     use std::time::Duration;
     let s = Sandbox::new();
+    s.configure_tzim();
     let root = s.folder("names");
     let names: &[&[u8]] = &[
         b"plain.png",
@@ -1508,6 +1550,7 @@ fn at03_names_corpus_emits_one_planned_row_per_constructible_name() {
 #[test]
 fn orphan_temps_are_never_rows_and_reported_once_per_batch() {
     let s = Sandbox::new();
+    s.configure_tzim();
     let roots = [s.folder("a"), s.folder("b")];
     for root in &roots {
         fs::write(root.join(".tzim-1.tmp"), b"keep").unwrap();

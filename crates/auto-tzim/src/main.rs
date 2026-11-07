@@ -181,7 +181,7 @@ fn inspect_state(state: &std::path::Path) -> Result<String, ConfigError> {
         Err(error) => return Err(err(error)),
         Ok(entries) => {
             for entry in entries {
-                entry.map_err(&err)?;
+                entry.map_err(err)?;
             }
         }
     }
@@ -206,8 +206,8 @@ fn inspect_state(state: &std::path::Path) -> Result<String, ConfigError> {
     match std::fs::read_dir(&runs) {
         Ok(entries) => {
             for entry in entries {
-                let entry = entry.map_err(&err)?;
-                let header = std::fs::read(entry.path().join("run.json")).map_err(&err)?;
+                let entry = entry.map_err(err)?;
+                let header = std::fs::read(entry.path().join("run.json")).map_err(err)?;
                 auto_tzim_core::json::parse(&header)
                     .map_err(|e| ConfigError::Internal(format!("run header: {e}")))?;
             }

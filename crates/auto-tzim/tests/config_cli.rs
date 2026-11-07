@@ -33,6 +33,29 @@ impl Sandbox {
             .output()
             .unwrap()
     }
+    fn run_scenario(&self, args: &[&str], vars: &[(&str, &str)]) -> Output {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_auto-tzim"));
+        command
+            .env("HOME", self.root.join("home"))
+            .env("AUTO_TZIM_HOME", self.root.join("config"))
+            .env("AT04_LOG", self.root.join("tzim-calls"));
+        for key in [
+            "AT04_VERSION",
+            "AT04_CAPABILITIES",
+            "AT04_FAIL_FLAG",
+            "AT04_DELAY_MS",
+            "AT04_STDIN_CHECK",
+            "AT04_STDOUT_SIZE",
+            "AT04_STDERR_SIZE",
+        ] {
+            command.env_remove(key);
+        }
+        command
+            .envs(vars.iter().copied())
+            .args(args)
+            .output()
+            .unwrap()
+    }
     fn fake_tzim(&self) -> PathBuf {
         static FAKE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
         FAKE.get_or_init(|| {
@@ -1579,5 +1602,216 @@ fn orphan_temps_are_never_rows_and_reported_once_per_batch() {
         let text = fs::read_to_string(entry.unwrap().path()).unwrap();
         assert!(!text.contains("orphan_temp"));
         assert!(!text.contains(".tzim-1.tmp"));
+    }
+}
+
+const AT04_CAPS: &str = r#"{"capabilities_schema_version":1,"result_schema_version":2,"build_features":{},"compiled_formats":["png"],"default_enabled_formats":["png"],"selection_flags":[],"handler_opt_ins":[],"transformations":[],"confirmation_policies":[]}"#;
+
+#[test]
+fn at04_adapter_corpus_versions_schemas_and_tripwires() {
+    struct Case {
+        id: &'static str,
+        vars: Vec<(&'static str, String)>,
+        exit: i32,
+        calls: usize,
+    }
+    let mut cases = vec![
+        Case {
+            id: "A-01/0.16.0",
+            vars: vec![("AT04_VERSION", "tzim 0.16.0\n".into())],
+            exit: 0,
+            calls: 2,
+        },
+        Case {
+            id: "A-01/0.16.1",
+            vars: vec![("AT04_VERSION", "tzim 0.16.1\n".into())],
+            exit: 0,
+            calls: 2,
+        },
+        Case {
+            id: "A-02",
+            vars: vec![("AT04_VERSION", "tzim 0.15.0\n".into())],
+            exit: 3,
+            calls: 1,
+        },
+        Case {
+            id: "A-03/1.0",
+            vars: vec![("AT04_VERSION", "tzim 1.0.0\n".into())],
+            exit: 3,
+            calls: 1,
+        },
+        Case {
+            id: "A-03/0.17",
+            vars: vec![("AT04_VERSION", "tzim 0.17.0\n".into())],
+            exit: 3,
+            calls: 1,
+        },
+        Case {
+            id: "A-04/garbage",
+            vars: vec![("AT04_VERSION", "garbage".into())],
+            exit: 3,
+            calls: 1,
+        },
+        Case {
+            id: "A-04/empty",
+            vars: vec![("AT04_VERSION", "".into())],
+            exit: 3,
+            calls: 1,
+        },
+        Case {
+            id: "A-06",
+            vars: vec![("AT04_FAIL_FLAG", "--version".into())],
+            exit: 3,
+            calls: 1,
+        },
+        Case {
+            id: "A-10",
+            vars: vec![("AT04_STDIN_CHECK", "1".into())],
+            exit: 0,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/a",
+            vars: vec![("AT04_CAPABILITIES", AT04_CAPS.into())],
+            exit: 0,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/b",
+            vars: vec![(
+                "AT04_CAPABILITIES",
+                AT04_CAPS.replace("version\":1", "version\":2"),
+            )],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/c",
+            vars: vec![(
+                "AT04_CAPABILITIES",
+                AT04_CAPS.replace("result_schema_version\":2", "result_schema_version\":3"),
+            )],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/d",
+            vars: vec![("AT04_FAIL_FLAG", "--capabilities".into())],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/e",
+            vars: vec![(
+                "AT04_CAPABILITIES",
+                AT04_CAPS.replace("\"result_schema_version\":2,", ""),
+            )],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/extra",
+            vars: vec![(
+                "AT04_CAPABILITIES",
+                AT04_CAPS.replace('{', "{\"extra\":true,"),
+            )],
+            exit: 0,
+            calls: 2,
+        },
+        Case {
+            id: "schema-float",
+            vars: vec![(
+                "AT04_CAPABILITIES",
+                AT04_CAPS.replace("result_schema_version\":2", "result_schema_version\":2.0"),
+            )],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "stdout-limit",
+            vars: vec![("AT04_STDOUT_SIZE", "1048577".into())],
+            exit: 3,
+            calls: 1,
+        },
+        Case {
+            id: "stderr-limit",
+            vars: vec![("AT04_STDERR_SIZE", "65537".into())],
+            exit: 3,
+            calls: 1,
+        },
+    ];
+    for case in cases.drain(..) {
+        let s = Sandbox::new();
+        s.configure_tzim();
+        let root = s.folder("root");
+        let vars: Vec<_> = case.vars.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let out = s.run_scenario(&["scan", root.to_str().unwrap()], &vars);
+        let log = fs::read_to_string(s.root.join("tzim-calls")).unwrap_or_default();
+        let lines: Vec<_> = log.lines().collect();
+        assert_eq!(
+            out.status.code(),
+            Some(case.exit),
+            "{} stderr={}",
+            case.id,
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(lines.len(), case.calls, "{} {log:?}", case.id);
+        assert_eq!(lines.first(), Some(&"--version"));
+        if case.calls == 2 {
+            assert_eq!(lines[1], "--capabilities");
+        }
+        if case.exit == 3 {
+            assert!(String::from_utf8_lossy(&out.stderr).contains("incompatible_tzim"));
+            assert!(!s.root.join("config/state/plans").exists());
+        } else {
+            assert_eq!(
+                fs::read_dir(s.root.join("config/state/plans"))
+                    .unwrap()
+                    .count(),
+                1
+            );
+        }
+        eprintln!(
+            "AT04_CASE {} exit={} calls={} log={:?} stderr={:?}",
+            case.id,
+            case.exit,
+            case.calls,
+            log,
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+#[test]
+fn at04_missing_and_non_executable_binary_refused() {
+    use std::os::unix::fs::PermissionsExt;
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let root = s.folder("root");
+    for (label, path) in [
+        ("missing", s.root.join("missing")),
+        ("not-executable", s.root.join("not-executable")),
+    ] {
+        if label == "not-executable" {
+            fs::copy(s.fake_tzim(), &path).unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        fs::write(
+            s.config(),
+            format!(
+                "schema=1\n[installation]\ntzim_path={:?}\n",
+                path.to_str().unwrap()
+            ),
+        )
+        .unwrap();
+        let out = s.run_scenario(&["scan", root.to_str().unwrap()], &[]);
+        assert_eq!(out.status.code(), Some(3));
+        assert!(String::from_utf8_lossy(&out.stderr).contains("incompatible_tzim"));
+        assert!(!s.root.join("config/state/plans").exists());
+        assert!(!s.root.join("tzim-calls").exists());
+        eprintln!(
+            "AT04_CASE A-05/{label} exit=3 calls=0 stderr={:?}",
+            String::from_utf8_lossy(&out.stderr)
+        );
     }
 }

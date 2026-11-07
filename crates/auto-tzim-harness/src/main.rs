@@ -30,6 +30,16 @@ fn main() {
             std::process::exit(97);
         }
     }
+    for (key, is_stdout) in [("AT04_STDOUT_SIZE", true), ("AT04_STDERR_SIZE", false)] {
+        if let Ok(size) = std::env::var(key) {
+            let bytes = vec![b'x'; size.parse().expect("output size")];
+            if is_stdout {
+                std::io::stdout().write_all(&bytes).expect("stdout");
+            } else {
+                std::io::stderr().write_all(&bytes).expect("stderr");
+            }
+        }
+    }
     if let Ok(ms) = std::env::var("AT04_DELAY_MS") {
         std::thread::sleep(Duration::from_millis(ms.parse().expect("delay")));
     }

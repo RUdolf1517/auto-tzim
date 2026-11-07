@@ -240,3 +240,55 @@ mod tests {
         }
     }
 }
+
+/// D-02's apply result mapping. A dry-run-only status has no apply mapping.
+pub const STATUS_MAP: &[(&str, &str)] = &[
+    ("optimized", "optimized"),
+    ("already_optimal", "already_optimal"),
+    ("unsupported", "skipped_unsupported"),
+    ("skipped", "skipped_by_tzim"),
+    ("failed", "failed"),
+];
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct MappedResult<'a> {
+    pub status: &'static str,
+    pub reason: Option<&'a str>,
+    pub note: Option<&'a str>,
+}
+
+/// Preserve unknown reason codes and the note without interpreting either.
+pub fn map_result<'a>(
+    status: &str,
+    reason_code: Option<&'a str>,
+    note: Option<&'a str>,
+) -> Result<MappedResult<'a>, Incompatible> {
+    let mapped = STATUS_MAP
+        .iter()
+        .find(|(input, _)| *input == status)
+        .map(|(_, output)| *output)
+        .ok_or_else(|| failure(format!("unknown result status: {status}")))?;
+    Ok(MappedResult {
+        status: mapped,
+        reason: reason_code,
+        note,
+    })
+}
+
+#[cfg(test)]
+mod mapping_tests {
+    use super::*;
+    #[test]
+    fn reason_and_note_are_opaque() {
+        for reason in [Some("format_disabled"), Some("something_new"), None] {
+            let row = map_result("skipped", reason, Some("verbatim\nnot interpreted")).unwrap();
+            assert_eq!(row.status, "skipped_by_tzim");
+            assert_eq!(row.reason, reason);
+            assert_eq!(row.note, Some("verbatim\nnot interpreted"));
+        }
+        for (input, output) in STATUS_MAP {
+            assert_eq!(map_result(input, None, None).unwrap().status, *output);
+        }
+        assert!(map_result("unknown", None, None).is_err());
+    }
+}

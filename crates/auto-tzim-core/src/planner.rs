@@ -207,10 +207,19 @@ pub fn document(plan: &Plan, created: std::time::SystemTime) -> std::io::Result<
         .skipped
         .iter()
         .map(|skip| {
+            let status = if skip.reason == "hardlink_skip"
+                || skip.reason == "skipped_unstable"
+                || skip.reason == "depth_exceeded"
+            {
+                skip.reason.as_str()
+            } else {
+                "skipped_policy"
+            };
             format!(
-                "{{\"path\":{},\"path_raw_b64\":{},\"reason\":{}}}",
+                "{{\"path\":{},\"path_raw_b64\":{},\"status\":{},\"reason\":{}}}",
                 json_string(&skip.path.to_string_lossy()),
                 json_string(&base64(skip.path.as_os_str().as_bytes())),
+                json_string(status),
                 json_string(&skip.reason)
             )
         })

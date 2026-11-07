@@ -177,6 +177,129 @@ pub fn json_string(value: &str) -> String {
     result
 }
 
+/// Serialize a plan record. The hash is computed only from D-52 canonical rows.
+pub fn document(plan: &Plan, created: std::time::SystemTime) -> std::io::Result<String> {
+    let duration = created
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| std::io::Error::other("clock before Unix epoch"))?;
+    let created = timestamp(duration.as_secs(), duration.subsec_nanos());
+    let canonical = canonical_rows(&plan.rows);
+    let mut rows = Vec::with_capacity(plan.rows.len());
+    let mut sorted: Vec<_> = plan.rows.iter().collect();
+    sorted.sort_by(|a, b| {
+        a.candidate
+            .path
+            .as_os_str()
+            .as_bytes()
+            .cmp(b.candidate.path.as_os_str().as_bytes())
+    });
+    for (line, row) in canonical.lines().zip(sorted) {
+        let prefix = line
+            .strip_suffix('}')
+            .ok_or_else(|| std::io::Error::other("invalid canonical row"))?;
+        rows.push(format!(
+            "{prefix},\"path\":{},\"status\":\"planned\"}}",
+            json_string(&row.candidate.path.to_string_lossy())
+        ));
+    }
+    let skipped = plan
+        .discovery
+        .skipped
+        .iter()
+        .map(|skip| {
+            format!(
+                "{{\"path\":{},\"path_raw_b64\":{},\"reason\":{}}}",
+                json_string(&skip.path.to_string_lossy()),
+                json_string(&base64(skip.path.as_os_str().as_bytes())),
+                json_string(&skip.reason)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    Ok(format!("{{\"schema\":1,\"plan_id\":{},\"created\":{},\"root\":{},\"root_raw_b64\":{},\"plan_hash\":{},\"rows\":[{}],\"skipped\":[{}]}}\n", json_string(&plan.id), json_string(&created), json_string(&plan.root.to_string_lossy()), json_string(&base64(plan.root.as_os_str().as_bytes())), json_string(&plan.hash), rows.join(","), skipped))
+}
+
+// UTC civil date conversion, Gregorian calendar; no external time dependency.
+fn timestamp(seconds: u64, nanos: u32) -> String {
+    let days = (seconds / 86_400) as i64 + 719_468;
+    let era = days / 146_097;
+    let day_of_era = days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
+    let mut year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
+    year += i64::from(month <= 2);
+    let time = seconds % 86_400;
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{nanos:09}Z",
+        time / 3600,
+        (time % 3600) / 60,
+        time % 60
+    )
+}
+
+/// Publish an immutable plan using create-new temp and a no-overwrite hard link.
+pub fn publish(
+    plans_dir: &std::path::Path,
+    plan: &Plan,
+    created: std::time::SystemTime,
+) -> std::io::Result<std::path::PathBuf> {
+    use std::io::Write;
+    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+    fn private_dir(path: &std::path::Path) -> std::io::Result<()> {
+        if path.is_dir() {
+            return Ok(());
+        }
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            private_dir(parent)?;
+        }
+        match std::fs::DirBuilder::new().mode(0o700).create(path) {
+            Ok(()) => std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && path.is_dir() => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+    if plan.id.len() != 32
+        || !plan
+            .id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
+        return Err(std::io::Error::other("invalid plan id"));
+    }
+    let bytes = document(plan, created)?;
+    private_dir(plans_dir)?;
+    let final_path = plans_dir.join(format!("{}.json", plan.id));
+    let temp = plans_dir.join(format!("{}.json.tmp", plan.id));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&temp)?;
+    let result = (|| {
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        file.write_all(bytes.as_bytes())?;
+        file.sync_all()?;
+        std::fs::hard_link(&temp, &final_path).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::AlreadyExists {
+                std::io::Error::other("plan_id_collision")
+            } else {
+                e
+            }
+        })?;
+        std::fs::remove_file(&temp)?;
+        std::fs::File::open(plans_dir)?.sync_all()?;
+        Ok(final_path)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temp);
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -197,6 +320,25 @@ mod tests {
             argv: vec!["--".into(), "x.png".into()],
         }
     }
+    #[test]
+    fn profile_arguments_are_relative_sorted_and_support_non_utf8() {
+        use std::os::unix::ffi::OsStringExt;
+        let mut candidate = row().candidate;
+        candidate.path = std::ffi::OsString::from_vec(b"bad\xff.png".to_vec()).into();
+        let folder = crate::config::Folder {
+            formats: vec!["png".into(), "gzip".into()],
+            ..crate::config::Folder::default()
+        };
+        let args = arguments(&folder, &candidate);
+        assert_eq!(args[..3], ["--formats", "gzip,png", "--"]);
+        assert_eq!(args[3].as_bytes(), b"bad\xff.png");
+        let row = Row {
+            candidate,
+            argv: args,
+        };
+        assert!(canonical_rows(&[row]).contains("{\"b64\":\"YmFk/y5wbmc=\"}"));
+    }
+
     #[test]
     fn serialization_and_hash_depend_on_identity_and_argv() {
         let original = row();
@@ -379,127 +521,4 @@ mod tests {
         assert_eq!(base64(b"foo"), "Zm9v");
         assert_eq!(json_string("a\n\"\\"), "\"a\\u000a\\\"\\\\\"");
     }
-}
-
-/// Serialize a plan record. The hash is computed only from D-52 canonical rows.
-pub fn document(plan: &Plan, created: std::time::SystemTime) -> std::io::Result<String> {
-    let duration = created
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| std::io::Error::other("clock before Unix epoch"))?;
-    let created = timestamp(duration.as_secs(), duration.subsec_nanos());
-    let canonical = canonical_rows(&plan.rows);
-    let mut rows = Vec::with_capacity(plan.rows.len());
-    let mut sorted: Vec<_> = plan.rows.iter().collect();
-    sorted.sort_by(|a, b| {
-        a.candidate
-            .path
-            .as_os_str()
-            .as_bytes()
-            .cmp(b.candidate.path.as_os_str().as_bytes())
-    });
-    for (line, row) in canonical.lines().zip(sorted) {
-        let prefix = line
-            .strip_suffix('}')
-            .ok_or_else(|| std::io::Error::other("invalid canonical row"))?;
-        rows.push(format!(
-            "{prefix},\"path\":{},\"status\":\"planned\"}}",
-            json_string(&row.candidate.path.to_string_lossy())
-        ));
-    }
-    let skipped = plan
-        .discovery
-        .skipped
-        .iter()
-        .map(|skip| {
-            format!(
-                "{{\"path\":{},\"path_raw_b64\":{},\"reason\":{}}}",
-                json_string(&skip.path.to_string_lossy()),
-                json_string(&base64(skip.path.as_os_str().as_bytes())),
-                json_string(&skip.reason)
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(",");
-    Ok(format!("{{\"schema\":1,\"plan_id\":{},\"created\":{},\"root\":{},\"root_raw_b64\":{},\"plan_hash\":{},\"rows\":[{}],\"skipped\":[{}]}}\n", json_string(&plan.id), json_string(&created), json_string(&plan.root.to_string_lossy()), json_string(&base64(plan.root.as_os_str().as_bytes())), json_string(&plan.hash), rows.join(","), skipped))
-}
-
-// UTC civil date conversion, Gregorian calendar; no external time dependency.
-fn timestamp(seconds: u64, nanos: u32) -> String {
-    let days = (seconds / 86_400) as i64 + 719_468;
-    let era = days / 146_097;
-    let day_of_era = days - era * 146_097;
-    let year_of_era =
-        (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
-    let mut year = year_of_era + era * 400;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_prime = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
-    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
-    year += i64::from(month <= 2);
-    let time = seconds % 86_400;
-    format!(
-        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{nanos:09}Z",
-        time / 3600,
-        (time % 3600) / 60,
-        time % 60
-    )
-}
-
-/// Publish an immutable plan using create-new temp and a no-overwrite hard link.
-pub fn publish(
-    plans_dir: &std::path::Path,
-    plan: &Plan,
-    created: std::time::SystemTime,
-) -> std::io::Result<std::path::PathBuf> {
-    use std::io::Write;
-    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
-    fn private_dir(path: &std::path::Path) -> std::io::Result<()> {
-        if path.is_dir() {
-            return Ok(());
-        }
-        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-            private_dir(parent)?;
-        }
-        match std::fs::DirBuilder::new().mode(0o700).create(path) {
-            Ok(()) => std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)),
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && path.is_dir() => Ok(()),
-            Err(e) => Err(e),
-        }
-    }
-    if plan.id.len() != 32
-        || !plan
-            .id
-            .bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-    {
-        return Err(std::io::Error::other("invalid plan id"));
-    }
-    let bytes = document(plan, created)?;
-    private_dir(plans_dir)?;
-    let final_path = plans_dir.join(format!("{}.json", plan.id));
-    let temp = plans_dir.join(format!("{}.json.tmp", plan.id));
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(&temp)?;
-    let result = (|| {
-        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
-        file.write_all(bytes.as_bytes())?;
-        file.sync_all()?;
-        std::fs::hard_link(&temp, &final_path).map_err(|e| {
-            if e.kind() == std::io::ErrorKind::AlreadyExists {
-                std::io::Error::other("plan_id_collision")
-            } else {
-                e
-            }
-        })?;
-        std::fs::remove_file(&temp)?;
-        std::fs::File::open(plans_dir)?.sync_all()?;
-        Ok(final_path)
-    })();
-    if result.is_err() {
-        let _ = std::fs::remove_file(&temp);
-    }
-    result
 }

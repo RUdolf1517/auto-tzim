@@ -20,7 +20,16 @@ pub fn resolve_inputs(
         .into_iter()
         .map(|input| {
             let mut profile = match input {
-                RootInput::Path(path) => direct(path),
+                RootInput::Path(path) => {
+                    let absolute = if path.is_absolute() {
+                        path
+                    } else {
+                        std::env::current_dir()
+                            .map_err(|e| format!("current directory: {e}"))?
+                            .join(path)
+                    };
+                    direct(absolute)
+                }
                 RootInput::Folder(name) => config
                     .folder
                     .iter()

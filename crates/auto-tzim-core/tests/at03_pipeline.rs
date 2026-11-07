@@ -205,3 +205,28 @@ fn reproducible_partial_fixture_across_discovery_planning_and_rendering() {
     assert_eq!(before, snapshot(&fixture.0));
     eprintln!("AT03_PARTIAL_FIXTURE planned=4 candidates=4 hardlinks=2 young=1 temp=1 symlink=1 directories_walked=2 excluded_dirs=1");
 }
+
+#[test]
+fn publication_never_replaces_colliding_id_and_encodes_raw_root() {
+    use std::os::unix::ffi::OsStringExt;
+    let fixture = Fixture::new();
+    let plans_dir = fixture.0.join("state/plans");
+    let raw_root = PathBuf::from(std::ffi::OsString::from_vec(b"/root/bad\xff".to_vec()));
+    let plan = planner::Plan {
+        id: "0123456789abcdef0123456789abcdef".into(),
+        root: raw_root,
+        hash: planner::plan_hash(&[]),
+        rows: Vec::new(),
+        discovery: discovery::Discovery::default(),
+    };
+    let time = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+    let path = planner::publish(&plans_dir, &plan, time).unwrap();
+    let first = fs::read(&path).unwrap();
+    let text = String::from_utf8(first.clone()).unwrap();
+    assert!(text.contains("\"root\":\"/root/bad"));
+    assert!(text.contains("\"root_raw_b64\":\"L3Jvb3QvYmFk/w==\""));
+    let error = planner::publish(&plans_dir, &plan, time + Duration::from_secs(1)).unwrap_err();
+    assert!(error.to_string().contains("plan_id_collision"));
+    assert_eq!(first, fs::read(path).unwrap());
+    assert!(!plans_dir.join(format!("{}.json.tmp", plan.id)).exists());
+}

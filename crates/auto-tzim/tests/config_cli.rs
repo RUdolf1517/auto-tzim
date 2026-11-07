@@ -1096,3 +1096,56 @@ fn invalid_batch_reports_second_root_even_when_first_cannot_be_read() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("not-present"));
     assert!(!s.root.join("config").exists());
 }
+
+#[test]
+fn valid_scan_publishes_two_immutable_plans_with_equal_hashes() {
+    use std::time::Duration;
+    let s = Sandbox::new();
+    let root = s.folder("pictures");
+    let image = root.join("image.png");
+    fs::write(&image, b"original").unwrap();
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&image)
+        .unwrap()
+        .set_modified(SystemTime::now() - Duration::from_secs(120))
+        .unwrap();
+    let mut hashes = Vec::new();
+    for invocation in 0..2 {
+        let out = if invocation == 0 {
+            s.run(&["scan", root.to_str().unwrap()])
+        } else {
+            s.run(&[root.to_str().unwrap(), "--dry-run"])
+        };
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let output = String::from_utf8(out.stdout).unwrap();
+        assert!(output.contains("planned \"image.png\""));
+        hashes.push(
+            output
+                .lines()
+                .find_map(|line| line.strip_prefix("plan hash: "))
+                .unwrap()
+                .to_owned(),
+        );
+    }
+    assert_eq!(hashes[0], hashes[1]);
+    assert_eq!(fs::read(&image).unwrap(), b"original");
+    let files: Vec<_> = fs::read_dir(s.root.join("config/state/plans"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    assert_eq!(files.len(), 2);
+    assert_ne!(files[0], files[1]);
+    let first = fs::read_to_string(&files[0]).unwrap();
+    let second = fs::read_to_string(&files[1]).unwrap();
+    assert_ne!(first, second);
+    for text in [first, second] {
+        assert!(text.contains(&hashes[0]));
+        assert!(text.contains("\"status\":\"planned\""));
+        assert!(text.contains("\"argv\":[\"--\",\"image.png\"]"));
+    }
+}

@@ -79,7 +79,9 @@ jobs:
           mkfifo "$temp/fifo"
           export AT03_FIFO_ROOT="$temp"
           cargo test --locked -p auto-tzim-core fifo_is_skipped_without_opening -- --ignored --nocapture
-          cargo test --locked -p auto-tzim-core ten_thousand_entries_record_elapsed_time -- --nocapture
+          set -o pipefail
+          cargo test --locked -p auto-tzim-core ten_thousand_entries_record_elapsed_time -- --nocapture 2>&1 | tee "$RUNNER_TEMP/at03-budget"
+          echo "::notice title=AT-03 budget::$(grep '^AT03_BUDGET_10000_MS=' "$RUNNER_TEMP/at03-budget")"
       - name: Partial AT-03 pipeline evidence
         shell: bash
         run: |

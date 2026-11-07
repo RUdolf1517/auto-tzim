@@ -362,11 +362,10 @@ fn check_parent(root: &Path, full: &Path) -> Result<(), String> {
 
 // Simple glob over path bytes: '*' stays within a component, '**' may cross '/'.
 fn glob(pattern: &[u8], path: &[u8]) -> bool {
-    // Each recurrence needs only the following three pattern rows. Bound
+    // Each recurrence needs only the following two pattern rows. Bound
     // memory by path length even for a very long user-supplied pattern.
     let mut one = vec![false; path.len() + 1];
     let mut two = one.clone();
-    let mut three = one.clone();
     one[path.len()] = true;
     for i in (0..pattern.len()).rev() {
         let mut current = vec![false; path.len() + 1];
@@ -374,16 +373,14 @@ fn glob(pattern: &[u8], path: &[u8]) -> bool {
             if pattern[i] == b'*' {
                 let double = pattern.get(i + 1) == Some(&b'*');
                 let rest = if double { &two } else { &one };
-                current[j] = rest[j]
-                    || (double && pattern.get(i + 2) == Some(&b'/') && three[j])
-                    || (j < path.len() && (double || path[j] != b'/') && current[j + 1]);
+                current[j] =
+                    rest[j] || (j < path.len() && (double || path[j] != b'/') && current[j + 1]);
             } else if j < path.len()
                 && (pattern[i] == path[j] || (pattern[i] == b'?' && path[j] != b'/'))
             {
                 current[j] = one[j + 1];
             }
         }
-        three = two;
         two = one;
         one = current;
     }
@@ -402,8 +399,7 @@ mod tests {
             if p[0] == b'*' {
                 let double = p.get(1) == Some(&b'*');
                 let rest = &p[if double { 2 } else { 1 }..];
-                return (double && rest.first() == Some(&b'/') && reference(&rest[1..], s))
-                    || reference(rest, s)
+                return reference(rest, s)
                     || (!s.is_empty() && (double || s[0] != b'/') && reference(p, &s[1..]));
             }
             !s.is_empty()
@@ -440,12 +436,22 @@ mod tests {
     }
 
     #[test]
+    fn extension_policy_is_case_insensitive_and_uses_last_suffix() {
+        let formats = vec!["jpeg".into(), "png".into()];
+        assert!(format_selected(b"a.JPG", &formats));
+        assert!(format_selected(b"a.tar.PnG", &formats));
+        assert!(!format_selected(b"a.png.gz", &formats));
+        assert!(!format_selected(b"no-extension", &formats));
+        assert!(format_selected(b"no-extension", &[]));
+    }
+
+    #[test]
     fn glob_boundaries() {
         assert!(glob(b".git/**", b".git/"));
         assert!(glob(b"**/*.png", b"nested/a.png"));
-        assert!(glob(b"**/*.png", b"a.png"));
+        assert!(!glob(b"**/*.png", b"a.png"));
         assert!(!glob(b"*.png", b"nested/a.png"));
-        assert!(glob(b"a/**/z", b"a/z"));
+        assert!(!glob(b"a/**/z", b"a/z"));
         assert!(glob(b"a/**/z", b"a/x/y/z"));
         assert!(!glob(b"a/*/z", b"a/x/y/z"));
         assert!(glob(b"", b""));
@@ -544,6 +550,61 @@ mod ordering_and_containment_tests {
         assert!(check_directory(&root, &child, &expected)
             .unwrap_err()
             .contains("directory changed"));
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn injected_directory_swap_aborts_before_any_plan_is_published() {
+        let base = std::env::temp_dir().join(format!(
+            "atz-race-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(base.join("root/child")).unwrap();
+        std::fs::create_dir(base.join("outside")).unwrap();
+        std::fs::write(base.join("root/child/inside"), b"inside").unwrap();
+        std::fs::write(base.join("outside/outside"), b"outside").unwrap();
+        let root = std::fs::canonicalize(base.join("root")).unwrap();
+        let child = root.join("child");
+        let outside = std::fs::canonicalize(base.join("outside")).unwrap();
+        let swapped = std::cell::Cell::new(false);
+        let result = walk_with_hook(&root, &Folder::default(), SystemTime::now(), &|dir| {
+            if dir == child && !swapped.replace(true) {
+                std::fs::rename(&child, root.join("old-child")).unwrap();
+                symlink(&outside, &child).unwrap();
+            }
+        });
+        assert!(swapped.get());
+        assert!(result.unwrap_err().contains("tree_changed"));
+        assert!(!base.join("state/plans").exists());
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn injected_file_swap_for_outside_symlink_is_never_a_candidate() {
+        let base = std::env::temp_dir().join(format!(
+            "atz-file-race-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(base.join("root")).unwrap();
+        std::fs::write(base.join("root/file"), b"inside").unwrap();
+        std::fs::write(base.join("outside"), b"outside").unwrap();
+        let root = std::fs::canonicalize(base.join("root")).unwrap();
+        let swapped = std::cell::Cell::new(false);
+        let found = walk_with_hook(&root, &Folder::default(), SystemTime::now(), &|_| {
+            if !swapped.replace(true) {
+                std::fs::remove_file(root.join("file")).unwrap();
+                symlink(base.join("outside"), root.join("file")).unwrap();
+            }
+        })
+        .unwrap();
+        assert!(found.candidates.is_empty());
+        assert!(found
+            .skipped
+            .iter()
+            .any(|skip| skip.reason == "skipped_policy: symlink"));
+        assert_eq!(std::fs::read(base.join("outside")).unwrap(), b"outside");
         std::fs::remove_dir_all(base).unwrap();
     }
 
@@ -861,11 +922,25 @@ mod corpus_tests {
         };
         let start = std::time::Instant::now();
         let result = walk(&f.0, &profile, SystemTime::now()).unwrap();
-        let elapsed = start.elapsed();
         assert_eq!(result.files_seen, 10_000);
         assert_eq!(result.candidates.len(), 10_000);
         assert_eq!(result.directories, 1);
-        eprintln!("10,000 entries: {} ms (walk only)", elapsed.as_millis());
+        let plans = crate::planner::build_plans(vec![(profile, result)], |folder, candidate| {
+            Ok(crate::planner::arguments(folder, candidate))
+        })
+        .unwrap();
+        assert_eq!(plans[0].rows.len(), 10_000);
+        let elapsed = start.elapsed();
+        eprintln!(
+            "AT03_BUDGET_10000_MS={} (walk, policy, plan rows and hash)",
+            elapsed.as_millis()
+        );
+        if cfg!(target_os = "linux") {
+            assert!(
+                elapsed < Duration::from_secs(15),
+                "D-65 budget exceeded: {elapsed:?}"
+            );
+        }
     }
 
     #[test]

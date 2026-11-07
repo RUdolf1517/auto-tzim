@@ -6,6 +6,11 @@ use std::fmt::Write;
 /// Render one completed in-memory plan for a human reader. Names and arguments
 /// are escaped so control characters cannot manufacture additional output rows.
 pub fn plan(plan: &crate::planner::Plan) -> String {
+    plan_with_diagnostics(plan, true)
+}
+
+/// Render a plan, optionally omitting diagnostics already emitted in this batch.
+pub fn plan_with_diagnostics(plan: &crate::planner::Plan, diagnostics: bool) -> String {
     use crate::planner::{base64, json_string};
     use std::os::unix::ffi::OsStrExt;
     let mut text = String::new();
@@ -37,8 +42,10 @@ pub fn plan(plan: &crate::planner::Plan) -> String {
         let raw = base64(skip.path.as_os_str().as_bytes());
         let _ = writeln!(text, "skipped {path} path_raw_b64={raw} reason={reason}");
     }
-    for diagnostic in &plan.discovery.diagnostics {
-        let _ = writeln!(text, "diagnostic: {}", diagnostic.reason.escape_debug());
+    if diagnostics {
+        for diagnostic in &plan.discovery.diagnostics {
+            let _ = writeln!(text, "diagnostic: {}", diagnostic.reason.escape_debug());
+        }
     }
     text.push_str(&scope(&plan.discovery));
     text

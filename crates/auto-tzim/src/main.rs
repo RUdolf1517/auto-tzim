@@ -201,10 +201,15 @@ fn execute(cli: Cli, matches: &clap::ArgMatches, path_first: bool) -> Result<(),
             .parent()
             .ok_or_else(|| ConfigError::Internal("missing state directory".into()))?;
         let plans_dir = state_home.join("state/plans");
+        let mut reported_temp = false;
         for plan in &plans {
             auto_tzim_core::planner::publish(&plans_dir, plan, std::time::SystemTime::now())
                 .map_err(|e| ConfigError::Internal(format!("plan publication: {e}")))?;
-            print!("{}", auto_tzim_core::summary::plan(plan));
+            print!(
+                "{}",
+                auto_tzim_core::summary::plan_with_diagnostics(plan, !reported_temp)
+            );
+            reported_temp |= !plan.discovery.diagnostics.is_empty();
         }
         return Ok(());
     }

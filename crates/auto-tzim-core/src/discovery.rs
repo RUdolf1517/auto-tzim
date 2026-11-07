@@ -322,7 +322,8 @@ fn format_selected(name: &[u8], formats: &[String]) -> bool {
 // Best-effort race detection only: path-based std APIs cannot make this check
 // atomic with read_dir. An authoritative no-follow primitive is still needed.
 fn check_directory(root: &Path, dir: &Path, expected: &Identity) -> Result<(), String> {
-    let metadata = std::fs::symlink_metadata(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let metadata = std::fs::symlink_metadata(dir)
+        .map_err(|e| format!("tree_changed: {}: {e}", dir.display()))?;
     let current = Identity::from_metadata(&metadata);
     if !metadata.file_type().is_dir() || current.dev != expected.dev || current.ino != expected.ino
     {
@@ -331,7 +332,8 @@ fn check_directory(root: &Path, dir: &Path, expected: &Identity) -> Result<(), S
             dir.display()
         ));
     }
-    let canonical = std::fs::canonicalize(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let canonical =
+        std::fs::canonicalize(dir).map_err(|e| format!("tree_changed: {}: {e}", dir.display()))?;
     if !canonical.starts_with(root) {
         return Err(format!(
             "tree_changed: containment violation: {}",
@@ -352,8 +354,8 @@ fn check_parent(root: &Path, full: &Path) -> Result<(), String> {
     let parent = full
         .parent()
         .ok_or_else(|| "candidate has no parent".to_owned())?;
-    let resolved =
-        std::fs::canonicalize(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+    let resolved = std::fs::canonicalize(parent)
+        .map_err(|e| format!("tree_changed: {}: {e}", parent.display()))?;
     if !resolved.starts_with(root) {
         return Err(format!(
             "tree_changed: containment violation: {}",
@@ -768,6 +770,53 @@ mod corpus_tests {
             b"keep temp"
         );
         assert_eq!(std::fs::read(f.0.join("first")).unwrap(), b"keep");
+    }
+
+    #[test]
+    fn format_filter_follows_hardlink_and_age_gates() {
+        let f = Fixture::new();
+        for name in ["good.PnG", "wrong.gz", "hard.gz", ".tzim-1.tmp"] {
+            std::fs::write(f.0.join(name), b"not an image").unwrap();
+        }
+        std::fs::hard_link(f.0.join("hard.gz"), f.0.join("hard2.gz")).unwrap();
+        std::fs::hard_link(f.0.join(".tzim-1.tmp"), f.0.join(".tzim-2.tmp")).unwrap();
+        let profile = Folder {
+            formats: vec!["png".into()],
+            min_file_age_seconds: 0,
+            include_hidden: true,
+            ..Folder::default()
+        };
+        let result = walk(&f.0, &profile, SystemTime::now()).unwrap();
+        assert_eq!(
+            result
+                .candidates
+                .iter()
+                .map(|c| c.path.as_path())
+                .collect::<Vec<_>>(),
+            [Path::new("good.PnG")]
+        );
+        assert_eq!(
+            result
+                .skipped
+                .iter()
+                .filter(|s| s.reason == "hardlink_skip")
+                .count(),
+            2
+        );
+        assert_eq!(
+            result
+                .skipped
+                .iter()
+                .filter(|s| s.reason == "skipped_policy: format_not_selected")
+                .count(),
+            1
+        );
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics[0].reason, "orphan_temp");
+        assert!(!result
+            .skipped
+            .iter()
+            .any(|s| s.path.to_string_lossy().starts_with(".tzim-")));
     }
 
     #[test]

@@ -1439,6 +1439,7 @@ fn at03_names_corpus_emits_one_planned_row_per_constructible_name() {
         b"bad\xff.png",
     ];
     let mut created = 0;
+    let mut created_names = Vec::new();
     for name in names {
         let path = root.join(OsString::from_vec(name.to_vec()));
         match fs::write(&path, b"x") {
@@ -1450,6 +1451,7 @@ fn at03_names_corpus_emits_one_planned_row_per_constructible_name() {
                     .set_modified(SystemTime::now() - Duration::from_secs(120))
                     .unwrap();
                 created += 1;
+                created_names.push(name.to_vec());
             }
             Err(error) if *name == b"bad\xff.png" && error.raw_os_error() == Some(92) => {
                 eprintln!("N-17 skipped: filesystem rejects non-UTF-8 name: {error}");
@@ -1470,6 +1472,26 @@ fn at03_names_corpus_emits_one_planned_row_per_constructible_name() {
             .count(),
         created
     );
+    let plan_path = fs::read_dir(s.root.join("config/state/plans"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let plan = fs::read_to_string(plan_path).unwrap();
+    for name in &created_names {
+        let encoded = auto_tzim_core::planner::base64(name);
+        let field = format!("\"path_raw_b64\":\"{encoded}\"");
+        assert_eq!(plan.matches(&field).count(), 1, "raw path {encoded}");
+        let arg = match std::str::from_utf8(name) {
+            Ok(value) => auto_tzim_core::planner::json_string(value),
+            Err(_) => format!("{{\"b64\":\"{encoded}\"}}"),
+        };
+        assert!(
+            plan.contains(&format!("\"argv\":[\"--\",{arg}]")),
+            "argv for {encoded}"
+        );
+    }
     for name in ["ats_pwned", "ats_pwned2"] {
         assert!(!root.join(name).exists());
         assert!(!std::path::Path::new(name).exists());

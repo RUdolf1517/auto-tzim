@@ -136,7 +136,7 @@ jobs:
           cargo test --locked -p auto-tzim --test config_cli at04_empty_profile_ignores_binary_default_formats_p01
           cargo test --locked -p auto-tzim-core reason_and_note_are_opaque -- --nocapture 2>&1 | tee -a "$RUNNER_TEMP/at04-cases"
           grep '^AT04_' "$RUNNER_TEMP/at04-cases" > "$RUNNER_TEMP/at04-raw"
-          python3 -c 'import base64,os,pathlib; data=base64.b64encode(pathlib.Path(os.environ["RUNNER_TEMP"], "at04-raw").read_bytes()).decode(); [print(f"::notice title=AT-04 raw {i//2000:03d}::{data[i:i+2000]}") for i in range(0,len(data),2000)]'
+          python3 -c 'import base64,os,pathlib,zlib; data=base64.b64encode(zlib.compress(pathlib.Path(os.environ["RUNNER_TEMP"], "at04-raw").read_bytes(),9)).decode(); assert len(data) <= 20000, "evidence exceeds GitHub step annotation limit"; [print(f"::notice title=AT-04 raw zlib {i//2000:03d}::{data[i:i+2000]}") for i in range(0,len(data),2000)]'
       - name: AT-03 real scan evidence
         shell: bash
         run: |

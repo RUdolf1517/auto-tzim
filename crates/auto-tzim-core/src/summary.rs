@@ -34,7 +34,8 @@ pub fn plan(plan: &crate::planner::Plan) -> String {
     for skip in &plan.discovery.skipped {
         let path = json_string(&skip.path.to_string_lossy());
         let reason = json_string(&skip.reason);
-        let _ = writeln!(text, "skipped {path} reason={reason}");
+        let raw = base64(skip.path.as_os_str().as_bytes());
+        let _ = writeln!(text, "skipped {path} path_raw_b64={raw} reason={reason}");
     }
     text.push_str(&scope(&plan.discovery));
     text

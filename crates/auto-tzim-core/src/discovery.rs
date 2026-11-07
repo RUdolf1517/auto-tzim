@@ -678,6 +678,24 @@ mod corpus_tests {
     }
 
     #[test]
+    fn unreadable_regular_file_is_discovered_without_opening_it() {
+        use std::os::unix::fs::PermissionsExt;
+        let f = Fixture::new();
+        let path = f.0.join("unreadable");
+        std::fs::write(&path, b"unchanged").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0)).unwrap();
+        let profile = Folder {
+            min_file_age_seconds: 0,
+            ..Folder::default()
+        };
+        let result = walk(&f.0, &profile, SystemTime::now()).unwrap();
+        assert_eq!(result.candidates.len(), 1);
+        assert_eq!(result.candidates[0].path, Path::new("unreadable"));
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(std::fs::read(path).unwrap(), b"unchanged");
+    }
+
+    #[test]
     fn read_only_tree_remains_byte_identical() {
         use std::os::unix::fs::PermissionsExt;
         let f = Fixture::new();

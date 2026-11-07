@@ -270,6 +270,34 @@ mod tests {
     }
 
     #[test]
+    fn every_hashed_identity_component_changes_digest() {
+        let original = row();
+        let original_hash = plan_hash(std::slice::from_ref(&original));
+        let mut variants = Vec::new();
+        let mut changed = original.clone();
+        changed.candidate.identity.dev += 1;
+        variants.push(changed);
+        let mut changed = original.clone();
+        changed.candidate.identity.ino += 1;
+        variants.push(changed);
+        let mut changed = original.clone();
+        changed.candidate.identity.size += 1;
+        variants.push(changed);
+        let mut changed = original.clone();
+        changed.candidate.identity.mtime_ns += 1;
+        variants.push(changed);
+        let mut changed = original.clone();
+        changed.candidate.path = "different.png".into();
+        variants.push(changed);
+        for changed in variants {
+            assert_ne!(original_hash, plan_hash(&[changed]));
+        }
+        let mut changed = original;
+        changed.candidate.identity.links += 1;
+        assert_eq!(original_hash, plan_hash(&[changed]));
+    }
+
+    #[test]
     fn rows_sort_by_raw_bytes_and_preserve_non_utf8_paths() {
         use std::ffi::OsString;
         use std::os::unix::ffi::OsStringExt;

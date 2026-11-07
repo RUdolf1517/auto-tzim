@@ -178,10 +178,7 @@ pub fn inspect(path: &Path) -> Result<Identity, Incompatible> {
         .map_err(|e| failure(e.to_string()))?
     {
         json::Value::Object(fields)
-            if fields.values().all(|v| matches!(v, json::Value::Bool(_))) =>
-        {
-            ()
-        }
+            if fields.values().all(|v| matches!(v, json::Value::Bool(_))) => {}
         _ => return Err(failure("key build_features: expected object of booleans")),
     }
     for key in ["compiled_formats", "default_enabled_formats"] {
@@ -190,10 +187,7 @@ pub fn inspect(path: &Path) -> Result<Identity, Incompatible> {
             .map_err(|e| failure(e.to_string()))?
         {
             json::Value::Array(items)
-                if items.iter().all(|v| matches!(v, json::Value::String(_))) =>
-            {
-                ()
-            }
+                if items.iter().all(|v| matches!(v, json::Value::String(_))) => {}
             _ => return Err(failure(format!("key {key}: expected array of strings"))),
         }
     }
@@ -208,10 +202,7 @@ pub fn inspect(path: &Path) -> Result<Identity, Incompatible> {
             .map_err(|e| failure(e.to_string()))?
         {
             json::Value::Array(items)
-                if items.iter().all(|v| matches!(v, json::Value::Object(_))) =>
-            {
-                ()
-            }
+                if items.iter().all(|v| matches!(v, json::Value::Object(_))) => {}
             _ => return Err(failure(format!("key {key}: expected array of objects"))),
         }
     }

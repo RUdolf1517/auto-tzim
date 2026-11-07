@@ -53,7 +53,6 @@ fn probe(path: &Path, flag: &str, start: Instant) -> Result<Vec<u8>, Incompatibl
     }
     let mut child = Command::new(path)
         .arg(flag)
-        .arg("--dry-run")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

@@ -1779,6 +1779,15 @@ fn at04_adapter_corpus_versions_schemas_and_tripwires() {
             );
         }
         eprintln!(
+            "AT04_RAW {} exit={} stdout_b64={} stderr_b64={} log_b64={} vars_b64={}",
+            case.id,
+            out.status.code().unwrap(),
+            auto_tzim_core::planner::base64(&out.stdout),
+            auto_tzim_core::planner::base64(&out.stderr),
+            auto_tzim_core::planner::base64(log.as_bytes()),
+            auto_tzim_core::planner::base64(format!("{:?}", case.vars).as_bytes())
+        );
+        eprintln!(
             "AT04_CASE {} exit={} calls={} log={:?} stderr={:?}",
             case.id,
             case.exit,
@@ -1817,6 +1826,11 @@ fn at04_missing_and_non_executable_binary_refused() {
         assert!(String::from_utf8_lossy(&out.stderr).contains("incompatible_tzim"));
         assert!(!s.root.join("config/state/plans").exists());
         assert!(!s.root.join("tzim-calls").exists());
+        eprintln!(
+            "AT04_RAW A-05/{label} exit=3 stdout_b64={} stderr_b64={} log_b64=",
+            auto_tzim_core::planner::base64(&out.stdout),
+            auto_tzim_core::planner::base64(&out.stderr)
+        );
         eprintln!(
             "AT04_CASE A-05/{label} exit=3 calls=0 stderr={:?}",
             String::from_utf8_lossy(&out.stderr)
@@ -1996,5 +2010,40 @@ fn at04_a10_forbidden_flag_tripwire_stays_cold() {
     assert_eq!(
         log, "--version\n--capabilities\n",
         "A-10: two flag-only and zero path invocations"
+    );
+}
+
+#[test]
+fn at04_probe_receives_null_stdin_even_when_cli_has_input() {
+    use std::io::Write;
+    use std::process::Stdio;
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let mut process = Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
+        .arg("doctor")
+        .env("HOME", s.root.join("home"))
+        .env("AUTO_TZIM_HOME", s.root.join("config"))
+        .env("AT04_LOG", s.root.join("tzim-calls"))
+        .env("AT04_STDIN_CHECK", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    process
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"parent input must not reach child")
+        .unwrap();
+    let out = process.wait_with_output().unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(s.root.join("tzim-calls")).unwrap(),
+        "--version\n--capabilities\n"
     );
 }

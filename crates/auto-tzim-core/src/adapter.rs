@@ -280,11 +280,16 @@ mod mapping_tests {
     use super::*;
     #[test]
     fn reason_and_note_are_opaque() {
+        eprintln!();
         for reason in [Some("format_disabled"), Some("something_new"), None] {
             let row = map_result("skipped", reason, Some("verbatim\nnot interpreted")).unwrap();
             assert_eq!(row.status, "skipped_by_tzim");
             assert_eq!(row.reason, reason);
             assert_eq!(row.note, Some("verbatim\nnot interpreted"));
+            eprintln!(
+                "AT04_MAPPING A-12 input={reason:?} status={} reason={:?} note={:?}",
+                row.status, row.reason, row.note
+            );
         }
         for (input, output) in STATUS_MAP {
             assert_eq!(map_result(input, None, None).unwrap().status, *output);

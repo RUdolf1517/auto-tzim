@@ -1388,3 +1388,24 @@ fn three_roots_are_ordered_deduplicated_and_independent() {
     assert_eq!(rows(original), rows(repeat));
     assert_eq!(hash(original), hash(repeat));
 }
+
+#[test]
+fn scan_rejects_root_containing_default_state_directory() {
+    let s = Sandbox::new();
+    #[cfg(target_os = "macos")]
+    let root = s.root.join("home/Library");
+    #[cfg(not(target_os = "macos"))]
+    let root = s.root.join("home/.config");
+    fs::create_dir_all(&root).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
+        .env("HOME", s.root.join("home"))
+        .env_remove("AUTO_TZIM_HOME")
+        .env_remove("XDG_CONFIG_HOME")
+        .arg("scan")
+        .arg(&root)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("state_inside_root"));
+    assert!(fs::read_dir(root).unwrap().next().is_none());
+}

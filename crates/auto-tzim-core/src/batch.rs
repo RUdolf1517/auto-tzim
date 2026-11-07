@@ -48,10 +48,19 @@ pub fn resolve_inputs(
 /// Canonicalise and deduplicate roots in first-occurrence order, rejecting overlaps.
 pub fn preflight(profiles: Vec<Folder>) -> Result<Vec<Folder>, String> {
     let mut accepted: Vec<Folder> = Vec::new();
+    let config_path = config::config_path().map_err(|error| error.to_string())?;
+    let state = config_path
+        .parent()
+        .ok_or_else(|| "missing state directory".to_owned())?;
+    let state =
+        canonical_with_missing(state).map_err(|error| format!("state directory: {error}"))?;
     for mut profile in profiles {
         let original = profile.root.clone();
         let root = config::validate_root(&original, profile.allow_cloud_sync)
             .map_err(|error| format!("{}: {error}", original.display()))?;
+        if root.starts_with(&state) || state.starts_with(&root) {
+            return Err(format!("{}: state_inside_root", original.display()));
+        }
         if accepted.iter().any(|item| item.root == root) {
             continue;
         }
@@ -72,6 +81,36 @@ pub fn preflight(profiles: Vec<Folder>) -> Result<Vec<Folder>, String> {
         return Err("no roots specified".into());
     }
     Ok(accepted)
+}
+
+// Resolve every existing ancestor, retaining missing final components. This
+// performs no directory enumeration and handles a not-yet-created state home.
+fn canonical_with_missing(path: &std::path::Path) -> std::io::Result<PathBuf> {
+    use std::path::Component;
+    let mut result = if path.is_absolute() {
+        PathBuf::new()
+    } else {
+        std::env::current_dir()?
+    };
+    for component in path.components() {
+        match component {
+            Component::RootDir => result.push(component.as_os_str()),
+            Component::CurDir => (),
+            Component::ParentDir => {
+                result.pop();
+            }
+            Component::Normal(part) => {
+                result.push(part);
+                match std::fs::symlink_metadata(&result) {
+                    Ok(_) => result = std::fs::canonicalize(&result)?,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+                    Err(error) => return Err(error),
+                }
+            }
+            Component::Prefix(_) => return Err(std::io::Error::other("unsupported path prefix")),
+        }
+    }
+    Ok(result)
 }
 
 /// Construct the default profile for an unconfigured root.

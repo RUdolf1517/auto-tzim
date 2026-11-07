@@ -300,37 +300,94 @@ fn check_parent(root: &Path, full: &Path) -> Result<(), String> {
 
 // Simple glob over path bytes: '*' stays within a component, '**' may cross '/'.
 fn glob(pattern: &[u8], path: &[u8]) -> bool {
-    // Dynamic programming bounds work by pattern length times path length,
-    // rather than recursively backtracking over adversarial wildcard patterns.
-    let mut table = vec![vec![false; path.len() + 1]; pattern.len() + 1];
-    table[pattern.len()][path.len()] = true;
+    // Each recurrence needs only the following three pattern rows. Bound
+    // memory by path length even for a very long user-supplied pattern.
+    let mut one = vec![false; path.len() + 1];
+    let mut two = one.clone();
+    let mut three = one.clone();
+    one[path.len()] = true;
     for i in (0..pattern.len()).rev() {
+        let mut current = vec![false; path.len() + 1];
         for j in (0..=path.len()).rev() {
             if pattern[i] == b'*' {
                 let double = pattern.get(i + 1) == Some(&b'*');
-                let next = i + if double { 2 } else { 1 };
-                table[i][j] = table[next][j]
-                    || (double && pattern.get(next) == Some(&b'/') && table[next + 1][j])
-                    || (j < path.len() && (double || path[j] != b'/') && table[i][j + 1]);
+                let rest = if double { &two } else { &one };
+                current[j] = rest[j]
+                    || (double && pattern.get(i + 2) == Some(&b'/') && three[j])
+                    || (j < path.len() && (double || path[j] != b'/') && current[j + 1]);
             } else if j < path.len()
                 && (pattern[i] == path[j] || (pattern[i] == b'?' && path[j] != b'/'))
             {
-                table[i][j] = table[i + 1][j + 1];
+                current[j] = one[j + 1];
             }
         }
+        three = two;
+        two = one;
+        one = current;
     }
-    table[0][0]
+    one[0]
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
+    fn bounded_glob_matches_reference_for_small_patterns() {
+        fn reference(p: &[u8], s: &[u8]) -> bool {
+            if p.is_empty() {
+                return s.is_empty();
+            }
+            if p[0] == b'*' {
+                let double = p.get(1) == Some(&b'*');
+                let rest = &p[if double { 2 } else { 1 }..];
+                return (double && rest.first() == Some(&b'/') && reference(&rest[1..], s))
+                    || reference(rest, s)
+                    || (!s.is_empty() && (double || s[0] != b'/') && reference(p, &s[1..]));
+            }
+            !s.is_empty()
+                && (p[0] == s[0] || (p[0] == b'?' && s[0] != b'/'))
+                && reference(&p[1..], &s[1..])
+        }
+        fn words(alphabet: &[u8], max: usize) -> Vec<Vec<u8>> {
+            let mut result = vec![Vec::new()];
+            let mut layer = vec![Vec::new()];
+            for _ in 0..max {
+                layer = layer
+                    .iter()
+                    .flat_map(|word| {
+                        alphabet.iter().map(move |&ch| {
+                            let mut next = word.clone();
+                            next.push(ch);
+                            next
+                        })
+                    })
+                    .collect();
+                result.extend(layer.iter().cloned());
+            }
+            result
+        }
+        for pattern in words(b"a/*?", 4) {
+            for path in words(b"a/", 4) {
+                assert_eq!(
+                    glob(&pattern, &path),
+                    reference(&pattern, &path),
+                    "pattern={pattern:?}, path={path:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn glob_boundaries() {
         assert!(glob(b".git/**", b".git/"));
         assert!(glob(b"**/*.png", b"nested/a.png"));
         assert!(glob(b"**/*.png", b"a.png"));
         assert!(!glob(b"*.png", b"nested/a.png"));
+        assert!(glob(b"a/**/z", b"a/z"));
+        assert!(glob(b"a/**/z", b"a/x/y/z"));
+        assert!(!glob(b"a/*/z", b"a/x/y/z"));
+        assert!(glob(b"", b""));
+        assert!(!glob(b"", b"a"));
     }
 }
 

@@ -225,6 +225,7 @@ fn publication_never_replaces_colliding_id_and_encodes_raw_root() {
     let path = planner::publish(&plans_dir, &plan, time).unwrap();
     let first = fs::read(&path).unwrap();
     let text = String::from_utf8(first.clone()).unwrap();
+    assert!(text.contains("\"created\":\"2023-11-14T22:13:20.000000000Z\""));
     assert!(text.contains("\"root\":\"/root/bad"));
     assert!(text.contains("\"root_raw_b64\":\"L3Jvb3QvYmFk/w==\""));
     let error = planner::publish(&plans_dir, &plan, time + Duration::from_secs(1)).unwrap_err();

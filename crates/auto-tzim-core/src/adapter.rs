@@ -97,9 +97,6 @@ fn probe(path: &Path, flag: &str, start: Instant) -> Result<Vec<u8>, Incompatibl
                 }
             }
         }
-        if status.is_some() && streams.iter().all(Option::is_some) {
-            break;
-        }
         if start.elapsed() >= BUDGET {
             let _ = child.kill();
             let _ = child.wait();
@@ -107,6 +104,9 @@ fn probe(path: &Path, flag: &str, start: Instant) -> Result<Vec<u8>, Incompatibl
                 "{flag}: timeout after {:?}",
                 start.elapsed()
             )));
+        }
+        if status.is_some() && streams.iter().all(Option::is_some) {
+            break;
         }
         std::thread::sleep(Duration::from_millis(5));
     }

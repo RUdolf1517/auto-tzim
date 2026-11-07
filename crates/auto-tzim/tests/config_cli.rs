@@ -1230,7 +1230,10 @@ fn scan_direct_non_utf8_root_records_exact_bytes() {
     match fs::create_dir(&root) {
         Ok(()) => (),
         Err(error) if error.raw_os_error() == Some(92) => {
-            eprintln!("non-UTF-8 root skipped: filesystem rejects the name: {error}");
+            eprintln!(
+                "non-UTF-8 root skipped on {}: filesystem rejects the name: {error}",
+                std::env::consts::OS
+            );
             return;
         }
         Err(error) => panic!("fixture setup: {error}"),
@@ -1522,7 +1525,10 @@ fn at03_names_corpus_emits_one_planned_row_per_constructible_name() {
                 created_names.push(name.to_vec());
             }
             Err(error) if *name == b"bad\xff.png" && error.raw_os_error() == Some(92) => {
-                eprintln!("N-17 skipped: filesystem rejects non-UTF-8 name: {error}");
+                eprintln!(
+                    "N-17 skipped on {}: filesystem rejects non-UTF-8 name: {error}",
+                    std::env::consts::OS
+                );
             }
             Err(error) => panic!("fixture: {error}"),
         }
@@ -1740,6 +1746,7 @@ fn at04_adapter_corpus_versions_schemas_and_tripwires() {
             calls: 1,
         },
     ];
+    eprintln!();
     for case in cases.drain(..) {
         let s = Sandbox::new();
         s.configure_tzim();
@@ -1788,6 +1795,7 @@ fn at04_missing_and_non_executable_binary_refused() {
     let s = Sandbox::new();
     s.configure_tzim();
     let root = s.folder("root");
+    eprintln!();
     for (label, path) in [
         ("missing", s.root.join("missing")),
         ("not-executable", s.root.join("not-executable")),
@@ -1889,6 +1897,7 @@ fn at04_shared_probe_timeout_is_bounded() {
         "--version\n--capabilities\n"
     );
     assert!(!s.root.join("config/state/plans").exists());
+    eprintln!();
     eprintln!(
         "AT04_TIMEOUT elapsed_ms={} exit=3 calls=2",
         elapsed.as_millis()
@@ -1929,4 +1938,37 @@ fn at04_empty_profile_ignores_binary_default_formats_p01() {
         "{plan}"
     );
     assert!(!plan.contains("--formats"));
+}
+
+#[test]
+fn at04_determinism_across_timezone_and_locale() {
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let root = s.folder("root");
+    let file = root.join("a.png");
+    fs::write(&file, b"x").unwrap();
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&file)
+        .unwrap()
+        .set_modified(SystemTime::now() - std::time::Duration::from_secs(120))
+        .unwrap();
+    let a = s.run_scenario(
+        &["scan", root.to_str().unwrap()],
+        &[("TZ", "UTC"), ("LC_ALL", "C")],
+    );
+    let b = s.run_scenario(
+        &["scan", root.to_str().unwrap()],
+        &[("TZ", "Pacific/Honolulu"), ("LC_ALL", "POSIX")],
+    );
+    assert!(a.status.success());
+    assert!(b.status.success());
+    let stable = |out: &[u8]| {
+        String::from_utf8_lossy(out)
+            .lines()
+            .filter(|line| !line.starts_with("plan id: "))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    assert_eq!(stable(&a.stdout), stable(&b.stdout));
 }

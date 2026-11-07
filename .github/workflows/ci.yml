@@ -92,6 +92,9 @@ jobs:
           set -o pipefail
           cargo test --locked -p auto-tzim-core real_proc_mount_boundary_is_reported_without_crossing -- --nocapture 2>&1 | tee "$RUNNER_TEMP/at03-mount"
           echo "::notice title=AT-03 mount::$(grep '^AT03_MOUNT ' "$RUNNER_TEMP/at03-mount" || echo 'not run: /proc not a separate filesystem')"
+      - name: Report mount boundary platform skip
+        if: runner.os != 'Linux'
+        run: echo '::notice title=AT-03 mount::not run on macOS: fixture uses Linux /proc mount'
       - name: Partial AT-03 pipeline evidence
         shell: bash
         run: |

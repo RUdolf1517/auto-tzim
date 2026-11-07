@@ -1025,3 +1025,74 @@ fn structural_validation_still_rejects_invalid_unavailable_profiles() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("must be absolute"));
 }
+
+#[test]
+fn recursive_default_and_explicit_profile_override() {
+    let sandbox = Sandbox::new();
+    let first = sandbox.folder("first");
+    let second = sandbox.folder("second");
+    assert!(sandbox
+        .run(&["folder", "add", first.to_str().unwrap()])
+        .status
+        .success());
+    assert!(
+        String::from_utf8_lossy(&sandbox.run(&["folder", "show", "first"]).stdout)
+            .contains("recursive = true")
+    );
+    assert!(sandbox
+        .run(&["folder", "add", second.to_str().unwrap(), "--no-recursive"])
+        .status
+        .success());
+    assert!(
+        String::from_utf8_lossy(&sandbox.run(&["folder", "show", "second"]).stdout)
+            .contains("recursive = false")
+    );
+}
+
+#[test]
+fn scan_invalid_batch_refuses_before_creating_state() {
+    let s = Sandbox::new();
+    let a = s.folder("a");
+    let c = s.folder("c");
+    let bad = s.root.join("missing");
+    let out = s.run(&[
+        "scan",
+        a.to_str().unwrap(),
+        bad.to_str().unwrap(),
+        c.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("missing"));
+    assert!(!s.root.join("config").exists());
+    let link = s.root.join("alias");
+    std::os::unix::fs::symlink(&a, &link).unwrap();
+    let out = s.run(&[
+        "scan",
+        c.to_str().unwrap(),
+        link.to_str().unwrap(),
+        a.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("root_is_symlink"));
+    assert!(!s.root.join("config").exists());
+    let child = a.join("child");
+    fs::create_dir(&child).unwrap();
+    let out = s.run(&[a.to_str().unwrap(), child.to_str().unwrap(), "--dry-run"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("overlapping_roots"));
+    assert!(!s.root.join("config").exists());
+}
+
+#[test]
+fn invalid_batch_reports_second_root_even_when_first_cannot_be_read() {
+    use std::os::unix::fs::PermissionsExt;
+    let s = Sandbox::new();
+    let first = s.folder("unreadable-root");
+    let missing = s.root.join("not-present");
+    fs::set_permissions(&first, fs::Permissions::from_mode(0o000)).unwrap();
+    let out = s.run(&["scan", first.to_str().unwrap(), missing.to_str().unwrap()]);
+    fs::set_permissions(&first, fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("not-present"));
+    assert!(!s.root.join("config").exists());
+}

@@ -31,14 +31,7 @@ pub fn canonical_rows(rows: &[Row]) -> String {
             .map(|item| json_string(item))
             .collect::<Vec<_>>()
             .join(",");
-        output.push_str(&format!(
-            "{{\"path_raw_b64\":{},\"size\":{},\"dev\":{},\"ino\":{},\"argv\":[{}]}}\n",
-            json_string(&path),
-            id.size,
-            id.dev,
-            id.ino,
-            argv
-        ));
+        output.push_str(&format!("{{\"path_raw_b64\":{},\"size\":{},\"dev\":{},\"ino\":{},\"mtime_ns\":{},\"argv\":[{}]}}\n", json_string(&path), id.size, id.dev, id.ino, id.mtime_ns, argv));
     }
     output
 }

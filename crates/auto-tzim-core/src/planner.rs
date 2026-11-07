@@ -167,6 +167,20 @@ mod tests {
     }
 
     #[test]
+    fn rows_sort_by_raw_bytes_and_preserve_non_utf8_paths() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+        let a = row();
+        let mut b = row();
+        b.candidate.path = PathBuf::from(OsString::from_vec(vec![b'x', 0xff]));
+        let forwards = canonical_rows(&[a.clone(), b.clone()]);
+        let backwards = canonical_rows(&[b.clone(), a.clone()]);
+        assert_eq!(forwards, backwards);
+        assert!(forwards.contains("\"path_raw_b64\":\"eP8=\""));
+        assert_eq!(plan_hash(&[a.clone(), b.clone()]), plan_hash(&[b, a]));
+    }
+
+    #[test]
     fn encoding() {
         assert_eq!(base64(b""), "");
         assert_eq!(base64(b"f"), "Zg==");

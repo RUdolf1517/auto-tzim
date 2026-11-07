@@ -69,4 +69,28 @@ mod tests {
             None
         );
     }
+    #[test]
+    fn nanosecond_boundary_and_future_times() {
+        let id = Identity {
+            dev: 1,
+            ino: 2,
+            size: 3,
+            mtime_ns: 100_000_000_500,
+            links: 1,
+        };
+        assert_eq!(
+            refusal(&id, UNIX_EPOCH + Duration::new(160, 499), 60),
+            Some("skipped_unstable")
+        );
+        assert_eq!(refusal(&id, UNIX_EPOCH + Duration::new(160, 500), 60), None);
+        assert_eq!(
+            refusal(&id, UNIX_EPOCH + Duration::from_secs(99), 0),
+            Some("skipped_unstable")
+        );
+        let pre_epoch = Identity {
+            mtime_ns: -1_000_000_000,
+            ..id
+        };
+        assert_eq!(refusal(&pre_epoch, UNIX_EPOCH, 1), None);
+    }
 }

@@ -142,6 +142,12 @@ jobs:
           test "$(jq -r '.plan_id' "${files[0]}")" != "$(jq -r '.plan_id' "${files[1]}")"
           test "$(jq -r '.created' "${files[0]}")" != "$(jq -r '.created' "${files[1]}")"
           echo "::notice title=AT-03 real scan::planned=2 scans=2 roots_unchanged=yes readonly=success canonical_hash=$expected ids=different"
+          echo "::notice title=AT-03 plan A base64::$(base64 < "${files[0]}" | tr -d '\n')"
+          echo "::notice title=AT-03 plan B base64::$(base64 < "${files[1]}" | tr -d '\n')"
+          echo "::notice title=AT-03 listing before base64::$(base64 < "$temp/list.before" | tr -d '\n')"
+          echo "::notice title=AT-03 listing after base64::$(base64 < "$temp/list.after" | tr -d '\n')"
+          echo "::notice title=AT-03 hashes before base64::$(base64 < "$temp/hash.before" | tr -d '\n')"
+          echo "::notice title=AT-03 hashes after base64::$(base64 < "$temp/hash.after" | tr -d '\n')"
       - name: Record aggregate validation evidence
         shell: bash
         run: |

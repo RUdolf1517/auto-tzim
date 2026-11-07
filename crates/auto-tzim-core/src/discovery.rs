@@ -115,6 +115,9 @@ fn visit(
         .map_err(|e| format!("{}: {e}", dir.display()))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("{}: {e}", dir.display()))?;
+    // Detect many swaps that occurred during enumeration. This is not an
+    // atomic no-follow guarantee: an attacker can still replace and restore it.
+    check_directory(root, &dir, expected)?;
     if reverse {
         entries.sort_by(|a, b| b.file_name().as_bytes().cmp(a.file_name().as_bytes()));
     }
@@ -288,6 +291,9 @@ fn check_parent(root: &Path, full: &Path) -> Result<(), String> {
         std::fs::canonicalize(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     if !resolved.starts_with(root) {
         return Err(format!("containment violation: {}", full.display()));
+    }
+    if resolved != parent {
+        return Err(format!("parent changed during scan: {}", full.display()));
     }
     Ok(())
 }

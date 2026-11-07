@@ -396,6 +396,28 @@ mod tests {
     }
 
     #[test]
+    fn scan_parser_preserves_non_utf8_root_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+        let path = OsString::from_vec(b"/tmp/bad\xff".to_vec());
+        let matches = Cli::command()
+            .try_get_matches_from(vec![
+                OsString::from("auto-tzim"),
+                OsString::from("scan"),
+                path.clone(),
+                OsString::from("--folder"),
+                OsString::from("photos"),
+            ])
+            .unwrap();
+        assert_eq!(
+            scan_inputs(matches.subcommand_matches("scan").unwrap()),
+            vec![
+                RootInput::Path(path.into()),
+                RootInput::Folder("photos".into())
+            ]
+        );
+    }
+
+    #[test]
     fn internal_error_maps_to_exit_seven() {
         assert_eq!(exit_code(&ConfigError::Internal("missing lock".into())), 7);
         assert_eq!(

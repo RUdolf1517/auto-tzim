@@ -73,7 +73,9 @@ jq -s 'map(select(.type=="run")) | .[-1].counts' < raw-rows.jsonl
 
 **Fail if:** `wc -l` differs from the claimed cases minus explicitly-reported `not run` rows; the counts disagree with
 `jq`; a status appears in the summary that has no row; or the corpus is smaller than
-[FIXTURE-CORPUS.md](FIXTURE-CORPUS.md) requires (111 IDs as of 2026-10-29).
+[FIXTURE-CORPUS.md](FIXTURE-CORPUS.md) requires (the page is the authority for the count: **120** contiguous IDs as of
+2026-11-07 — A-01…A-12, D-01…D-04, K-01…K-14, L-01…L-06, M-01…M-14, N-01…N-17, P-01…P-10, R-01…R-15, S-01…S-06,
+W-01…W-05, X-01…X-17. The `111` frozen on 2026-10-29 is the floor, not the current size).
 
 ## 4. Byte evidence: the claims that matter most
 

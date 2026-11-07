@@ -1149,3 +1149,43 @@ fn valid_scan_publishes_two_immutable_plans_with_equal_hashes() {
         assert!(text.contains("\"argv\":[\"--\",\"image.png\"]"));
     }
 }
+
+#[test]
+fn scan_direct_non_utf8_root_records_exact_bytes() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    let s = Sandbox::new();
+    let root = s.root.join(OsString::from_vec(b"raw-\xff".to_vec()));
+    match fs::create_dir(&root) {
+        Ok(()) => (),
+        Err(error) if error.raw_os_error() == Some(92) => {
+            eprintln!("non-UTF-8 root skipped: filesystem rejects the name: {error}");
+            return;
+        }
+        Err(error) => panic!("fixture setup: {error}"),
+    }
+    let out = Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
+        .env("HOME", s.root.join("home"))
+        .env("AUTO_TZIM_HOME", s.root.join("config"))
+        .arg("scan")
+        .arg(&root)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let plan = fs::read_dir(s.root.join("config/state/plans"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let text = fs::read_to_string(plan).unwrap();
+    let canonical = fs::canonicalize(&root).unwrap();
+    use std::os::unix::ffi::OsStrExt;
+    let encoded = auto_tzim_core::planner::base64(canonical.as_os_str().as_bytes());
+    assert!(text.contains(&format!("\"root_raw_b64\":\"{encoded}\"")));
+    assert!(text.contains("\"root\":"));
+}

@@ -450,5 +450,9 @@ mod tests {
             2
         );
         assert_eq!(exit_code(&ConfigError::Locked("holder".into())), 8);
+        assert_eq!(
+            exit_code(&ConfigError::TreeChanged("tree_changed".into())),
+            6
+        );
     }
 }

@@ -262,12 +262,12 @@ pub fn map_result<'a>(
     status: &str,
     reason_code: Option<&'a str>,
     note: Option<&'a str>,
-) -> Result<MappedResult<'a>, Incompatible> {
+) -> Result<MappedResult<'a>, String> {
     let mapped = STATUS_MAP
         .iter()
         .find(|(input, _)| *input == status)
         .map(|(_, output)| *output)
-        .ok_or_else(|| failure(format!("unknown result status: {status}")))?;
+        .ok_or_else(|| format!("unknown result status: {status}"))?;
     Ok(MappedResult {
         status: mapped,
         reason: reason_code,

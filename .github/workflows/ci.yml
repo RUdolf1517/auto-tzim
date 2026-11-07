@@ -140,6 +140,7 @@ jobs:
           test "$expected" = "$actual"
           test "$(jq '.rows | length' "${files[0]}")" = 2
           test "$(jq -r '.plan_id' "${files[0]}")" != "$(jq -r '.plan_id' "${files[1]}")"
+          test "$(jq -r '.created' "${files[0]}")" != "$(jq -r '.created' "${files[1]}")"
           echo "::notice title=AT-03 real scan::planned=2 scans=2 roots_unchanged=yes readonly=success canonical_hash=$expected ids=different"
       - name: Record aggregate validation evidence
         shell: bash

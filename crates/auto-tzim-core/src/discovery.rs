@@ -47,7 +47,11 @@ fn walk_with_order(
     reverse: bool,
 ) -> Result<Discovery, String> {
     let metadata = std::fs::symlink_metadata(root).map_err(|e| format!("root: {e}"))?;
-    let root_dev = Identity::from_metadata(&metadata).dev;
+    if !metadata.file_type().is_dir() {
+        return Err(format!("root is not a directory: {}", root.display()));
+    }
+    let root_identity = Identity::from_metadata(&metadata);
+    let root_dev = root_identity.dev;
     let mut result = Discovery::default();
     let options = WalkOptions {
         root_dev,
@@ -55,7 +59,14 @@ fn walk_with_order(
         now,
         reverse,
     };
-    visit(root, Path::new(""), 0, &options, &mut result)?;
+    visit(
+        root,
+        Path::new(""),
+        0,
+        &root_identity,
+        &options,
+        &mut result,
+    )?;
     result.candidates.sort_by(|a, b| {
         a.path
             .as_os_str()
@@ -86,6 +97,7 @@ fn visit(
     root: &Path,
     relative: &Path,
     depth: usize,
+    expected: &Identity,
     options: &WalkOptions<'_>,
     out: &mut Discovery,
 ) -> Result<(), String> {
@@ -96,10 +108,7 @@ fn visit(
         reverse,
     } = *options;
     let dir = root.join(relative);
-    let canonical = std::fs::canonicalize(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    if !canonical.starts_with(root) {
-        return Err(format!("containment violation: {}", dir.display()));
-    }
+    check_directory(root, &dir, expected)?;
     out.directories += 1;
     out.max_depth = out.max_depth.max(depth);
     let mut entries = std::fs::read_dir(&dir)
@@ -195,7 +204,8 @@ fn visit(
                 });
                 continue;
             }
-            visit(root, &path, depth + 1, options, out)?;
+            let identity = Identity::from_metadata(&metadata);
+            visit(root, &path, depth + 1, &identity, options, out)?;
             out.skipped.push(Skip {
                 path,
                 reason: "skipped_policy: directory".into(),
@@ -243,6 +253,28 @@ fn visit(
                 reason: format!("skipped_policy: {kind}"),
             });
         }
+    }
+    Ok(())
+}
+
+// Best-effort race detection only: path-based std APIs cannot make this check
+// atomic with read_dir. An authoritative no-follow primitive is still needed.
+fn check_directory(root: &Path, dir: &Path, expected: &Identity) -> Result<(), String> {
+    let metadata = std::fs::symlink_metadata(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let current = Identity::from_metadata(&metadata);
+    if !metadata.file_type().is_dir() || current.dev != expected.dev || current.ino != expected.ino
+    {
+        return Err(format!("directory changed during scan: {}", dir.display()));
+    }
+    let canonical = std::fs::canonicalize(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    if !canonical.starts_with(root) {
+        return Err(format!("containment violation: {}", dir.display()));
+    }
+    if canonical != dir {
+        return Err(format!(
+            "directory path changed during scan: {}",
+            dir.display()
+        ));
     }
     Ok(())
 }
@@ -363,6 +395,32 @@ mod ordering_and_containment_tests {
     use std::os::unix::fs::symlink;
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    #[test]
+    fn directory_replacement_or_symlink_is_detected_before_visit() {
+        let base = std::env::temp_dir().join(format!(
+            "atz-directory-check-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(base.join("root/child")).unwrap();
+        std::fs::create_dir(base.join("root/other")).unwrap();
+        let root = std::fs::canonicalize(base.join("root")).unwrap();
+        let child = root.join("child");
+        let expected = Identity::from_metadata(&std::fs::symlink_metadata(&child).unwrap());
+        assert!(check_directory(&root, &child, &expected).is_ok());
+        std::fs::rename(&child, root.join("old-child")).unwrap();
+        std::fs::create_dir(&child).unwrap();
+        assert!(check_directory(&root, &child, &expected)
+            .unwrap_err()
+            .contains("directory changed"));
+        std::fs::remove_dir(&child).unwrap();
+        symlink("other", &child).unwrap();
+        assert!(check_directory(&root, &child, &expected)
+            .unwrap_err()
+            .contains("directory changed"));
+        std::fs::remove_dir_all(base).unwrap();
+    }
 
     #[test]
     fn reverse_enumeration_and_escaping_parents() {

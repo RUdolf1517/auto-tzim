@@ -168,9 +168,40 @@ fn reproducible_partial_fixture_across_discovery_planning_and_rendering() {
     for text in ["save", "smaller", "optimiz", "%"] {
         assert!(!output.contains(text));
     }
-    let batch = batch::discover(vec![profile.clone(), profile], now).unwrap();
+    let batch = batch::discover(vec![profile.clone(), profile.clone()], now).unwrap();
     assert_eq!(batch.len(), 1);
     assert_eq!(batch[0].1.candidates, plans[0].discovery.candidates);
+    use std::os::unix::fs::PermissionsExt;
+    let directories = [
+        fixture.0.clone(),
+        fixture.0.join("sub"),
+        fixture.0.join("sub/.git"),
+    ];
+    let mut original_permissions = Vec::new();
+    for (path, entry) in &before {
+        if matches!(entry, SnapshotEntry::File(_)) {
+            let full = fixture.0.join(path);
+            let original = fs::metadata(&full).unwrap().permissions();
+            fs::set_permissions(&full, fs::Permissions::from_mode(0o444)).unwrap();
+            original_permissions.push((full, original));
+        }
+    }
+    let directory_permissions: Vec<_> = directories
+        .iter()
+        .map(|dir| fs::metadata(dir).unwrap().permissions())
+        .collect();
+    for dir in &directories {
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o555)).unwrap();
+    }
+    let readonly = discovery::walk(&fixture.0, &profile, now);
+    for (dir, permissions) in directories.iter().zip(directory_permissions) {
+        fs::set_permissions(dir, permissions).unwrap();
+    }
+    for (file, permissions) in original_permissions {
+        fs::set_permissions(file, permissions).unwrap();
+    }
+    let readonly = readonly.unwrap();
+    assert_eq!(readonly.candidates, plans[0].discovery.candidates);
     assert_eq!(before, snapshot(&fixture.0));
     eprintln!("AT03_PARTIAL_FIXTURE planned=4 candidates=4 hardlinks=2 young=1 temp=1 symlink=1 directories_walked=2 excluded_dirs=1");
 }

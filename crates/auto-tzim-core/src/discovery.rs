@@ -251,7 +251,16 @@ fn visit(
                 });
                 continue;
             }
+            hook(&full);
             check_parent(root, &full)?;
+            let current = std::fs::symlink_metadata(&full)
+                .map_err(|e| format!("tree_changed: {}: {e}", full.display()))?;
+            if !current.file_type().is_file() || Identity::from_metadata(&current) != identity {
+                return Err(format!(
+                    "tree_changed: file changed during scan: {}",
+                    full.display()
+                ));
+            }
             if let Some(reason) = stability::refusal(&identity, now, profile.min_file_age_seconds) {
                 out.skipped.push(Skip {
                     path,
@@ -592,18 +601,15 @@ mod ordering_and_containment_tests {
         std::fs::write(base.join("outside"), b"outside").unwrap();
         let root = std::fs::canonicalize(base.join("root")).unwrap();
         let swapped = std::cell::Cell::new(false);
-        let found = walk_with_hook(&root, &Folder::default(), SystemTime::now(), &|_| {
-            if !swapped.replace(true) {
-                std::fs::remove_file(root.join("file")).unwrap();
-                symlink(base.join("outside"), root.join("file")).unwrap();
+        let file = root.join("file");
+        let found = walk_with_hook(&root, &Folder::default(), SystemTime::now(), &|path| {
+            if path == file && !swapped.replace(true) {
+                std::fs::remove_file(&file).unwrap();
+                symlink(base.join("outside"), &file).unwrap();
             }
-        })
-        .unwrap();
-        assert!(found.candidates.is_empty());
-        assert!(found
-            .skipped
-            .iter()
-            .any(|skip| skip.reason == "skipped_policy: symlink"));
+        });
+        assert!(swapped.get());
+        assert!(found.unwrap_err().contains("tree_changed"));
         assert_eq!(std::fs::read(base.join("outside")).unwrap(), b"outside");
         std::fs::remove_dir_all(base).unwrap();
     }
@@ -951,6 +957,8 @@ mod corpus_tests {
             b"with space.png",
             b"two  spaces .png",
             b"semi;colon.png",
+            b"dollar$(touch ats_pwned).png",
+            b"back`touch ats_pwned2`.png",
             b"quote'single.png",
             b"quote\"double.png",
             b"newline\nname.png",
@@ -976,6 +984,8 @@ mod corpus_tests {
                 Err(e) => panic!("fixture creation: {e}"),
             }
         }
+        assert!(!f.0.join("ats_pwned").exists());
+        assert!(!f.0.join("ats_pwned2").exists());
         expected.sort();
         let profile = Folder {
             min_file_age_seconds: 0,
@@ -990,5 +1000,9 @@ mod corpus_tests {
                 .collect::<Vec<_>>(),
             expected
         );
+        assert!(!f.0.join("ats_pwned").exists());
+        assert!(!f.0.join("ats_pwned2").exists());
+        assert!(!std::path::Path::new("ats_pwned").exists());
+        assert!(!std::path::Path::new("ats_pwned2").exists());
     }
 }

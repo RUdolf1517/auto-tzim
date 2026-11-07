@@ -182,9 +182,11 @@ fn reproducible_partial_fixture_across_discovery_planning_and_rendering() {
         if matches!(entry, SnapshotEntry::File(_)) {
             let full = fixture.0.join(path);
             let original = fs::metadata(&full).unwrap().permissions();
-            fs::set_permissions(&full, fs::Permissions::from_mode(0o444)).unwrap();
             original_permissions.push((full, original));
         }
+    }
+    for (file, _) in &original_permissions {
+        fs::set_permissions(file, fs::Permissions::from_mode(0o444)).unwrap();
     }
     let directory_permissions: Vec<_> = directories
         .iter()

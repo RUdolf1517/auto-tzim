@@ -42,6 +42,47 @@ A limitations list is part of the product. Each item below is a deliberate bound
 - Anything `tzim` refuses: progressive JPEG, LZW/tiled/BigTIFF, signed/ZIP64/encrypted archives, preset-dictionary
   zlib, and every format `tzim` declines by measurement (PDF, FLAC, WebP, AVIF, MP4, GIF, xz/zstd/7z).
 
+## 3a. A directory can be swapped while we read it
+
+The scan is read-only, but it walks a tree somebody else may be changing. We `lstat` a path, decide it is a directory, then
+enumerate it; between those two calls another process can replace the directory with a symlink, and the enumeration follows it.
+Closing that window needs `openat`/`fstatat` with `O_NOFOLLOW`, which means `libc` and `unsafe` — refused by
+[D-35](manager/DECISIONS.md)/[D-38](manager/DECISIONS.md) — or a crate wrapping them, refused for the same reason
+([D-64](manager/DECISIONS.md)).
+
+What this means in practice:
+
+- **no published plan ever contains a file outside the folder you named** — every candidate's parent is canonicalised and
+  compared with the root, and a violation aborts the scan (exit `6`, `tree_changed`) instead of being skipped;
+- a swap is **detected**: each directory's `(device, inode)` is recorded before enumeration and compared after;
+- **nothing in your folder is written**, at any point, so the worst outcome of losing this race is a refused run — never a damaged
+  file;
+- what is *not* promised is that we never `lstat` a name outside the folder during such a swap, or that a message never mentions
+  one. An attacker who can replace directories inside your own tree with your own privileges is outside what a read-only planner
+  can defend against.
+
+
+- **A scan writes nothing; an apply does.** `auto-tzim scan` (and `run --dry-run`, which is the same operation) never
+  runs file-processing `tzim` and never needs write access to the folder. An **apply** lets `tzim` write a candidate
+  `.tzim-<pid>-<ns>-<attempt>.tmp` in the destination directory and rename it; after a hard kill an orphan can remain, we
+  report it and never delete it (R-13).
+- **A scan knows no numbers.** The plan lists candidates, not predicted savings, and is not a promise that `tzim` will
+  change anything (D-23).
+- **One file at a time.** `jobs = 1` in v0.1; parallelism inside a file is `tzim`'s own.
+- **Exactly one prompt in the whole product.** The `confirm` approval gate (D-29) is it. There is no `--yes` to skip it,
+  no "are you sure" anywhere else, no pager, no menu. Anything that would otherwise need a decision takes a flag, and an
+  unattended run uses `--mode auto` — a different mode, not a silenced question.
+- **A refusal is not an error, and it is not typed.** `skipped_by_tzim` and `skipped_unsupported` exit `0`, because
+  nothing went wrong; the reason survives as `tzim`'s own note, not as a status we invented.
+- **Exit codes are ours.** `6` means "refused before processing" (cooldown still running, stale `--plan`, paused, low
+  disk, no terminal for a `confirm` run), `8` means another run
+  holds the lock, `7` means an internal error, and `4` is never produced.
+- **`failed` is not retried automatically.** A second run does not try again until the file, the binary or the policy
+  changes; `history` shows why.
+- **The first run of a new folder does nothing but preview.**
+- **Absolute paths are recorded** in history and, on request, on stdout; they are local data and should not be pasted
+  into a public issue without thought.
+
 ## 4. Behaviour that surprises people
 
 - **A scan writes nothing; an apply does.** `auto-tzim scan` (and `run --dry-run`, which is the same operation) never

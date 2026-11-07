@@ -75,6 +75,27 @@ built-in list, path comparison only, documented as best-effort, escapable with o
 behaves on macOS where `/tmp` is a link ([D-45](docs/manager/DECISIONS.md) — the last component is refused, intermediate
 ones are resolved). Each would have been baked into stored data by the first commit.
 
+### Decided — eight questions on AT-03, answered before the code exists
+
+The coder stopped instead of guessing, eight times, and every stop was on a place where two documents disagreed or a document
+was silent. They are now rules (D-59…D-65):
+
+- **what a plan records** — `argv` is the profile-owned part only, `--` always, the **relative** path (an absolute one would make
+  the hash depend on where the tree lives), `root` plus `root_raw_b64`, and "byte-identical" means the **rows**, because the id
+  and `created` must differ;
+- **a plan is published, not replaced** — `fs::hard_link`, which fails instead of overwriting, so a colliding id exits `7` rather
+  than destroying an approved plan; `state.md`'s "atomic replacement" applies to the mutable files only;
+- **the order of the gates** — excluded name first, so a hard-linked orphan temp is not a row at all;
+- **the format policy reads a name, never a file** — and `D-26`'s "`--formats` is still never passed" was wrong: it is passed when
+  the profile sets it, and only the *derivation from the capability document* is forbidden (corpus `P-02` had been contradicting it);
+- **globs are three wildcards** with everything else literal, so "malformed" does not exist;
+- **the directory race is a named limitation**, with the guarantee narrowed to what is true: no plan ever contains a row outside
+  the root, and a swap aborts the scan;
+- **the 10 000-entry budget** exists at last — 15 s in a debug build, printed by the test.
+
+Two corrections of my own: `N-05`/`N-06` in the corpus named a payload containing `/tmp/…`, which is not a single filename on
+Unix, so the case could never have run; and the AT-03 brief's `D-26` reading, above.
+
 ### Decided — a folder means the folder and everything in it
 
 The owner asked whether `auto-tzim ~/Downloads` walks the subfolders. The answer was *no, unless you pass `--recursive`* —

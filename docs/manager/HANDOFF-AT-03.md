@@ -28,7 +28,10 @@ Everything here is read-only, and read-only is not a property of good intentions
 | Order | byte-wise sorted entry names per directory, rows sorted byte-wise by relative POSIX path. Not locale, not case-insensitive ([D-52](DECISIONS.md)) |
 | Depth | **64 levels** below the root; level 65 is `depth_exceeded`, recorded once per directory, not once per file |
 | Scope rules | `recursive` **defaults to `true`** — a named folder means the folder and everything in it; `false` walks the top level only ([D-58](DECISIONS.md)); `include_hidden`, `cross_filesystems` (do not cross a mount point when false, and record the boundary once), `exclude_globs` on the POSIX relative path, `**` spans directories, no braces, no negation |
+| Format policy | the name, never the bytes: `formats = []` selects every regular file; a non-empty list filters by the extension table in [D-62](DECISIONS.md), case-insensitively, `skipped_policy` `format_not_selected` otherwise. No file is opened and no signature is read |
+| Glob grammar | `*` any bytes except `/`, `**` any bytes including `/`, `?` one byte except `/`, everything else literal; no classes, no escapes, no braces, no negation; an empty pattern is a config error ([D-63](DECISIONS.md)) |
 | Always excluded | `.tzim-*…*.tmp`, at any depth, **even with `include_hidden = true`** (corpus `K-12`, R-14). Never deleted, never reported as an error |
+| Gate order | excluded name → scope → type → hard link → age → format → `planned`, exactly as [D-61](DECISIONS.md) lists it. A hard-linked orphan temp is **not a row at all**: gate 1 wins |
 | Regular files only | FIFOs, sockets, device nodes, directories, symlinks: `skipped_policy` with a reason, never an error, never a read. A symlink loop must not hang (corpus `K-05`, 5 s bound) |
 | Identity | `(st_dev, st_ino, size, mtime_ns)` captured once at discovery via `std::os::unix::fs::MetadataExt`; `st_nlink > 1` ⇒ `hardlink_skip` **before** anything else |
 | Age | younger than `min_file_age_seconds` ⇒ `skipped_unstable`. The clock is **injected** ([D-14](DECISIONS.md)): `stability.rs` takes a "now", never calls `SystemTime::now()` inside the decision |
@@ -61,6 +64,10 @@ Everything here is read-only, and read-only is not a property of good intentions
 | 15 | The plan of a folder does not depend on its batch | scan `A` alone, then `A B`: the `A` plan hash is **identical** and only the id differs — a batch is a loop, not a merged document (D-52, D-57) |
 | 16 | The scope is stated, and it is recursive by default | a root with files only in subfolders: `scan DIR` finds them ([D-58](DECISIONS.md)); `scan DIR --no-recursive` finds none **and says so in one line** naming how many directories were not walked; with a mount point, a 65-deep branch and `.git/`, the summary names each limit and its count; a folder with zero candidates reports how many files were looked at and why none qualified — never an empty success |
 | 17 | An internal error exits `7`, not `2` | a unit test drives the `Internal` variant through the CLI mapping and asserts `7`; `git grep` shows **no** `ConfigError::Invalid` used for an internal condition, and no `unwrap`/`expect` on user input ([F-26](reviews/REVIEW-d0ac17e.md), `cli.md` §4) |
+| 18 | The plan's `argv` is the profile part only | `--formats` appears only when `formats` is non-empty, values byte-sorted; `--` is always present; the file argument is the **relative POSIX path**; `--json`, `--jobs`, `--strip-metadata` and the staged path appear **nowhere**; changing one profile flag changes the plan hash, changing `main`'s path in the config does not ([D-59](DECISIONS.md)) |
+| 19 | A plan is published, never replaced | two plans written to the same id: the second exits `7` `plan_id_collision`, the first file is byte-identical afterwards, no temp is left; a test asserts `rename`-style overwrite is impossible, and that `root` + `root_raw_b64` are both recorded for a non-UTF-8 root ([D-60](DECISIONS.md)) |
+| 20 | The race is handled as declared | the injected seam swaps a directory for a symlink between enumeration and the re-check: the scan aborts with `tree_changed`, exit `6`, and **writes no plan**; a second test swaps only a file's identity and shows a row outside the root can never be published; the limitation in [limitations](../limitations.md) §3a is quoted in the PR verbatim ([D-64](DECISIONS.md)) |
+| 21 | The 10 000-entry budget is met and recorded | one directory, 10 000 regular files, debug build on `ubuntu-24.04`, walk+policy+plan rows under 15 s excluding fixture creation; the test prints the observed time and the PR quotes it ([D-65](DECISIONS.md)) |
 
 ## 3a. Two leftovers from AT-02, in your first commit
 
@@ -106,6 +113,11 @@ coder: no`, commits labelled `AT-03: …`, one pull request.
 
 Under "CI runs and artifacts", include the count of planned files for the fixture root **as a number the reviewer can
 recompute** from the corpus cases — a summary nobody can re-derive is the first reason a handoff comes back unread.
+
+**And the obvious one, said because the current head does not do it:** a valid `scan` at the final head must exit `0` and
+print a plan. "Exits `7` on purpose rather than guess" was a legitimate position while the contract was undecided and is a
+blocker now that [D-59](DECISIONS.md)–[D-65](DECISIONS.md) are written: every question that made a guess necessary has an
+answer.
 
 ## 7. What comes after, so you can size this
 

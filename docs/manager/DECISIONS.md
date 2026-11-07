@@ -64,6 +64,13 @@ invent it; the owner may change it without cost), **superseded**.
 | D-56 | **Validation splits in two**: *structure* (parsed into the model: schema, enums, names, duplicates, path shape, forbidden roots, cloud-sync rule, reserved features, ranges) is checked on **every** load and save; *environment* (the root exists, is a directory, is not a symlink, canonicalises; `tzim_path` exists and is executable) is checked only by `config validate`, by `folder add`, and at run time — an unplugged disk must not make the tool unrepairable | **adopted (manager default, 2026-11-04)** — amends [D-54](DECISIONS.md) item 2, after the review of `b1b6d5a` found the trap | `config.md` §5; `cli.md` §2.2–2.4 | AT-02 |
 | D-57 | **The read-only plan is per folder, inside a batch**: `scan` / `auto-tzim PATH… --dry-run` takes several paths ([D-49](DECISIONS.md) applies unchanged), every path is validated before a single directory is read, one refusal ⇒ exit `2` with **nothing scanned and no plan file written**, duplicates are de-duplicated on the canonical root, overlap is `overlapping_roots`, and each folder gets **its own plan id, own hash and own `plans/<plan_id>.json`**, printed in the order typed | **adopted (manager default, 2026-11-06)** — the brief and `cli.md` §2.5 were written in the singular; the owner caught it | `cli.md` §0.2, §2.5; `state.md` §3.4; [HANDOFF-AT-03](HANDOFF-AT-03.md) | AT-03 |
 | D-58 | **A named folder means the folder and everything in it**: `recursive` defaults to **`true`**, `--no-recursive` limits a run to the top level, `folder add --no-recursive` stores that choice, and every scan/run summary **states the scope** (directories walked, deepest level, subdirectories skipped) so "nothing found" is never silent | **adopted (manager default, 2026-11-06)** — the previous default (`false`, top level only) made the ordinary invocation find nothing in a downloads folder and say so quietly | `config.md` §3; `cli.md` §0, §2.3; [HANDOFF-AT-03](HANDOFF-AT-03.md) | AT-03 |
+| D-59 | **What a plan records**: `argv` is the *profile-owned* part only — fixed flag order, `--`, then the **relative POSIX path** (never absolute: D-52 wants two machines to agree) — plus `root` (display, lossy) and `root_raw_b64` (exact); AT-04 owns every adapter flag; a non-UTF-8 argument is `{"b64": …}` in the canonical row; and "byte-identical" in acceptance 1 means the **rows**, not the file, because the id and `created` must differ | **adopted (manager default, 2026-11-07)** — answers the coder's argv, non-UTF-8 and acceptance-1 questions on PR #46 | `cli.md` §2.5; `state.md` §3.4; [HANDOFF-AT-03](HANDOFF-AT-03.md) | AT-03, AT-04 |
+| D-60 | **A plan is published, not replaced**: write the temp file, `fs::hard_link(temp, final)` — which fails with `EEXIST` instead of overwriting — then unlink the temp and `fsync` the directory. A collision is `plan_id_collision` and exit `7`; there is **no fallback that can overwrite**, and a filesystem without hard links fails loudly | **adopted (manager default, 2026-11-07)** — the coder's proposal, which is better than the `rename` `state.md` §2 assumes | `state.md` §2, §3.4 | AT-03 |
+| D-61 | **The order of the gates in a walk is contract**: excluded name → scope (depth, mount point, `recursive`) → type (regular file only) → hard link → age → format policy → planned. An orphan `.tzim-*…*.tmp` is decided by the **first** gate: no row, one `orphan_temp` diagnostic, even when it has several hard links | **adopted (manager default, 2026-11-07)** — the coder asked which rule wins for a hard-linked orphan temp | [HANDOFF-AT-03](HANDOFF-AT-03.md) §2 | AT-03 |
+| D-62 | **Format policy reads the name, never the bytes**: `formats = []` selects every regular file; a non-empty list selects by a fixed extension table (`png`, `gzip`, `zip`, `ico`, `jpeg`, `tiff`, `zlib`), case-insensitively; anything else is `skipped_policy` `format_not_selected`. This is **our** allowlist, not a claim about `tzim`'s capabilities — [D-26](DECISIONS.md) item 3 said "`--formats` is still never passed", which was wrong and is corrected here | **adopted (manager default, 2026-11-07)** — corpus `P-02` required `--formats png` while D-26 appeared to forbid it (F-30) | `config.md` §3; corpus `P-02` | AT-03 |
+| D-63 | **The glob grammar is exactly three wildcards**: `*` = any bytes except `/`, `**` = any bytes including `/`, `?` = one byte except `/`. Everything else is literal — no `[...]` classes, no backslash escapes, no braces, no negation. An empty pattern is a configuration error; nothing else is "malformed" | **adopted (manager default, 2026-11-07)** — the coder asked what an unsupported pattern should do | `config.md` §3 | AT-03 |
+| D-64 | **The directory race is a named limitation, not a claim**: `std` cannot open a directory with `O_NOFOLLOW` without `libc`/`unsafe`, so a directory swapped for a symlink *during* enumeration can be read. What is **guaranteed** is that no published plan contains a row outside the canonical root (per-row canonical check ⇒ hard abort, `tree_changed`, exit `6`), and that a swap is detected by comparing `(dev, ino)` before and after enumeration through an **injected seam** so the test needs no race. Closing the window needs `openat`/`fstatat` — refused by [D-35](DECISIONS.md)/[D-38](DECISIONS.md), see [limitations](../limitations.md) §4 | **adopted (manager default, 2026-11-07)** — the coder asked whether best-effort is acceptable | `limitations.md` §4 | AT-03 |
+| D-65 | **The 10,000-entry budget is a smoke bound, not a benchmark**: in a debug build on `ubuntu-24.04`, walking and planning one directory of 10,000 files must finish in **under 15 s**, the test prints the observed number, and the PR records it; setup is excluded from the measurement. A tighter number is refused because it would turn CI load into a red build | **adopted (manager default, 2026-11-07)** — acceptance point 10 referred to "the documented budget" that no document contained | [HANDOFF-AT-03](HANDOFF-AT-03.md) §3 | AT-03 |
 
 ---
 
@@ -395,7 +402,9 @@ Rules that keep this from becoming a new source of invention:
 2. **Two schema numbers, both checked.** `capabilities_schema_version` must be `1` and `result_schema_version` must be `2`,
    the pair we are tested against. Anything else, including a *newer* number, is `incompatible_tzim` (exit `3`) with the
    observed values recorded. Fail closed, not forward.
-3. **`--formats` is still never passed** (D-11). Knowing the default set does not make it a promise; the binary still decides.
+3. **`--formats` is never *derived from this document*** (D-11, corrected by [D-62](DECISIONS.md)). The flag is passed exactly
+   when the profile sets `formats`; what the capability document never does is supply, complete or correct that list. Knowing
+   the default set does not make it a promise; the binary still decides.
 4. **The document is not displayed as a guarantee.** `doctor` shows the observed set with the binary hash beside it, and the
    document says it is a description of that binary, not of the product (audit DR-05, option C refused).
 5. **Cost:** one extra spawn at start, so "a scan is exactly one `tzim` invocation" becomes two. The harness contract is
@@ -1550,3 +1559,208 @@ anything went wrong.
 **Reversal:** `recursive = false` stays a stored value, so a user who wants the old behaviour gets it exactly with
 `--no-recursive` or the config field. If it turns out that people are surprised in the *other* direction — "I did not mean
 that deep" — the answer is the scope line, not a silent narrower walk.
+
+## D-59 · What a plan records, and what "byte-identical" means
+
+**Status: adopted (manager default, 2026-11-07).** Answers three questions from PR #46 that share one subject: the bytes a plan
+writes down.
+
+**1. `argv` is the profile-owned part of a future command, and nothing else.** The coder asked whether AT-03 should put
+`--json` and an absolute path in it. Neither:
+
+| Element | AT-03 writes | Why |
+| --- | --- | --- |
+| profile flags, fixed order, byte-sorted values | `--formats png,gzip` when `formats` is non-empty ([D-62](DECISIONS.md)) | this is the part the *user* chose, and the part [D-11](DECISIONS.md) says is ours to pass |
+| `--` | always, before the path | a name may start with `-` (corpus `N-09`); the separator is not optional |
+| the file argument | the **relative POSIX path** | absolute paths would make the plan hash depend on where the tree lives, and [D-52](DECISIONS.md) exists so two machines agree on an unchanged tree |
+| `--json`, `--jobs`, `--strip-metadata`, the staged path, the timeout | **nothing** | every one of them is adapter territory ([D-26](DECISIONS.md), AT-04). AT-03 must not invent the adapter contract, and the coder was right not to |
+
+AT-04 will prepend its own flags and replace the final element with the staged copy's path. That is a **different argv**, and the
+hash changes with it — which is correct: a plan made by AT-03 does not authorise an AT-04 run, and the plan will be refused with
+exit `6` rather than quietly reused.
+
+**2. A name that is not UTF-8 is carried as bytes.** `argv` in the *canonical row* is an array whose elements are JSON strings
+when the bytes are valid UTF-8, and `{"b64":"<base64 of the bytes>"}` when they are not. Only the path element can be
+non-UTF-8 — profile flags are validated ASCII — but the row does not need to know that. The human rendering of a plan uses the
+lossy form and never feeds it back into a hash.
+
+**3. `root` and `root_raw_b64`.** A plan records the canonical root twice: `root` for display (lossy) and `root_raw_b64` for
+exactness, the same pair [D-52](DECISIONS.md) already uses for `path`. A directly supplied root may itself be non-UTF-8 on Unix,
+and rejecting such a root would refuse a legal directory — corpus `N-17` exists precisely because names are bytes.
+
+**4. "Byte-identical" cannot mean the file, and the corpus never said it did.** Acceptance 1 asks that two scans of an
+unchanged tree be byte-identical, while [D-52](DECISIONS.md) requires each plan to carry its own id, and a plan also records
+`created`. The three fields that *must* differ are `plan_id`, `created` and any mode/timestamp; what must be identical is the
+**`rows` array** — the canonical lines — and therefore `plan_hash`. `GATES.md` AC-1 says "the two plan **bodies**" and means the
+same thing. The test asserts both halves: rows equal, hashes equal, ids different.
+
+**Reversal:** if AT-04 needs a different argv composition, it changes it and says so; the hash's job is to notice.
+
+## D-60 · A plan is published, never replaced
+
+**Status: adopted (manager default, 2026-11-07).** The coder's proposal, accepted because it is better than what my own
+`state.md` §2 assumed.
+
+`state.md` §2 says "atomic replacement of every small file", and §3.4 says a plan file is written once and never modified. Those
+two rules collide for exactly one case: a `rename` onto an existing path **overwrites** it, so a plan id that collides would
+silently destroy the plan it collided with.
+
+**The primitive is a hard link:**
+
+```text
+write plans/<id>.json.tmp   (0600, fsync the file)
+hard_link(tmp, plans/<id>.json)   → EEXIST means the id is taken
+unlink(tmp)
+fsync the directory
+```
+
+`fs::hard_link` is in `std`, creates the destination only if it does not exist, and fails with `EEXIST` otherwise — the
+"create-if-absent" semantics that `rename` does not have. Same directory, so same filesystem, so the link always succeeds when
+the name is free.
+
+| Case | Behaviour |
+| --- | --- |
+| name free | published, temp removed, directory fsynced |
+| name taken | `plan_id_collision`, **exit `7`**, the existing plan untouched, the temp removed |
+| filesystem without hard links (`ENOTSUP`/`EPERM`) | fails loudly with the OS error; **no** fallback that could overwrite |
+
+A 128-bit random id makes a collision a broken-randomness event, not bad luck ([D-52](DECISIONS.md)), which is why the reaction
+is an internal error rather than a retry loop: retrying would hide the only symptom.
+
+**Consequence for `state.md`:** "atomic replacement" stays the rule for every *mutable* small file (`last-compression.json`,
+`run.json`), and becomes "atomic publication" for the immutable ones. The distinction is the point of the two sections.
+
+## D-61 · The order of the gates, because a file can trip several
+
+**Status: adopted (manager default, 2026-11-07).** The coder asked what wins when an orphan temp file also has two hard links.
+
+A walk meets the same file with several properties at once, and "which check runs first" decides which status the row carries.
+It is contract, not implementation detail, because the plan is compared byte for byte:
+
+| # | Gate | Outcome when it fires |
+| --- | --- | --- |
+| 1 | **excluded name** — `.tzim-` prefix and `.tmp` suffix, at any depth, even with `include_hidden = true` | **no row**; one `orphan_temp` diagnostic per run; never deleted, never an error |
+| 2 | **scope** — depth 64, mount point with `cross_filesystems = false`, above the top level with `recursive = false` | recorded once per directory (`depth_exceeded`, `mount_boundary`, `not_recursive`), not per file |
+| 3 | **type** — not a regular file (directory, symlink, FIFO, socket, device) | `skipped_policy` with the kind named |
+| 4 | **hard link** — `st_nlink > 1` | `hardlink_skip` |
+| 5 | **age** — younger than `min_file_age_seconds` | `skipped_unstable` |
+| 6 | **format** — `formats` non-empty and the extension not in it ([D-62](DECISIONS.md)) | `skipped_policy` `format_not_selected` |
+| 7 | otherwise | `planned` |
+
+So a hard-linked orphan temp is **not a row at all**: gate 1 answers before gate 4 is reached. That is the only reading
+consistent with "never planned, diagnostic emitted" in corpus `K-12` — and with the rule that we never touch, delete or report an
+error about a file that is not ours to touch.
+
+Gate 4 before 5 and 6 is deliberate: two links to one inode are one file's bytes under two names, and a plan whose rows disagree
+about the same bytes is worse than a smaller plan.
+
+## D-62 · The format policy reads a name, never a file
+
+**Status: adopted (manager default, 2026-11-07).** Resolves a real contradiction the coder found between corpus `P-02`,
+[D-11](DECISIONS.md) and [D-26](DECISIONS.md) item 3.
+
+Two different things had been written with the same words:
+
+- **our policy** — *which files we offer to `tzim`*. The user writes `formats = ["png"]`, `config.md` validates the names, and
+  the plan selects `.png` files and skips a `.gz`. Corpus `P-02` is exactly this.
+- **`tzim`'s capability** — *what it can actually do*. That comes from `--capabilities` ([D-26](DECISIONS.md)) and is never
+  reconstructed, inferred from a version, or guessed from an extension (invariant 18).
+
+`D-26` item 3 said "`--formats` is still never passed", which conflated them and contradicted `P-02`. **Corrected:** the flag is
+passed exactly when the profile sets `formats` ([D-11](DECISIONS.md)); what is never derived from the capability document is the
+list itself.
+
+| Situation | Plan |
+| --- | --- |
+| `formats = []` | every regular file passes gate 6; `tzim` decides later (D-11), and the plan claims nothing (D-23) |
+| `formats = ["png"]` | only files whose extension maps to `png` pass; everything else is `skipped_policy` `format_not_selected` |
+
+The extension table, fixed in this decision so two implementations cannot differ:
+
+| Format name | Extensions |
+| --- | --- |
+| `png` | `.png` |
+| `gzip` | `.gz` |
+| `zip` | `.zip` |
+| `ico` | `.ico` |
+| `jpeg` | `.jpg`, `.jpeg` |
+| `tiff` | `.tif`, `.tiff` |
+| `zlib` | `.zlib` |
+
+Matching is on the **last** suffix, ASCII case-insensitively; a file with no suffix never matches a non-empty list. **No file is
+opened**, no signature is read, and a file whose contents disagree with its name is still selected — because the plan is not a
+promise ([D-23](DECISIONS.md)), and `tzim` will report `unsupported` if it disagrees.
+
+**Why this is not "guessing from an extension" (invariant 18):** we are not claiming what `tzim` can do, we are applying the
+user's own selection rule. The invariant forbids inferring *capabilities and reasons*; `formats` is a filter the user typed.
+
+**Reversal:** if a workload needs content sniffing, it is a new decision with a corpus entry and a cost, not a quiet `magic`
+crate.
+
+## D-63 · The glob grammar is three wildcards and no escaper
+
+**Status: adopted (manager default, 2026-11-07).** `config.md` said "`**` spans directories, no brace expansion, no negation" and
+stopped there; the coder asked what `[...]` and `\` do, and what "malformed" means.
+
+| Token | Meaning |
+| --- | --- |
+| `*` | any run of bytes **except** `/` |
+| `**` | any run of bytes **including** `/` |
+| `?` | exactly one byte, **not** `/` |
+| everything else | literal bytes, including `[`, `]`, `\`, `{`, `}`, `!` |
+
+There are no character classes, no escapes and no negation in v0.1: they are the part of glob syntax that turns into a
+specification of its own (ranges, collation, escaping a metacharacter) and then into a compatibility promise. A pattern that looks
+malformed under some other glob dialect is a **literal** here, which is why nothing is rejected at match time.
+
+The one refusal: an **empty** pattern (`exclude_globs = [""]`) is a configuration error at load — `exclude_globs: empty pattern`
+— because "" matches nothing and silently excludes nothing, and the user meant something by it. Matching is over the **relative
+POSIX path** as bytes, so a pattern can express a non-UTF-8 name only if it is written as bytes, which TOML does not allow —
+acceptable, and stated.
+
+## D-64 · The directory race: what is guaranteed, and what is not
+
+**Status: adopted (manager default, 2026-11-07).** The coder is right that `std` cannot make the traversal atomic, and right to
+refuse to claim otherwise.
+
+**The window.** We `lstat` a path, decide it is a directory, then `read_dir` it. Between those two calls another process can
+replace the directory with a symlink to somewhere else, and our enumeration follows it. Closing the window needs
+`openat(O_NOFOLLOW | O_DIRECTORY)` + `fstatat` + `fdopendir`, which is `libc` and, through it, `unsafe` — refused by
+[D-35](DECISIONS.md)/[D-38](DECISIONS.md) and [D-53](DECISIONS.md), or a crate that wraps them, refused for the same reason.
+
+**What is guaranteed, and is what the product promises:**
+
+| Claim | Mechanism |
+| --- | --- |
+| No published plan contains a row outside the canonical root | each candidate's parent is canonicalised and compared with the root before the row is emitted; a violation is a **hard abort** (`tree_changed`, exit `6`), never a skip ([HANDOFF-AT-03](HANDOFF-AT-03.md) §2) |
+| A swap is detected rather than ignored | `(st_dev, st_ino)` of each directory is captured before enumeration and compared after; a mismatch aborts the whole scan with `tree_changed` |
+| Nothing in the user's folder is written, ever | there is no write path in this stage at all — this is the reason the residual risk is a refused run, not a damaged tree |
+| A file that changed between plan and install is not installed | the per-file identity re-check at install time ([D-20](DECISIONS.md)), which is AT-05's job and does not depend on this window |
+
+**What is not guaranteed, and is written in [limitations](../limitations.md) §4:** that we never `lstat` a name outside the root
+during a concurrent swap, and that no diagnostic ever mentions such a name. An attacker who can replace a directory inside the
+user's own tree, with the user's own privileges, is outside what a read-only planner can defend against; the honest response is a
+refused run, and that is what happens.
+
+**Testability without a race.** The re-check must be reachable through an **injected seam** — a hook called after enumeration and
+before the comparison — so a test performs the swap deterministically instead of racing, the same discipline [D-14](DECISIONS.md)
+applies to the clock. A test that sleeps and hopes is a flaky test with a slow half-life.
+
+## D-65 · The 10,000-entry budget, written down at last
+
+**Status: adopted (manager default, 2026-11-07).** Acceptance point 10 says "within the documented budget" and no document had a
+number — a requirement that cannot fail is not a check.
+
+| Property | Value |
+| --- | --- |
+| Shape | one directory, 10 000 regular files, no subdirectories |
+| Build | debug (`cargo test`), because that is what CI runs |
+| Platform | `ubuntu-24.04`, the CI runner |
+| Measured | walk + policy + plan rows; **fixture creation excluded** |
+| Ceiling | **15 s** — a smoke bound, roughly an order of magnitude above the expected debug time |
+| Evidence | the test prints the observed duration; the PR quotes it |
+
+**Why a loose bound and not a target.** A tight number on shared CI hardware turns runner load into a red build, and a test that
+fails for reasons unrelated to the code teaches people to re-run instead of read. The number exists to catch an accidental
+quadratic — a per-file canonicalise of the whole root, a re-read of the directory per row — which is exactly the failure this
+stage can have. If a real budget is ever needed, it belongs in a benchmark with a recorded baseline, not in a unit test.

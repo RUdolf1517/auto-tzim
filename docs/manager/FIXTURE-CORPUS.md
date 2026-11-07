@@ -38,8 +38,8 @@ create anything.
 | N-02 | `with space.png` | same as N-01 |
 | N-03 | `two  spaces .png` | same |
 | N-04 | `semi;colon.png` | same |
-| N-05 | `dollar$(touch /tmp/ats_pwned).png` | same, **and `/tmp/ats_pwned` must not exist afterwards** |
-| N-06 | `` back`touch /tmp/ats_pwned2`.png `` | same, and `/tmp/ats_pwned2` must not exist |
+| N-05 | `dollar$(touch ats_pwned).png` | same, **and no file named `ats_pwned` may appear in the root or the test's working directory** |
+| N-06 | `` back`touch ats_pwned2`.png `` | same, and no file named `ats_pwned2` may appear in the root or the working directory |
 | N-07 | `quote'single.png` | same |
 | N-08 | `quote"double.png` | same |
 | N-09 | `newline\nname.png` | same; the JSON `path` escapes it, `path_raw_b64` optional |
@@ -210,5 +210,9 @@ two runs must agree on everything except the approval row and whether a proposal
 1. The handoff must reference every ID above, with a raw row (or an explicit `not run: <reason>`).
 2. The reviewer picks **five cases at random** and re-runs them independently; a mismatch is a finding.
 3. A case reported `skipped` on a platform without a platform-specific reason is a finding.
-4. The `N-05`, `N-06`, `R-10`, `S-06` and `X-16` rows are the ones a "passing" implementation most often fakes; they are
+4. `N-05` and `N-06` used to name a payload containing `/tmp/…`, which is not a single filename on Unix — `/` is a separator.
+   Corrected 2026-11-07 to a slash-free payload that still detects a shell: if any component were handed to `sh`, a file appears in
+   the current directory, which the test checks. The lesson is recorded rather than hidden: a corpus case that cannot be built is a
+   case that silently never ran.
+5. The `N-05`, `N-06`, `R-10`, `S-06` and `X-16` rows are the ones a "passing" implementation most often fakes; they are
    checked first, against raw bytes, not against the summary.

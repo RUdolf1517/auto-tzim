@@ -987,6 +987,51 @@ mod corpus_tests {
                     || skip.reason == "skipped_policy: block device")));
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn real_proc_mount_boundary_is_reported_without_crossing() {
+        use std::os::unix::fs::MetadataExt;
+        let root = Path::new("/");
+        let root_dev = std::fs::symlink_metadata(root).unwrap().dev();
+        let proc_dev = std::fs::symlink_metadata("/proc").unwrap().dev();
+        if root_dev == proc_dev {
+            eprintln!("mount test skipped: /proc is not a separate filesystem");
+            return;
+        }
+        // Exercise the walker directly; CLI correctly forbids / as a user root.
+        // Exclude every other root entry, so the test never recurses outside /proc.
+        let mut excludes = Vec::new();
+        for entry in std::fs::read_dir(root).unwrap() {
+            let entry = entry.unwrap();
+            let name = entry
+                .file_name()
+                .into_string()
+                .expect("Linux CI root names are UTF-8");
+            if name != "proc" {
+                excludes.push(name);
+            }
+        }
+        let profile = Folder {
+            include_hidden: true,
+            exclude_globs: excludes,
+            min_file_age_seconds: 0,
+            ..Folder::default()
+        };
+        let found = walk(root, &profile, SystemTime::now()).unwrap();
+        assert_eq!(found.limits.get("mount point"), Some(&1));
+        assert!(found
+            .skipped
+            .iter()
+            .any(|item| item.path == Path::new("proc")
+                && item.reason == "skipped_policy: mount point"));
+        assert!(crate::summary::scope(&found).contains("1 directories not walked (mount point)"));
+        assert!(!found
+            .candidates
+            .iter()
+            .any(|item| item.path.starts_with("proc")));
+        eprintln!("AT03_MOUNT /proc boundary=1 crossed=0");
+    }
+
     #[test]
     fn ten_thousand_entries_record_elapsed_time() {
         let f = Fixture::new();

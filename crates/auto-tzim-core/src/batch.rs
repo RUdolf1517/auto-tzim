@@ -240,3 +240,65 @@ mod input_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod batch_hash_tests {
+    use super::*;
+    use crate::planner::{canonical_rows, plan_hash, plan_id, Row};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::SystemTime;
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    #[test]
+    fn same_root_has_same_rows_and_hash_alone_or_in_a_batch() {
+        let fixture = std::env::temp_dir().join(format!(
+            "atz-batch-hash-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        let roots: Vec<_> = ["a", "b", "c"]
+            .into_iter()
+            .map(|n| fixture.join(n))
+            .collect();
+        for (i, root) in roots.iter().enumerate() {
+            std::fs::create_dir_all(root).unwrap();
+            std::fs::write(root.join(format!("file-{i}")), b"data").unwrap();
+        }
+        let profile = |path: &std::path::Path| Folder {
+            min_file_age_seconds: 0,
+            ..direct(path.to_path_buf())
+        };
+        let now = SystemTime::now();
+        let single = discover(vec![profile(&roots[0])], now).unwrap();
+        let combined = discover(
+            vec![profile(&roots[0]), profile(&roots[1]), profile(&roots[2])],
+            now,
+        )
+        .unwrap();
+        assert_eq!(combined.len(), 3);
+        // The actual adapter argv is undecided; inject fixed argv to test batch independence only.
+        let rows = |result: &crate::discovery::Discovery| {
+            result
+                .candidates
+                .iter()
+                .cloned()
+                .map(|candidate| Row {
+                    candidate,
+                    argv: vec!["test-argument".into()],
+                })
+                .collect::<Vec<_>>()
+        };
+        let alone = rows(&single[0].1);
+        let together = rows(&combined[0].1);
+        assert_eq!(canonical_rows(&alone), canonical_rows(&together));
+        assert_eq!(plan_hash(&alone), plan_hash(&together));
+        let hashes: std::collections::HashSet<_> = combined
+            .iter()
+            .map(|(_, result)| plan_hash(&rows(result)))
+            .collect();
+        assert_eq!(hashes.len(), 3);
+        let ids: std::collections::HashSet<_> = (0..3).map(|_| plan_id().unwrap()).collect();
+        assert_eq!(ids.len(), 3);
+        std::fs::remove_dir_all(fixture).unwrap();
+    }
+}

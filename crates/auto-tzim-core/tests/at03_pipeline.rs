@@ -35,6 +35,45 @@ fn file(root: &Path, name: &str, now: SystemTime, age_seconds: u64) {
         .unwrap();
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum SnapshotEntry {
+    Directory,
+    File([u8; 32]),
+    Symlink(PathBuf),
+}
+
+// The test reads fixtures to verify the walk did not change either the complete
+// listing or the SHA-256 of any regular file, including excluded files.
+fn snapshot(root: &Path) -> BTreeMap<PathBuf, SnapshotEntry> {
+    fn recurse(root: &Path, relative: &Path, result: &mut BTreeMap<PathBuf, SnapshotEntry>) {
+        for entry in fs::read_dir(root.join(relative)).unwrap() {
+            let entry = entry.unwrap();
+            let relative = relative.join(entry.file_name());
+            let full = root.join(&relative);
+            let kind = fs::symlink_metadata(&full).unwrap().file_type();
+            if kind.is_symlink() {
+                result.insert(
+                    relative,
+                    SnapshotEntry::Symlink(fs::read_link(full).unwrap()),
+                );
+            } else if kind.is_dir() {
+                result.insert(relative.clone(), SnapshotEntry::Directory);
+                recurse(root, &relative, result);
+            } else if kind.is_file() {
+                result.insert(
+                    relative,
+                    SnapshotEntry::File(hash::sha256(&fs::read(full).unwrap())),
+                );
+            } else {
+                panic!("unexpected special object in this fixture");
+            }
+        }
+    }
+    let mut result = BTreeMap::new();
+    recurse(root, Path::new(""), &mut result);
+    result
+}
+
 #[test]
 fn reproducible_partial_fixture_across_discovery_planning_and_rendering() {
     let fixture = Fixture::new();
@@ -50,21 +89,7 @@ fn reproducible_partial_fixture_across_discovery_planning_and_rendering() {
     file(&fixture.0, "sub/.tzim-123-456-0.tmp", now, 120);
     file(&fixture.0, "sub/.git/config", now, 120);
     symlink("../a.png", fixture.0.join("sub/link")).unwrap();
-    let contents = [
-        "a.png",
-        "z.png",
-        "sub/b.png",
-        "sub/c.png",
-        "young.png",
-        "hard-a",
-        "hard-b",
-        "sub/.tzim-123-456-0.tmp",
-        "sub/.git/config",
-    ];
-    let before: BTreeMap<_, _> = contents
-        .into_iter()
-        .map(|name| (name, hash::sha256(&fs::read(fixture.0.join(name)).unwrap())))
-        .collect();
+    let before = snapshot(&fixture.0);
     let profile = Folder {
         root: fixture.0.clone(),
         include_hidden: true,
@@ -146,10 +171,6 @@ fn reproducible_partial_fixture_across_discovery_planning_and_rendering() {
     let batch = batch::discover(vec![profile.clone(), profile], now).unwrap();
     assert_eq!(batch.len(), 1);
     assert_eq!(batch[0].1.candidates, plans[0].discovery.candidates);
-    let after: BTreeMap<_, _> = contents
-        .into_iter()
-        .map(|name| (name, hash::sha256(&fs::read(fixture.0.join(name)).unwrap())))
-        .collect();
-    assert_eq!(before, after);
+    assert_eq!(before, snapshot(&fixture.0));
     eprintln!("AT03_PARTIAL_FIXTURE planned=4 candidates=4 hardlinks=2 young=1 temp=1 symlink=1 directories_walked=2 excluded_dirs=1");
 }

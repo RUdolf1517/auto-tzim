@@ -1656,7 +1656,8 @@ about the same bytes is worse than a smaller plan.
 
 ## D-62 · The format policy reads a name, never a file
 
-**Status: adopted (manager default, 2026-11-07).** Resolves a real contradiction the coder found between corpus `P-02`,
+**Status: adopted, and confirmed by the owner 2026-11-07** — put to them in numbers, answered *"1 — передавать"*. It was a manager
+default the same day and is now the owner's rule. Resolves a real contradiction the coder found between corpus `P-02`,
 [D-11](DECISIONS.md) and [D-26](DECISIONS.md) item 3.
 
 Two different things had been written with the same words:
@@ -1720,8 +1721,9 @@ acceptable, and stated.
 
 ## D-64 · The directory race: what is guaranteed, and what is not
 
-**Status: adopted (manager default, 2026-11-07).** The coder is right that `std` cannot make the traversal atomic, and right to
-refuse to claim otherwise.
+**Status: adopted, and confirmed by the owner 2026-11-07** — put to them in numbers, answered *"1 — принять ограничение"* rather
+than allowing `unsafe` for `openat`. The coder is right that `std` cannot make the traversal atomic, and right to refuse to
+claim otherwise.
 
 **The window.** We `lstat` a path, decide it is a directory, then `read_dir` it. Between those two calls another process can
 replace the directory with a symlink to somewhere else, and our enumeration follows it. Closing the window needs

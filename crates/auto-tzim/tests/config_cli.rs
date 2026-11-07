@@ -1716,6 +1716,30 @@ fn at04_adapter_corpus_versions_schemas_and_tripwires() {
             calls: 2,
         },
         Case {
+            id: "A-11/empty",
+            vars: vec![("AT04_CAPABILITIES", "".into())],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/malformed",
+            vars: vec![("AT04_CAPABILITIES", "{garbage".into())],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/wrong-type",
+            vars: vec![(
+                "AT04_CAPABILITIES",
+                AT04_CAPS.replace(
+                    "\"compiled_formats\":[\"png\"]",
+                    "\"compiled_formats\":true",
+                ),
+            )],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
             id: "A-11/extra",
             vars: vec![(
                 "AT04_CAPABILITIES",

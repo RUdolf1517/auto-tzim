@@ -1290,3 +1290,101 @@ fn valid_scan_never_spawns_tzim_or_interprets_hostile_names() {
         assert!(!std::path::Path::new(name).exists());
     }
 }
+
+#[test]
+fn empty_exclusion_glob_is_rejected_at_config_load() {
+    let s = Sandbox::new();
+    let root = s.folder("pictures");
+    fs::create_dir_all(s.root.join("config")).unwrap();
+    fs::write(s.config(), format!("schema=1\n[installation]\n[[folder]]\nname='pictures'\nroot={:?}\nexclude_globs=['']\n", root.to_str().unwrap())).unwrap();
+    let out = s.run(&["scan", "--folder", "pictures"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("exclude_globs: empty pattern"));
+    assert!(!s.root.join("config/state/plans").exists());
+}
+
+#[test]
+fn three_roots_are_ordered_deduplicated_and_independent() {
+    use std::time::Duration;
+    let s = Sandbox::new();
+    let roots: Vec<_> = ["alpha", "beta", "gamma"]
+        .into_iter()
+        .map(|name| s.folder(name))
+        .collect();
+    for (i, root) in roots.iter().enumerate() {
+        let path = root.join(format!("file{i}.png"));
+        fs::write(&path, b"x").unwrap();
+        fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(120))
+            .unwrap();
+    }
+    let out = s.run(&[
+        "scan",
+        roots[1].to_str().unwrap(),
+        roots[0].to_str().unwrap(),
+        roots[2].to_str().unwrap(),
+        roots[0].to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let roots_order: Vec<_> = stdout
+        .lines()
+        .filter(|line| line.starts_with("root: "))
+        .collect();
+    assert_eq!(roots_order.len(), 3);
+    for (line, root) in roots_order.iter().zip([&roots[1], &roots[0], &roots[2]]) {
+        assert!(line.contains(root.to_str().unwrap()));
+    }
+    let plans_dir = s.root.join("config/state/plans");
+    let plans: Vec<_> = fs::read_dir(&plans_dir)
+        .unwrap()
+        .map(|entry| fs::read_to_string(entry.unwrap().path()).unwrap())
+        .collect();
+    assert_eq!(plans.len(), 3);
+    let original = plans
+        .iter()
+        .find(|text| text.contains(roots[0].to_str().unwrap()))
+        .unwrap();
+    let rows = |text: &str| {
+        text.split_once("\"rows\":[")
+            .unwrap()
+            .1
+            .split_once("],\"skipped\":")
+            .unwrap()
+            .0
+            .to_owned()
+    };
+    let hash = |text: &str| {
+        text.split_once("\"plan_hash\":\"")
+            .unwrap()
+            .1
+            .split('"')
+            .next()
+            .unwrap()
+            .to_owned()
+    };
+    let out = s.run(&["scan", roots[0].to_str().unwrap()]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let all: Vec<_> = fs::read_dir(&plans_dir)
+        .unwrap()
+        .map(|entry| fs::read_to_string(entry.unwrap().path()).unwrap())
+        .collect();
+    assert_eq!(all.len(), 4);
+    let repeat = all
+        .iter()
+        .find(|text| text.contains(roots[0].to_str().unwrap()) && *text != original)
+        .unwrap();
+    assert_eq!(rows(original), rows(repeat));
+    assert_eq!(hash(original), hash(repeat));
+}

@@ -1,0 +1,9 @@
+[package]
+name = "auto-tzim-harness"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+publish = false
+license = "MIT"
+description = "Test fixtures for auto-tzim"
+repository = "https://github.com/RUdolf1517/auto-tzim"

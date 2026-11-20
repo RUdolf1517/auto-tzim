@@ -28,9 +28,78 @@ impl Sandbox {
         Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
             .env("HOME", self.root.join("home"))
             .env("AUTO_TZIM_HOME", self.root.join("config"))
+            .env("AT04_LOG", self.root.join("tzim-calls"))
             .args(args)
             .output()
             .unwrap()
+    }
+    fn run_scenario(&self, args: &[&str], vars: &[(&str, &str)]) -> Output {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_auto-tzim"));
+        command
+            .env("HOME", self.root.join("home"))
+            .env("AUTO_TZIM_HOME", self.root.join("config"))
+            .env("AT04_LOG", self.root.join("tzim-calls"));
+        for key in [
+            "AT04_VERSION",
+            "AT04_CAPABILITIES",
+            "AT04_FAIL_FLAG",
+            "AT04_DELAY_MS",
+            "AT04_STDIN_CHECK",
+            "AT04_STDOUT_SIZE",
+            "AT04_STDERR_SIZE",
+        ] {
+            command.env_remove(key);
+        }
+        command
+            .envs(vars.iter().copied())
+            .args(args)
+            .output()
+            .unwrap()
+    }
+    fn fake_tzim(&self) -> PathBuf {
+        static FAKE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+        FAKE.get_or_init(|| {
+            let output =
+                std::env::temp_dir().join(format!("auto-tzim-fake-{}", std::process::id()));
+            let source =
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../auto-tzim-harness/src/main.rs");
+            let result = Command::new("rustc")
+                .args(["--edition", "2021"])
+                .arg(source)
+                .arg("-o")
+                .arg(&output)
+                .output()
+                .expect("build fake");
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+            output
+        })
+        .clone()
+    }
+    fn configure_tzim(&self) {
+        fs::create_dir_all(self.root.join("config")).unwrap();
+        let existing = fs::read_to_string(self.config())
+            .unwrap_or_else(|_| "schema=1\n[installation]\n".into());
+        let line = format!("tzim_path = {:?}", self.fake_tzim().to_str().unwrap());
+        let content = if existing.contains("tzim_path = ") {
+            existing
+                .lines()
+                .map(|s| {
+                    if s.starts_with("tzim_path = ") {
+                        line.as_str()
+                    } else {
+                        s
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        } else {
+            existing.replacen("[installation]", &format!("[installation]\n{line}"), 1)
+        };
+        fs::write(self.config(), content).unwrap();
     }
     fn config(&self) -> PathBuf {
         self.root.join("config/config.toml")
@@ -533,6 +602,7 @@ fn non_utf8_directory_name_does_not_panic() {
         if !cfg!(target_os = "macos") || error.raw_os_error() != Some(92) {
             panic!("creating non-UTF-8 test directory: {error}");
         }
+        eprintln!("macOS: non-UTF-8 directory creation skipped because APFS rejected the bytes: {error}; missing-path CLI still tested");
     }
     let output = Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
         .env("HOME", sandbox.root.join("home"))
@@ -1101,6 +1171,7 @@ fn invalid_batch_reports_second_root_even_when_first_cannot_be_read() {
 fn valid_scan_publishes_two_immutable_plans_with_equal_hashes() {
     use std::time::Duration;
     let s = Sandbox::new();
+    s.configure_tzim();
     let root = s.folder("pictures");
     let image = root.join("image.png");
     fs::write(&image, b"original").unwrap();
@@ -1155,11 +1226,15 @@ fn scan_direct_non_utf8_root_records_exact_bytes() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
     let s = Sandbox::new();
+    s.configure_tzim();
     let root = s.root.join(OsString::from_vec(b"raw-\xff".to_vec()));
     match fs::create_dir(&root) {
         Ok(()) => (),
         Err(error) if error.raw_os_error() == Some(92) => {
-            eprintln!("non-UTF-8 root skipped: filesystem rejects the name: {error}");
+            eprintln!(
+                "non-UTF-8 root skipped on {}: filesystem rejects the name: {error}",
+                std::env::consts::OS
+            );
             return;
         }
         Err(error) => panic!("fixture setup: {error}"),
@@ -1217,6 +1292,7 @@ fn scan_profile_formats_filter_without_reading_and_build_sorted_argv() {
         "{}",
         String::from_utf8_lossy(&added.stderr)
     );
+    s.configure_tzim();
     let out = s.run(&["scan", "--folder", "pictures"]);
     assert!(
         out.status.success(),
@@ -1239,8 +1315,7 @@ fn scan_profile_formats_filter_without_reading_and_build_sorted_argv() {
 }
 
 #[test]
-fn valid_scan_never_spawns_tzim_or_interprets_hostile_names() {
-    use std::os::unix::fs::PermissionsExt;
+fn valid_scan_only_probes_tzim_and_never_interprets_hostile_names() {
     use std::time::Duration;
     let s = Sandbox::new();
     let root = s.folder("pictures");
@@ -1254,23 +1329,8 @@ fn valid_scan_never_spawns_tzim_or_interprets_hostile_names() {
             .set_modified(SystemTime::now() - Duration::from_secs(120))
             .unwrap();
     }
-    let counter = s.root.join("tzim-called");
-    let fake = s.root.join("fake-tzim");
-    fs::write(
-        &fake,
-        format!("#!/bin/sh\nprintf called > '{}'\n", counter.display()),
-    )
-    .unwrap();
-    fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
-    fs::create_dir_all(s.root.join("config")).unwrap();
-    fs::write(
-        s.config(),
-        format!(
-            "schema=1\n[installation]\ntzim_path={:?}\n",
-            fake.to_str().unwrap()
-        ),
-    )
-    .unwrap();
+    s.configure_tzim();
+    let counter = s.root.join("tzim-calls");
     let out = s.run(&["scan", root.to_str().unwrap()]);
     assert!(
         out.status.success(),
@@ -1284,7 +1344,10 @@ fn valid_scan_never_spawns_tzim_or_interprets_hostile_names() {
             .count(),
         2
     );
-    assert!(!counter.exists());
+    assert_eq!(
+        fs::read_to_string(counter).unwrap(),
+        "--version\n--capabilities\n"
+    );
     for name in ["ats_pwned", "ats_pwned2"] {
         assert!(!root.join(name).exists());
         assert!(!std::path::Path::new(name).exists());
@@ -1307,6 +1370,7 @@ fn empty_exclusion_glob_is_rejected_at_config_load() {
 fn three_roots_are_ordered_deduplicated_and_independent() {
     use std::time::Duration;
     let s = Sandbox::new();
+    s.configure_tzim();
     let roots: Vec<_> = ["alpha", "beta", "gamma"]
         .into_iter()
         .map(|name| s.folder(name))
@@ -1332,6 +1396,10 @@ fn three_roots_are_ordered_deduplicated_and_independent() {
         out.status.success(),
         "{}",
         String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(s.root.join("tzim-calls")).unwrap(),
+        "--version\n--capabilities\n"
     );
     let stdout = String::from_utf8(out.stdout).unwrap();
     let roots_order: Vec<_> = stdout
@@ -1419,6 +1487,7 @@ fn at03_names_corpus_emits_one_planned_row_per_constructible_name() {
     use std::os::unix::ffi::OsStringExt;
     use std::time::Duration;
     let s = Sandbox::new();
+    s.configure_tzim();
     let root = s.folder("names");
     let names: &[&[u8]] = &[
         b"plain.png",
@@ -1457,7 +1526,10 @@ fn at03_names_corpus_emits_one_planned_row_per_constructible_name() {
                 created_names.push(name.to_vec());
             }
             Err(error) if *name == b"bad\xff.png" && error.raw_os_error() == Some(92) => {
-                eprintln!("N-17 skipped: filesystem rejects non-UTF-8 name: {error}");
+                eprintln!(
+                    "N-17 skipped on {}: filesystem rejects non-UTF-8 name: {error}",
+                    std::env::consts::OS
+                );
             }
             Err(error) => panic!("fixture: {error}"),
         }
@@ -1508,6 +1580,7 @@ fn at03_names_corpus_emits_one_planned_row_per_constructible_name() {
 #[test]
 fn orphan_temps_are_never_rows_and_reported_once_per_batch() {
     let s = Sandbox::new();
+    s.configure_tzim();
     let roots = [s.folder("a"), s.folder("b")];
     for root in &roots {
         fs::write(root.join(".tzim-1.tmp"), b"keep").unwrap();
@@ -1537,4 +1610,484 @@ fn orphan_temps_are_never_rows_and_reported_once_per_batch() {
         assert!(!text.contains("orphan_temp"));
         assert!(!text.contains(".tzim-1.tmp"));
     }
+}
+
+const AT04_CAPS: &str = r#"{"capabilities_schema_version":1,"result_schema_version":2,"build_features":{},"compiled_formats":["png"],"default_enabled_formats":["png"],"selection_flags":[],"handler_opt_ins":[],"transformations":[],"confirmation_policies":[]}"#;
+
+#[test]
+fn at04_adapter_corpus_versions_schemas_and_tripwires() {
+    struct Case {
+        id: &'static str,
+        vars: Vec<(&'static str, String)>,
+        exit: i32,
+        calls: usize,
+    }
+    let mut cases = vec![
+        Case {
+            id: "A-01/0.16.0",
+            vars: vec![("AT04_VERSION", "tzim 0.16.0\n".into())],
+            exit: 0,
+            calls: 2,
+        },
+        Case {
+            id: "A-01/0.16.1",
+            vars: vec![("AT04_VERSION", "tzim 0.16.1\n".into())],
+            exit: 0,
+            calls: 2,
+        },
+        Case {
+            id: "A-02",
+            vars: vec![("AT04_VERSION", "tzim 0.15.0\n".into())],
+            exit: 3,
+            calls: 1,
+        },
+        Case {
+            id: "A-03/1.0",
+            vars: vec![("AT04_VERSION", "tzim 1.0.0\n".into())],
+            exit: 3,
+            calls: 1,
+        },
+        Case {
+            id: "A-03/0.17",
+            vars: vec![("AT04_VERSION", "tzim 0.17.0\n".into())],
+            exit: 3,
+            calls: 1,
+        },
+        Case {
+            id: "A-04/garbage",
+            vars: vec![("AT04_VERSION", "garbage".into())],
+            exit: 3,
+            calls: 1,
+        },
+        Case {
+            id: "A-04/empty",
+            vars: vec![("AT04_VERSION", "".into())],
+            exit: 3,
+            calls: 1,
+        },
+        Case {
+            id: "A-06",
+            vars: vec![("AT04_FAIL_FLAG", "--version".into())],
+            exit: 3,
+            calls: 1,
+        },
+        Case {
+            id: "A-10",
+            vars: vec![("AT04_STDIN_CHECK", "1".into())],
+            exit: 0,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/a",
+            vars: vec![("AT04_CAPABILITIES", AT04_CAPS.into())],
+            exit: 0,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/b",
+            vars: vec![(
+                "AT04_CAPABILITIES",
+                AT04_CAPS.replace("version\":1", "version\":2"),
+            )],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/c",
+            vars: vec![(
+                "AT04_CAPABILITIES",
+                AT04_CAPS.replace("result_schema_version\":2", "result_schema_version\":3"),
+            )],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/d",
+            vars: vec![("AT04_FAIL_FLAG", "--capabilities".into())],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/e",
+            vars: vec![(
+                "AT04_CAPABILITIES",
+                AT04_CAPS.replace("\"result_schema_version\":2,", ""),
+            )],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/empty",
+            vars: vec![("AT04_CAPABILITIES", "".into())],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/malformed",
+            vars: vec![("AT04_CAPABILITIES", "{garbage".into())],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/wrong-type",
+            vars: vec![(
+                "AT04_CAPABILITIES",
+                AT04_CAPS.replace(
+                    "\"compiled_formats\":[\"png\"]",
+                    "\"compiled_formats\":true",
+                ),
+            )],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "A-11/extra",
+            vars: vec![(
+                "AT04_CAPABILITIES",
+                AT04_CAPS.replacen('{', "{\"extra\":true,", 1),
+            )],
+            exit: 0,
+            calls: 2,
+        },
+        Case {
+            id: "schema-float",
+            vars: vec![(
+                "AT04_CAPABILITIES",
+                AT04_CAPS.replace("result_schema_version\":2", "result_schema_version\":2.0"),
+            )],
+            exit: 3,
+            calls: 2,
+        },
+        Case {
+            id: "stdout-limit",
+            vars: vec![("AT04_STDOUT_SIZE", "1048577".into())],
+            exit: 3,
+            calls: 1,
+        },
+        Case {
+            id: "stderr-limit",
+            vars: vec![("AT04_STDERR_SIZE", "65537".into())],
+            exit: 3,
+            calls: 1,
+        },
+    ];
+    eprintln!();
+    for case in cases.drain(..) {
+        let s = Sandbox::new();
+        s.configure_tzim();
+        let root = s.folder("root");
+        let vars: Vec<_> = case.vars.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let out = s.run_scenario(&["scan", root.to_str().unwrap()], &vars);
+        let log = fs::read_to_string(s.root.join("tzim-calls")).unwrap_or_default();
+        let lines: Vec<_> = log.lines().collect();
+        assert_eq!(
+            out.status.code(),
+            Some(case.exit),
+            "{} stderr={}",
+            case.id,
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(lines.len(), case.calls, "{} {log:?}", case.id);
+        assert_eq!(lines.first(), Some(&"--version"));
+        if case.calls == 2 {
+            assert_eq!(lines[1], "--capabilities");
+        }
+        if case.exit == 3 {
+            assert!(String::from_utf8_lossy(&out.stderr).contains("incompatible_tzim"));
+            assert!(!s.root.join("config/state/plans").exists());
+        } else {
+            assert_eq!(
+                fs::read_dir(s.root.join("config/state/plans"))
+                    .unwrap()
+                    .count(),
+                1
+            );
+        }
+        eprintln!(
+            "AT04_RAW {} exit={} stdout_b64={} stderr_b64={} log_b64={} vars_b64={}",
+            case.id,
+            out.status.code().unwrap(),
+            auto_tzim_core::planner::base64(&out.stdout),
+            auto_tzim_core::planner::base64(&out.stderr),
+            auto_tzim_core::planner::base64(log.as_bytes()),
+            auto_tzim_core::planner::base64(format!("{:?}", case.vars).as_bytes())
+        );
+        eprintln!(
+            "AT04_CASE {} exit={} calls={} log={:?} stderr={:?}",
+            case.id,
+            case.exit,
+            case.calls,
+            log,
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+#[test]
+fn at04_missing_and_non_executable_binary_refused() {
+    use std::os::unix::fs::PermissionsExt;
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let root = s.folder("root");
+    eprintln!();
+    for (label, path) in [
+        ("missing", s.root.join("missing")),
+        ("not-executable", s.root.join("not-executable")),
+    ] {
+        if label == "not-executable" {
+            fs::copy(s.fake_tzim(), &path).unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        fs::write(
+            s.config(),
+            format!(
+                "schema=1\n[installation]\ntzim_path={:?}\n",
+                path.to_str().unwrap()
+            ),
+        )
+        .unwrap();
+        let out = s.run_scenario(&["scan", root.to_str().unwrap()], &[]);
+        assert_eq!(out.status.code(), Some(3));
+        assert!(String::from_utf8_lossy(&out.stderr).contains("incompatible_tzim"));
+        assert!(!s.root.join("config/state/plans").exists());
+        assert!(!s.root.join("tzim-calls").exists());
+        eprintln!(
+            "AT04_RAW A-05/{label} exit=3 stdout_b64={} stderr_b64={} log_b64=",
+            auto_tzim_core::planner::base64(&out.stdout),
+            auto_tzim_core::planner::base64(&out.stderr)
+        );
+        eprintln!(
+            "AT04_CASE A-05/{label} exit=3 calls=0 stderr={:?}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+#[test]
+fn at04_doctor_identity_and_exit_codes() {
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let fake = s.fake_tzim();
+    let expected_hash = Command::new("shasum")
+        .args(["-a", "256"])
+        .arg(&fake)
+        .output()
+        .unwrap();
+    assert!(expected_hash.status.success());
+    let expected_hash = String::from_utf8(expected_hash.stdout).unwrap();
+    let hash = expected_hash.split_whitespace().next().unwrap();
+    let out = s.run_scenario(&["doctor"], &[("AT04_STDIN_CHECK", "1")]);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    eprintln!();
+    eprintln!(
+        "AT04_DOCTOR exit=0 independent_sha256={hash} stdout_b64={} stderr_b64={}",
+        auto_tzim_core::planner::base64(&out.stdout),
+        auto_tzim_core::planner::base64(&out.stderr)
+    );
+    let text = String::from_utf8(out.stdout).unwrap();
+    for part in [
+        format!("path={}", fake.display()),
+        format!("realpath={}", fs::canonicalize(&fake).unwrap().display()),
+        format!("size={}", fs::metadata(&fake).unwrap().len()),
+        format!("sha256={hash}"),
+        "version=0.16.1".into(),
+        "capabilities_schema=1".into(),
+        "result_schema=2".into(),
+        "adapter=tzim-0.16".into(),
+    ] {
+        assert!(text.contains(&part), "missing {part}: {text}");
+    }
+    assert_eq!(
+        fs::read_to_string(s.root.join("tzim-calls")).unwrap(),
+        "--version\n--capabilities\n"
+    );
+    let bad_binary = s.run_scenario(&["doctor"], &[("AT04_VERSION", "tzim 0.17.0\n")]);
+    assert_eq!(bad_binary.status.code(), Some(3));
+    fs::write(s.config(), "malformed [[[").unwrap();
+    assert_eq!(s.run_scenario(&["doctor"], &[]).status.code(), Some(2));
+    fs::write(
+        s.config(),
+        format!(
+            "schema=1\n[installation]\ntzim_path={:?}\n",
+            fake.to_str().unwrap()
+        ),
+    )
+    .unwrap();
+    fs::create_dir_all(s.root.join("config/state")).unwrap();
+    fs::write(s.root.join("config/state/schema.json"), b"invalid").unwrap();
+    assert_eq!(s.run_scenario(&["doctor"], &[]).status.code(), Some(7));
+    eprintln!("AT04_DOCTOR_MATRIX exit_success=0 incompatible=3 bad_config=2 bad_state=7");
+    fs::write(s.root.join("config/state/schema.json"), br#"{"schema":1}"#).unwrap();
+    let run = s.root.join("config/state/runs/run1");
+    fs::create_dir_all(&run).unwrap();
+    fs::write(run.join("run.json"), br#"{"schema":1}"#).unwrap();
+    let journal = run.join("files.jsonl");
+    fs::write(&journal, b"{}\n{\"incomplete\":").unwrap();
+    let recovered = s.run_scenario(&["doctor"], &[]);
+    assert!(recovered.status.success());
+    assert!(String::from_utf8_lossy(&recovered.stdout).contains("tail_recovered=true"));
+    assert_eq!(fs::read(&journal).unwrap(), b"{}\n{\"incomplete\":");
+    fs::write(&journal, b"bad\n{}\n").unwrap();
+    assert_eq!(s.run_scenario(&["doctor"], &[]).status.code(), Some(7));
+}
+
+#[test]
+fn at04_shared_probe_timeout_is_bounded() {
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let root = s.folder("root");
+    let now = std::time::Instant::now();
+    let out = s.run_scenario(
+        &["scan", root.to_str().unwrap()],
+        &[("AT04_DELAY_MS", "6000")],
+    );
+    let elapsed = now.elapsed();
+    assert_eq!(out.status.code(), Some(3));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("timeout after"));
+    assert!(elapsed < std::time::Duration::from_secs(14), "{elapsed:?}");
+    assert_eq!(
+        fs::read_to_string(s.root.join("tzim-calls")).unwrap(),
+        "--version\n--capabilities\n"
+    );
+    assert!(!s.root.join("config/state/plans").exists());
+    eprintln!();
+    eprintln!(
+        "AT04_TIMEOUT elapsed_ms={} exit=3 calls=2",
+        elapsed.as_millis()
+    );
+}
+
+#[test]
+fn at04_empty_profile_ignores_binary_default_formats_p01() {
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let root = s.folder("root");
+    let image = root.join("-leading.png");
+    fs::write(&image, b"not read").unwrap();
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&image)
+        .unwrap()
+        .set_modified(SystemTime::now() - std::time::Duration::from_secs(120))
+        .unwrap();
+    let out = s.run_scenario(
+        &["scan", root.to_str().unwrap()],
+        &[("AT04_CAPABILITIES", AT04_CAPS)],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let plan = fs::read_dir(s.root.join("config/state/plans"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let plan = fs::read_to_string(plan).unwrap();
+    assert!(
+        plan.contains("\"argv\":[\"--\",\"-leading.png\"]"),
+        "{plan}"
+    );
+    assert!(!plan.contains("--formats"));
+}
+
+#[test]
+fn at04_determinism_across_timezone_and_locale() {
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let root = s.folder("root");
+    let file = root.join("a.png");
+    fs::write(&file, b"x").unwrap();
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&file)
+        .unwrap()
+        .set_modified(SystemTime::now() - std::time::Duration::from_secs(120))
+        .unwrap();
+    let a = s.run_scenario(
+        &["scan", root.to_str().unwrap()],
+        &[("TZ", "UTC"), ("LC_ALL", "C")],
+    );
+    let b = s.run_scenario(
+        &["scan", root.to_str().unwrap()],
+        &[("TZ", "Pacific/Honolulu"), ("LC_ALL", "POSIX")],
+    );
+    assert!(a.status.success());
+    assert!(b.status.success());
+    let stable = |out: &[u8]| {
+        String::from_utf8_lossy(out)
+            .lines()
+            .filter(|line| !line.starts_with("plan id: "))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    assert_eq!(stable(&a.stdout), stable(&b.stdout));
+}
+
+#[test]
+fn at04_a10_forbidden_flag_tripwire_stays_cold() {
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let roots = [s.folder("a"), s.folder("b"), s.folder("c")];
+    let out = s.run_scenario(
+        &[
+            "scan",
+            roots[0].to_str().unwrap(),
+            roots[1].to_str().unwrap(),
+            roots[2].to_str().unwrap(),
+        ],
+        &[],
+    );
+    let log = fs::read_to_string(s.root.join("tzim-calls")).unwrap_or_default();
+    assert!(
+        out.status.success(),
+        "A-10 tripwire; log={log:?} stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        log, "--version\n--capabilities\n",
+        "A-10: two flag-only and zero path invocations"
+    );
+}
+
+#[test]
+fn at04_probe_receives_null_stdin_even_when_cli_has_input() {
+    use std::io::Write;
+    use std::process::Stdio;
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let mut process = Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
+        .arg("doctor")
+        .env("HOME", s.root.join("home"))
+        .env("AUTO_TZIM_HOME", s.root.join("config"))
+        .env("AT04_LOG", s.root.join("tzim-calls"))
+        .env("AT04_STDIN_CHECK", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    process
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"parent input must not reach child")
+        .unwrap();
+    let out = process.wait_with_output().unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(s.root.join("tzim-calls")).unwrap(),
+        "--version\n--capabilities\n"
+    );
 }

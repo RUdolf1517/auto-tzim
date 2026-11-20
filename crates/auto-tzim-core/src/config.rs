@@ -451,6 +451,8 @@ pub enum ConfigError {
     Invalid(Vec<String>),
     /// An unexpected internal failure, distinct from invalid user configuration.
     Internal(String),
+    /// The configured binary failed the adapter contract.
+    IncompatibleTzim(String),
     /// The target tree changed while scanning.
     TreeChanged(String),
     Io(std::io::Error),
@@ -463,6 +465,7 @@ impl std::fmt::Display for ConfigError {
         match self {
             Self::Invalid(errors) => write!(f, "{}", errors.join("\n")),
             Self::Internal(error) => write!(f, "internal error: {error}"),
+            Self::IncompatibleTzim(error) => write!(f, "{error}"),
             Self::TreeChanged(error) => write!(f, "{error}"),
             Self::Io(error) => write!(f, "configuration I/O: {error}"),
             Self::Locked(holder) => write!(f, "configuration locked: {holder}"),

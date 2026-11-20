@@ -11,63 +11,91 @@ const K: [u32; 64] = [
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
+use std::io::{self, Read};
+
 /// Return the SHA-256 digest of the supplied bytes.
 pub fn sha256(input: &[u8]) -> [u8; 32] {
+    sha256_reader(input).expect("reading a byte slice cannot fail")
+}
+
+/// Hash a stream with fixed working memory.
+pub fn sha256_reader(mut input: impl Read) -> io::Result<[u8; 32]> {
     let mut h: [u32; 8] = [
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
         0x5be0cd19,
     ];
-    let mut padded = input.to_vec();
-    padded.push(0x80);
-    while padded.len() % 64 != 56 {
-        padded.push(0);
-    }
-    padded.extend_from_slice(&(input.len() as u64).wrapping_mul(8).to_be_bytes());
-    for block in padded.chunks_exact(64) {
-        let mut w = [0u32; 64];
-        for (word, bytes) in w.iter_mut().take(16).zip(block.chunks_exact(4)) {
-            *word = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        }
-        for i in 16..64 {
-            let x = w[i - 15];
-            let y = w[i - 2];
-            let s0 = x.rotate_right(7) ^ x.rotate_right(18) ^ (x >> 3);
-            let s1 = y.rotate_right(17) ^ y.rotate_right(19) ^ (y >> 10);
-            w[i] = w[i - 16]
-                .wrapping_add(s0)
-                .wrapping_add(w[i - 7])
-                .wrapping_add(s1);
-        }
-        let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut hh] = h;
-        for i in 0..64 {
-            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
-            let ch = (e & f) ^ (!e & g);
-            let t1 = hh
-                .wrapping_add(s1)
-                .wrapping_add(ch)
-                .wrapping_add(K[i])
-                .wrapping_add(w[i]);
-            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
-            let maj = (a & b) ^ (a & c) ^ (b & c);
-            let t2 = s0.wrapping_add(maj);
-            hh = g;
-            g = f;
-            f = e;
-            e = d.wrapping_add(t1);
-            d = c;
-            c = b;
-            b = a;
-            a = t1.wrapping_add(t2);
-        }
-        for (state, value) in h.iter_mut().zip([a, b, c, d, e, f, g, hh]) {
-            *state = state.wrapping_add(value);
+    let mut block = [0; 64];
+    let mut filled = 0;
+    let mut length = 0u64;
+    loop {
+        let count = match input.read(&mut block[filled..]) {
+            Ok(0) => break,
+            Ok(count) => count,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        };
+        length = length.wrapping_add(count as u64);
+        filled += count;
+        if filled == block.len() {
+            compress(&mut h, &block);
+            filled = 0;
         }
     }
+    block[filled..].fill(0);
+    block[filled] = 0x80;
+    if filled >= 56 {
+        compress(&mut h, &block);
+        block.fill(0);
+    }
+    block[56..].copy_from_slice(&length.wrapping_mul(8).to_be_bytes());
+    compress(&mut h, &block);
+
     let mut result = [0; 32];
-    for (chunk, word) in result.chunks_exact_mut(4).zip(h) {
+    for (chunk, word) in result.as_chunks_mut::<4>().0.iter_mut().zip(h) {
         chunk.copy_from_slice(&word.to_be_bytes());
     }
-    result
+    Ok(result)
+}
+
+fn compress(h: &mut [u32; 8], block: &[u8; 64]) {
+    let mut w = [0u32; 64];
+    for (word, bytes) in w.iter_mut().take(16).zip(block.as_chunks::<4>().0) {
+        *word = u32::from_be_bytes(*bytes);
+    }
+    for i in 16..64 {
+        let x = w[i - 15];
+        let y = w[i - 2];
+        let s0 = x.rotate_right(7) ^ x.rotate_right(18) ^ (x >> 3);
+        let s1 = y.rotate_right(17) ^ y.rotate_right(19) ^ (y >> 10);
+        w[i] = w[i - 16]
+            .wrapping_add(s0)
+            .wrapping_add(w[i - 7])
+            .wrapping_add(s1);
+    }
+    let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut hh] = *h;
+    for i in 0..64 {
+        let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
+        let ch = (e & f) ^ (!e & g);
+        let t1 = hh
+            .wrapping_add(s1)
+            .wrapping_add(ch)
+            .wrapping_add(K[i])
+            .wrapping_add(w[i]);
+        let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
+        let maj = (a & b) ^ (a & c) ^ (b & c);
+        let t2 = s0.wrapping_add(maj);
+        hh = g;
+        g = f;
+        f = e;
+        e = d.wrapping_add(t1);
+        d = c;
+        c = b;
+        b = a;
+        a = t1.wrapping_add(t2);
+    }
+    for (state, value) in h.iter_mut().zip([a, b, c, d, e, f, g, hh]) {
+        *state = state.wrapping_add(value);
+    }
 }
 
 /// Lowercase hexadecimal representation of a digest.

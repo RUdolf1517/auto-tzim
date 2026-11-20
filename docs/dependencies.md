@@ -16,13 +16,14 @@ could arrive through the environment — which is the property this page is buil
 
 | Crate | Why | What `std` cannot do | Refused alternative |
 | --- | --- | --- | --- |
+| `signal-hook` (iterator) | deliver SIGINT and SIGTERM to the apply runner | no signal-handler API in `std` | local unsafe signal registration. The C feature stays disabled |
 | `clap` (derive) | argv parsing, help text, `--` handling | no argument parser in `std`; hand-rolling one is how a flag like `--json` becomes a filename | a hand-written parser; a shell wrapper |
 | `serde` + `toml` | the documented TOML config, strict schema, unknown fields rejected | no TOML reader in `std` | a hand-written TOML parser — a correctness risk in the one file that decides what may be touched |
 | `serde_json` | the documented NDJSON output | no JSON in `std`; string-building JSON is how output becomes unparseable | manual `format!` construction |
 | `sha2` | binary identity, record hashes | no SHA-256 in `std` | shelling out to `shasum`/`sha256sum` — a shell dependency and a locale hazard |
 | `thiserror` | typed errors that map to exit codes | `std` gives no derive; without typed errors the exit-code contract becomes string matching | `anyhow` everywhere (an opaque error is not a code) |
 
-That is the entire runtime set: **five** crates, all of them boring, none of them capable of opening a socket — and **not one
+That is the entire runtime set: **six** crates, all of them boring, none of them capable of opening a socket — and **not one
 line of C**. State and history are plain files written with `std` alone (D-35), so the build has no C toolchain in it at
 all, which is also what makes a static musl binary reproducible on a machine that has nothing installed.
 

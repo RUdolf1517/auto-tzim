@@ -2091,3 +2091,534 @@ fn at04_probe_receives_null_stdin_even_when_cli_has_input() {
         "--version\n--capabilities\n"
     );
 }
+
+#[test]
+fn run_auto_installs_only_after_a_matching_plan() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::Duration;
+
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let probe = s.fake_tzim();
+    let fake = s.root.join("apply-tzim");
+    fs::write(
+        &fake,
+        format!(r#"#!/bin/sh
+case "$1" in
+  --version|--capabilities) exec '{}' "$@" ;;
+  --json) ;;
+  *) exit 2 ;;
+esac
+[ "$#" -eq 3 ] && [ "$2" = -- ] || exit 2
+case "$3" in
+  */state/staging/*/cached-*.png)
+    printf '%s\n' "${{3##*/}}" >> "$0.cache-calls"
+    printf '%s\n' '{{"type":"file","status":"already_optimal","reason_code":"already_optimal","note":null,"before":8,"after":8,"saved":0}}' '{{"type":"summary","schema":2,"files":1,"optimized":0,"would_optimize":0,"already_optimal":1,"unsupported":0,"skipped":0,"failed":0,"before":8,"after":8,"saved":0,"dry_run":false,"strip_metadata":false}}'
+    exit 0 ;;
+  */state/staging/*/a-file-error.png)
+    printf '%s\n' '{{"type":"file","status":"failed","reason_code":"io_error","note":null,"before":8,"after":8,"saved":0,"error":{{"kind":"io","message":"fixture read error"}}}}' '{{"type":"summary","schema":2,"files":1,"optimized":0,"would_optimize":0,"already_optimal":0,"unsupported":0,"skipped":0,"failed":1,"before":8,"after":8,"saved":0,"dry_run":false,"strip_metadata":false}}'
+    exit 1 ;;
+  */state/staging/*/broken.png)
+    printf 'called\n' >> "$0.invocations"
+    printf '%s\n' '{{"type":"file","status":"failed","reason_code":"verify_failed","note":null,"before":8,"after":8,"saved":0,"error":{{"kind":"verify","message":"fixture verification failed"}}}}' '{{"type":"summary","schema":2,"files":1,"optimized":0,"would_optimize":0,"already_optimal":0,"unsupported":0,"skipped":0,"failed":1,"before":8,"after":8,"saved":0,"dry_run":false,"strip_metadata":false}}'
+    exit 4 ;;
+  */state/staging/*/wait.png)
+    printf ready > "$3.ready"
+    exec /bin/sleep 60 ;;
+  */state/staging/*/image.png) ;;
+  *) exit 2 ;;
+esac
+printf small > "$3"
+printf '%s\n' '{{"type":"file","status":"optimized","reason_code":null,"note":null,"before":8,"after":5,"saved":3}}' '{{"type":"summary","schema":2,"files":1,"optimized":1,"would_optimize":0,"already_optimal":0,"unsupported":0,"skipped":0,"failed":0,"before":8,"after":5,"saved":3,"dry_run":false,"strip_metadata":false}}'
+"#, probe.display()),
+    ).unwrap();
+    fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
+    fs::write(
+        s.config(),
+        format!(
+            "schema=1\n[installation]\ntzim_path = {:?}\n",
+            fake.to_str().unwrap()
+        ),
+    )
+    .unwrap();
+    let root = s.folder("pictures");
+    let image = root.join("image.png");
+    fs::write(&image, b"original").unwrap();
+    fs::File::options()
+        .write(true)
+        .open(&image)
+        .unwrap()
+        .set_modified(SystemTime::now() - Duration::from_secs(120))
+        .unwrap();
+    let root = root.to_str().unwrap();
+    let scan = s.run(&["scan", root, "--json"]);
+    assert!(
+        scan.status.success(),
+        "{}",
+        String::from_utf8_lossy(&scan.stderr)
+    );
+    let assert_types = |output: &Output, final_type| {
+        use auto_tzim_core::json::{self, Value};
+        let rows: Vec<_> = output
+            .stdout
+            .split(|&byte| byte == b'\n')
+            .filter(|line| !line.is_empty())
+            .map(|line| json::parse(line).unwrap())
+            .collect();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[0].member("type").unwrap(),
+            &Value::String("file".into())
+        );
+        assert_eq!(
+            rows[1].member("type").unwrap(),
+            &Value::String(String::from(final_type))
+        );
+        assert!(rows.iter().all(|row| row.integer("schema").unwrap() == 1));
+    };
+    assert_types(&scan, "plan");
+    let state = s.root.join("config/state");
+    let cooldown = state.join("last-compression.json");
+    assert!(!cooldown.exists());
+    let plans = state.join("plans");
+    let plan = fs::read_dir(plans).unwrap().next().unwrap().unwrap().path();
+    let id = plan.file_stem().unwrap().to_str().unwrap();
+    let pending = || {
+        let status = s.run(&["status", "--json"]);
+        assert!(
+            status.status.success(),
+            "{}",
+            String::from_utf8_lossy(&status.stderr)
+        );
+        let status = auto_tzim_core::json::parse(&status.stdout).unwrap();
+        let auto_tzim_core::json::Value::Array(plans) = status.member("pending_plans").unwrap()
+        else {
+            panic!("expected pending plans");
+        };
+        plans.clone()
+    };
+    let before = pending();
+    assert_eq!(before.len(), 1);
+    assert_eq!(
+        before[0].member("plan_id").unwrap(),
+        &auto_tzim_core::json::Value::String(id.into())
+    );
+    assert_eq!(before[0].integer("rows").unwrap(), 1);
+    assert!(before[0].integer("age_seconds").is_ok());
+    let refused = s.run(&["run", root, "--plan", id]);
+    assert_eq!(refused.status.code(), Some(6));
+    assert_eq!(fs::read(&image).unwrap(), b"original");
+    let saved = fs::read_to_string(&plan).unwrap();
+    let tampered = saved.replace(
+        r#""argv":["--","image.png"]"#,
+        r#""argv":["--","other.png"]"#,
+    );
+    assert_ne!(tampered, saved);
+    fs::write(&plan, tampered).unwrap();
+    let invalid = s.run(&["run", root, "--auto", "--plan", id]);
+    assert_eq!(invalid.status.code(), Some(6));
+    assert_eq!(fs::read(&image).unwrap(), b"original");
+    fs::write(&plan, saved).unwrap();
+    let run = s.run(&["run", root, "--auto", "--plan", id]);
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert_eq!(fs::read(&image).unwrap(), b"small");
+    assert!(pending().is_empty());
+    let consumed = fs::read(&cooldown).unwrap();
+    let blocked = s.run(&[root, "--auto", "--time", "24"]);
+    assert_eq!(blocked.status.code(), Some(6));
+    assert!(String::from_utf8_lossy(&blocked.stderr).contains("too_soon"));
+    let preview = s.run(&[root, "--dry-run", "--time", "24"]);
+    assert!(preview.status.success());
+    assert_eq!(fs::read(&cooldown).unwrap(), consumed);
+
+    let stale = s.run(&["run", root, "--auto", "--plan", id]);
+    assert_eq!(stale.status.code(), Some(6));
+    fs::write(&image, b"original").unwrap();
+    fs::File::options()
+        .write(true)
+        .open(&image)
+        .unwrap()
+        .set_modified(SystemTime::now() - Duration::from_secs(120))
+        .unwrap();
+    let forced = s.run(&[root, "--auto", "--time", "24", "--force", "--json"]);
+    assert!(
+        forced.status.success(),
+        "{}",
+        String::from_utf8_lossy(&forced.stderr)
+    );
+    assert_eq!(fs::read(&image).unwrap(), b"small");
+    assert_ne!(fs::read(&cooldown).unwrap(), consumed);
+    assert_types(&forced, "run");
+    let history_count = |output: &[u8]| {
+        use auto_tzim_core::json::{self, Value};
+        let record = json::parse(output).unwrap();
+        assert_eq!(record.integer("schema").unwrap(), 1);
+        assert_eq!(
+            record.member("type").unwrap(),
+            &Value::String("history".into())
+        );
+        let Value::Array(rows) = record.member("rows").unwrap() else {
+            panic!("expected history rows");
+        };
+        rows.len()
+    };
+    let history = s.run(&["history", "--status", "optimized", "--limit", "1", "--json"]);
+    assert!(
+        history.status.success(),
+        "{}",
+        String::from_utf8_lossy(&history.stderr)
+    );
+    let stdout = String::from_utf8(history.stdout).unwrap();
+    assert_eq!(history_count(stdout.as_bytes()), 1);
+    assert!(stdout.contains(r#""relative_path":"image.png""#));
+    assert!(stdout.contains(r#""status":"optimized""#));
+    let empty = s.run(&["history", "--status", "failed"]);
+    assert!(empty.status.success());
+    assert!(empty.stdout.is_empty());
+    let empty_json = s.run(&["history", "--status", "failed", "--json"]);
+    assert!(empty_json.status.success());
+    assert_eq!(history_count(&empty_json.stdout), 0);
+    assert_eq!(
+        s.run(&["history", "--status", "unknown"]).status.code(),
+        Some(2)
+    );
+    let cache_root = s.folder("cache");
+    let cached = ["cached-a.png", "cached-b.png"].map(|name| cache_root.join(name));
+    for path in &cached {
+        fs::write(path, b"original").unwrap();
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(120))
+            .unwrap();
+    }
+    let cache_root = cache_root.to_str().unwrap();
+    let calls = fake.with_extension("cache-calls");
+    let probes = s.root.join("tzim-calls");
+    let first = s.run(&[cache_root, "--auto"]);
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(&calls).unwrap(),
+        "cached-a.png\ncached-b.png\n"
+    );
+    fs::write(&probes, b"").unwrap();
+    let before_cached_run = fs::read(&cooldown).unwrap();
+    let second = s.run(&[cache_root, "--auto"]);
+    assert_eq!(fs::read(&cooldown).unwrap(), before_cached_run);
+    assert!(
+        second.status.success(),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(&probes).unwrap(),
+        "--version\n--capabilities\n"
+    );
+    assert_eq!(
+        fs::read_to_string(&calls).unwrap(),
+        "cached-a.png\ncached-b.png\n"
+    );
+    let history = s.run(&[
+        "history",
+        "--status",
+        "already_optimal",
+        "--limit",
+        "4",
+        "--json",
+    ]);
+    assert!(history.status.success());
+    assert_eq!(history_count(&history.stdout), 4);
+    fs::File::options()
+        .write(true)
+        .open(&cached[0])
+        .unwrap()
+        .set_modified(SystemTime::now() - Duration::from_secs(240))
+        .unwrap();
+    let changed = s.run(&[cache_root, "--auto"]);
+    assert!(
+        changed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&changed.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(&calls).unwrap(),
+        "cached-a.png\ncached-b.png\ncached-a.png\n"
+    );
+
+    let recoverable = std::path::Path::new(cache_root).join("a-file-error.png");
+    fs::write(&recoverable, b"original").unwrap();
+    fs::File::options()
+        .write(true)
+        .open(&recoverable)
+        .unwrap()
+        .set_modified(SystemTime::now() - Duration::from_secs(120))
+        .unwrap();
+    fs::File::options()
+        .write(true)
+        .open(&cached[1])
+        .unwrap()
+        .set_modified(SystemTime::now() - Duration::from_secs(240))
+        .unwrap();
+    let partial = s.run(&[cache_root, "--auto"]);
+    assert_eq!(partial.status.code(), Some(1));
+    assert_eq!(
+        fs::read_to_string(&calls).unwrap(),
+        "cached-a.png\ncached-b.png\ncached-a.png\ncached-b.png\n"
+    );
+    let history = s.run(&["history", "--status", "failed", "--limit", "1", "--json"]);
+    assert!(history.status.success());
+    assert!(String::from_utf8_lossy(&history.stdout).contains(r#""tzim_exit_code":1"#));
+
+    let broken = std::path::Path::new(root).join("broken.png");
+    fs::write(&broken, b"original").unwrap();
+    fs::File::options()
+        .write(true)
+        .open(&broken)
+        .unwrap()
+        .set_modified(SystemTime::now() - Duration::from_secs(120))
+        .unwrap();
+    let failed = s.run(&[root, "--auto"]);
+    assert_eq!(failed.status.code(), Some(1));
+    assert_eq!(fs::read(broken).unwrap(), b"original");
+    let history = s.run(&["history", "--status", "failed", "--json"]);
+    assert!(history.status.success());
+    let stdout = String::from_utf8(history.stdout).unwrap();
+    assert!(stdout.contains(r#""tzim_status":"failed""#));
+    assert!(stdout.contains(r#""reason":"verify_failed""#));
+    assert!(stdout.contains(r#""tzim_error_kind":"verify""#));
+    assert!(stdout.contains(r#""tzim_error_message":"fixture verification failed""#));
+    let repeated = s.run(&[root, "--auto"]);
+    assert_eq!(repeated.status.code(), Some(1));
+    assert_eq!(
+        fs::read_to_string(fake.with_extension("invocations")).unwrap(),
+        "called\n"
+    );
+    fs::remove_file(std::path::Path::new(root).join("broken.png")).unwrap();
+    let wait_file = std::path::Path::new(root).join("wait.png");
+    let later_file = std::path::Path::new(root).join("zzz.png");
+    for path in [&wait_file, &later_file] {
+        fs::write(path, b"original").unwrap();
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(120))
+            .unwrap();
+    }
+    let staging = state.join("staging");
+    for (signal, expected_code) in [("-TERM", 143), ("-INT", 130)] {
+        let previous: std::collections::HashSet<_> = fs::read_dir(&staging)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        let mut child = Command::new(env!("CARGO_BIN_EXE_auto-tzim"))
+            .env("HOME", s.root.join("home"))
+            .env("AUTO_TZIM_HOME", s.root.join("config"))
+            .args([root, "--auto"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let started = std::time::Instant::now();
+        let ready = loop {
+            let ready = fs::read_dir(&staging).unwrap().any(|entry| {
+                let path = entry.unwrap().path();
+                !previous.contains(&path) && path.join("wait.png.ready").exists()
+            });
+            if ready
+                || started.elapsed() > Duration::from_secs(5)
+                || child.try_wait().unwrap().is_some()
+            {
+                break ready;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        if !ready {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        assert!(ready, "tzim never reached the signal fixture");
+        let active = s.run(&["status", "--json"]);
+        assert!(
+            active.status.success(),
+            "{}",
+            String::from_utf8_lossy(&active.stderr)
+        );
+        let active = auto_tzim_core::json::parse(&active.stdout).unwrap();
+        assert_eq!(
+            active.member("active").unwrap(),
+            &auto_tzim_core::json::Value::Bool(true)
+        );
+        assert_eq!(
+            active.member("active_run").unwrap().integer("pid").unwrap(),
+            u64::from(child.id())
+        );
+        let competing = s.run(&[root, "--auto"]);
+        assert_eq!(competing.status.code(), Some(8));
+        let sent = Command::new("/bin/kill")
+            .args([signal, &child.id().to_string()])
+            .status()
+            .unwrap();
+        assert!(sent.success());
+        let started = std::time::Instant::now();
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            if started.elapsed() > Duration::from_secs(5) {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("CLI did not exit after {signal}");
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(status.code(), Some(expected_code));
+        assert_eq!(fs::read(&wait_file).unwrap(), b"original");
+        assert_eq!(fs::read(&later_file).unwrap(), b"original");
+        let history = s.run(&[
+            "history",
+            "--status",
+            "interrupted",
+            "--limit",
+            "2",
+            "--json",
+        ]);
+        assert!(history.status.success());
+        let rows = String::from_utf8(history.stdout).unwrap();
+        assert_eq!(history_count(rows.as_bytes()), 2);
+        assert!(rows.contains(r#""relative_path":"wait.png""#));
+        assert!(rows.contains(r#""relative_path":"zzz.png""#));
+    }
+}
+
+#[test]
+fn pause_blocks_apply_but_allows_preview_and_resume() {
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let root = s.folder("pause-case");
+    let root = root.to_str().unwrap();
+
+    let pause = s.run(&["pause", "--json"]);
+    assert!(pause.status.success());
+    assert!(String::from_utf8_lossy(&pause.stdout).contains(r#""paused":true"#));
+    assert!(s.run(&["pause"]).status.success());
+    let status = s.run(&["status", "--json"]);
+    assert!(status.status.success());
+    let status = auto_tzim_core::json::parse(&status.stdout).unwrap();
+    assert_eq!(
+        status.member("paused").unwrap(),
+        &auto_tzim_core::json::Value::Bool(true)
+    );
+    assert_eq!(
+        status.member("active").unwrap(),
+        &auto_tzim_core::json::Value::Bool(false)
+    );
+
+    let blocked = s.run(&[root, "--auto", "--force"]);
+    assert_eq!(blocked.status.code(), Some(6));
+    assert!(String::from_utf8_lossy(&blocked.stderr).contains("paused"));
+    assert!(!s.root.join("tzim-calls").exists());
+    assert!(s.run(&[root, "--dry-run"]).status.success());
+
+    let resume = s.run(&["resume", "--json"]);
+    assert!(resume.status.success());
+    assert!(String::from_utf8_lossy(&resume.stdout).contains(r#""paused":false"#));
+    assert!(s.run(&["resume"]).status.success());
+    assert!(s.run(&[root, "--auto"]).status.success());
+    let status = s.run(&["status", "--json"]);
+    assert!(status.status.success());
+    let status = auto_tzim_core::json::parse(&status.stdout).unwrap();
+    assert_eq!(
+        status.member("paused").unwrap(),
+        &auto_tzim_core::json::Value::Bool(false)
+    );
+    assert_eq!(
+        status.member("active").unwrap(),
+        &auto_tzim_core::json::Value::Bool(false)
+    );
+    let auto_tzim_core::json::Value::Array(runs) = status.member("last_runs").unwrap() else {
+        panic!("expected run records");
+    };
+    assert_eq!(runs.len(), 1);
+    assert_eq!(
+        runs[0].member("state").unwrap(),
+        &auto_tzim_core::json::Value::String("completed".into())
+    );
+}
+
+#[test]
+fn staging_headroom_refuses_before_starting_tzim() {
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let root = s.folder("storage-case");
+    let content = fs::read_to_string(s.config()).unwrap();
+    fs::write(
+        s.config(),
+        format!("{content}\n[[folder]]\nname = \"storage\"\nroot = {:?}\nmin_free_bytes = 9223372036854775807\n", root.to_str().unwrap()),
+    ).unwrap();
+
+    let refused = s.run(&["run", "--folder", "storage", "--auto"]);
+    assert_eq!(
+        refused.status.code(),
+        Some(6),
+        "{}",
+        String::from_utf8_lossy(&refused.stderr)
+    );
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("min_free_bytes"));
+    assert!(!s.root.join("tzim-calls").exists());
+    assert!(!s.root.join("config/state/staging").exists());
+    assert!(s
+        .run(&["run", "--folder", "storage", "--dry-run"])
+        .status
+        .success());
+}
+
+#[test]
+fn doctor_and_config_validate_emit_single_json_results() {
+    use auto_tzim_core::json::{self, Value};
+    let s = Sandbox::new();
+    s.configure_tzim();
+    let result = |args: &[&str], command: &str| {
+        let output = s.run(args);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let parsed = json::parse(&output.stdout).unwrap();
+        assert_eq!(parsed.integer("schema").unwrap(), 1);
+        assert_eq!(
+            parsed.member("type").unwrap(),
+            &Value::String("result".into())
+        );
+        assert_eq!(
+            parsed.member("command").unwrap(),
+            &Value::String(command.into())
+        );
+        parsed
+    };
+    let doctor = result(&["doctor", "--json"], "doctor");
+    let tzim = doctor.member("tzim").unwrap();
+    assert_eq!(tzim.integer("result_schema").unwrap(), 2);
+    assert_eq!(
+        doctor.member("state").unwrap().member("ok").unwrap(),
+        &Value::Bool(true)
+    );
+    let validation = result(&["config", "validate", "--json"], "config validate");
+    assert_eq!(validation.member("valid").unwrap(), &Value::Bool(true));
+
+    fs::write(s.config(), "schema = [").unwrap();
+    let invalid = s.run(&["config", "validate", "--json"]);
+    assert_eq!(invalid.status.code(), Some(2));
+    assert!(invalid.stdout.is_empty());
+    assert!(!invalid.stderr.is_empty());
+}

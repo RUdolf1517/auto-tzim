@@ -35,7 +35,7 @@ fn failure(message: impl Into<String>) -> Incompatible {
     Incompatible(message.into())
 }
 
-fn read_pipe(mut pipe: impl Read, limit: u64) -> Result<Vec<u8>, String> {
+pub(crate) fn read_pipe(mut pipe: impl Read, limit: u64) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
     pipe.by_ref()
         .take(limit + 1)

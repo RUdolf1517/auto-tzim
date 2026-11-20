@@ -508,9 +508,19 @@ pub fn config_path() -> Result<PathBuf, ConfigError> {
 
 /// Reads and validates existing settings. Missing files are an empty default configuration.
 pub fn load(path: &std::path::Path) -> Result<Config, ConfigError> {
+    load_snapshot(path).map(|(config, _)| config)
+}
+
+/// Load configuration together with the digest of the exact bytes parsed.
+pub fn load_snapshot(path: &std::path::Path) -> Result<(Config, String), ConfigError> {
     let text = match std::fs::read_to_string(path) {
         Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Config::default()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok((
+                Config::default(),
+                crate::hash::hex(&crate::hash::sha256(b"")),
+            ))
+        }
         Err(error) => return Err(error.into()),
     };
     let mut errors = validate_document(&text);
@@ -521,7 +531,10 @@ pub fn load(path: &std::path::Path) -> Result<Config, ConfigError> {
         .map_err(|error| ConfigError::Invalid(vec![format!("invalid config: {error}")]))?;
     errors.extend(validate_config(&config));
     if errors.is_empty() {
-        Ok(config)
+        Ok((
+            config,
+            crate::hash::hex(&crate::hash::sha256(text.as_bytes())),
+        ))
     } else {
         Err(ConfigError::Invalid(errors))
     }
@@ -860,7 +873,7 @@ pub fn save(
 }
 
 #[cfg(unix)]
-fn create_private_directory(path: &std::path::Path) -> Result<(), ConfigError> {
+pub(crate) fn create_private_directory(path: &std::path::Path) -> Result<(), ConfigError> {
     use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
     if path.exists() {
         return Ok(());

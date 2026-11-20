@@ -179,29 +179,8 @@ pub fn json_string(value: &str) -> String {
 
 /// Serialize a plan record. The hash is computed only from D-52 canonical rows.
 pub fn document(plan: &Plan, created: std::time::SystemTime) -> std::io::Result<String> {
-    let duration = created
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| std::io::Error::other("clock before Unix epoch"))?;
-    let created = timestamp(duration.as_secs(), duration.subsec_nanos());
-    let canonical = canonical_rows(&plan.rows);
-    let mut rows = Vec::with_capacity(plan.rows.len());
-    let mut sorted: Vec<_> = plan.rows.iter().collect();
-    sorted.sort_by(|a, b| {
-        a.candidate
-            .path
-            .as_os_str()
-            .as_bytes()
-            .cmp(b.candidate.path.as_os_str().as_bytes())
-    });
-    for (line, row) in canonical.lines().zip(sorted) {
-        let prefix = line
-            .strip_suffix('}')
-            .ok_or_else(|| std::io::Error::other("invalid canonical row"))?;
-        rows.push(format!(
-            "{prefix},\"path\":{},\"status\":\"planned\"}}",
-            json_string(&row.candidate.path.to_string_lossy())
-        ));
-    }
+    let created = format_timestamp(created)?;
+    let rows = document_rows(&plan.rows)?;
     let skipped = plan
         .discovery
         .skipped
@@ -225,11 +204,181 @@ pub fn document(plan: &Plan, created: std::time::SystemTime) -> std::io::Result<
         })
         .collect::<Vec<_>>()
         .join(",");
-    Ok(format!("{{\"schema\":1,\"plan_id\":{},\"created\":{},\"root\":{},\"root_raw_b64\":{},\"plan_hash\":{},\"rows\":[{}],\"skipped\":[{}]}}\n", json_string(&plan.id), json_string(&created), json_string(&plan.root.to_string_lossy()), json_string(&base64(plan.root.as_os_str().as_bytes())), json_string(&plan.hash), rows.join(","), skipped))
+    Ok(format!("{{\"schema\":1,\"plan_id\":{},\"created\":{},\"root\":{},\"root_raw_b64\":{},\"plan_hash\":{},\"row_count\":{},\"rows\":[{}],\"skipped\":[{}]}}\n", json_string(&plan.id), json_string(&created), json_string(&plan.root.to_string_lossy()), json_string(&base64(plan.root.as_os_str().as_bytes())), json_string(&plan.hash), rows.len(), rows.join(","), skipped))
 }
 
 // UTC civil date conversion, Gregorian calendar; no external time dependency.
-fn timestamp(seconds: u64, nanos: u32) -> String {
+fn document_rows(plan_rows: &[Row]) -> std::io::Result<Vec<String>> {
+    let canonical = canonical_rows(plan_rows);
+    let mut rows = Vec::with_capacity(plan_rows.len());
+    let mut sorted: Vec<_> = plan_rows.iter().collect();
+    sorted.sort_by(|a, b| {
+        a.candidate
+            .path
+            .as_os_str()
+            .as_bytes()
+            .cmp(b.candidate.path.as_os_str().as_bytes())
+    });
+    for (line, row) in canonical.lines().zip(sorted) {
+        let prefix = line
+            .strip_suffix('}')
+            .ok_or_else(|| std::io::Error::other("invalid canonical row"))?;
+        rows.push(format!(
+            "{prefix},\"path\":{},\"status\":\"planned\"}}",
+            json_string(&row.candidate.path.to_string_lossy())
+        ));
+    }
+    Ok(rows)
+}
+
+/// Compare a stored plan with the current plan, streaming the saved rows.
+pub fn matches_file(plan: &Plan, path: &std::path::Path, id: &str) -> std::io::Result<bool> {
+    use crate::json::{self, Value};
+
+    let mut input = open_plan(path)?;
+    let header = read_plan_header(&mut input)?;
+    let root = base64(plan.root.as_os_str().as_bytes());
+    if header.integer("schema").ok() != Some(1)
+        || (header.member("row_count").is_ok()
+            && header.integer("row_count").ok() != Some(plan.rows.len() as u64))
+        || [
+            ("plan_id", id),
+            ("plan_hash", &plan.hash),
+            ("root_raw_b64", &root),
+        ]
+        .iter()
+        .any(|(key, expected)| header.member(key).ok() != Some(&Value::String((*expected).into())))
+    {
+        return Ok(false);
+    }
+
+    let mut bytes = Vec::new();
+    for (index, row) in document_rows(&plan.rows)?.iter().enumerate() {
+        if index != 0 && !consume(&mut input, b",", &mut bytes)? {
+            return Ok(false);
+        }
+        if !consume(&mut input, row.as_bytes(), &mut bytes)? {
+            return Ok(false);
+        }
+    }
+    if !consume(&mut input, b"],\"skipped\":[", &mut bytes)? {
+        return Ok(false);
+    }
+
+    // Skipped entries are descriptive and can differ from today's scan. Check
+    // their syntax and the document end without materializing the whole array.
+    let mut next = [0];
+    input.read_exact(&mut next)?;
+    if next != [b']'] {
+        loop {
+            if next != [b'{'] {
+                return Ok(false);
+            }
+            bytes.clear();
+            bytes.push(b'{');
+            let mut quoted = false;
+            let mut escaped = false;
+            loop {
+                input.read_exact(&mut next)?;
+                bytes.push(next[0]);
+                if bytes.len() > json::MAX_BYTES {
+                    return Ok(false);
+                }
+                if escaped {
+                    escaped = false;
+                } else if quoted && next == [b'\\'] {
+                    escaped = true;
+                } else if next == [b'"'] {
+                    quoted = !quoted;
+                } else if !quoted && next == [b'}'] {
+                    break;
+                }
+            }
+            json::parse(&bytes).map_err(std::io::Error::other)?;
+            input.read_exact(&mut next)?;
+            match next[0] {
+                b']' => break,
+                b',' => input.read_exact(&mut next)?,
+                _ => return Ok(false),
+            }
+        }
+    }
+    if !consume(&mut input, b"}", &mut bytes)? {
+        return Ok(false);
+    }
+    loop {
+        match input.read(&mut next)? {
+            0 => return Ok(true),
+            _ if next[0].is_ascii_whitespace() => {}
+            _ => return Ok(false),
+        }
+    }
+}
+
+fn consume(input: &mut impl Read, expected: &[u8], bytes: &mut Vec<u8>) -> std::io::Result<bool> {
+    bytes.resize(expected.len(), 0);
+    input.read_exact(bytes)?;
+    Ok(bytes == expected)
+}
+
+fn open_plan(path: &std::path::Path) -> std::io::Result<std::io::BufReader<std::fs::File>> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(crate::staging::SOURCE_FLAGS)
+        .open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(std::io::Error::other("expected regular plan file"));
+    }
+    Ok(std::io::BufReader::new(file))
+}
+
+/// Read plan metadata without loading candidate rows. Older plan records
+/// without a count use the original bounded JSON reader.
+pub fn read_header(path: &std::path::Path) -> std::io::Result<crate::json::Value> {
+    use crate::json::{self, Value};
+    use std::io::Error;
+    let mut input = open_plan(path)?;
+    let mut header = read_plan_header(&mut input)?;
+    if header.member("row_count").is_err() {
+        let mut bytes = b"{\"rows\":[".to_vec();
+        input.take(json::MAX_BYTES as u64).read_to_end(&mut bytes)?;
+        let tail = json::parse(&bytes).map_err(Error::other)?;
+        let Value::Array(rows) = tail.member("rows").map_err(Error::other)? else {
+            return Err(Error::other("expected plan rows"));
+        };
+        if let Value::Object(fields) = &mut header {
+            fields.insert("row_count".into(), Value::Number(rows.len().to_string()));
+        }
+    }
+    Ok(header)
+}
+
+fn read_plan_header(input: &mut impl Read) -> std::io::Result<crate::json::Value> {
+    use crate::json;
+    let mut prefix = Vec::new();
+    let delimiter = b",\"rows\":[";
+    let mut byte = [0];
+    while prefix.len() < json::MAX_BYTES && input.read(&mut byte)? != 0 {
+        prefix.push(byte[0]);
+        if prefix.ends_with(delimiter) {
+            prefix.truncate(prefix.len() - delimiter.len());
+            prefix.push(b'}');
+            return json::parse(&prefix).map_err(std::io::Error::other);
+        }
+    }
+    Err(std::io::Error::other("missing plan header"))
+}
+
+/// Render a timestamp in the UTC form used by plan and history records.
+pub fn format_timestamp(time: std::time::SystemTime) -> std::io::Result<String> {
+    let duration = time
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| std::io::Error::other("clock before Unix epoch"))?;
+    Ok(timestamp(duration.as_secs(), duration.subsec_nanos()))
+}
+
+pub(crate) fn timestamp(seconds: u64, nanos: u32) -> String {
     let days = (seconds / 86_400) as i64 + 719_468;
     let era = days / 146_097;
     let day_of_era = days - era * 146_097;
@@ -329,6 +478,54 @@ mod tests {
             argv: vec!["--".into(), "x.png".into()],
         }
     }
+    #[test]
+    fn verifies_a_large_saved_plan_and_rejects_a_truncated_tail() {
+        let id = plan_id().unwrap();
+        let path = std::env::temp_dir().join(format!("auto-tzim-plan-{id}.json"));
+        struct Fixture(PathBuf);
+        impl Drop for Fixture {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+        let fixture = Fixture(path);
+        let rows = (0..8_000)
+            .map(|index| {
+                let path = format!("image-{index:04}.png");
+                let mut row = row();
+                row.candidate.path = path.clone().into();
+                row.argv[1] = path.into();
+                row
+            })
+            .collect::<Vec<_>>();
+        let plan = Plan {
+            id: id.clone(),
+            root: "/example".into(),
+            hash: plan_hash(&rows),
+            rows,
+            discovery: crate::discovery::Discovery {
+                skipped: vec![crate::discovery::Skip {
+                    path: "odd}name.png".into(),
+                    reason: "skip \"quoted\"".into(),
+                }],
+                ..Default::default()
+            },
+        };
+        let document = document(&plan, std::time::UNIX_EPOCH).unwrap();
+        assert!(document.len() > crate::json::MAX_BYTES);
+        std::fs::write(&fixture.0, &document).unwrap();
+        assert!(matches_file(&plan, &fixture.0, &id).unwrap());
+        assert_eq!(
+            read_header(&fixture.0)
+                .unwrap()
+                .integer("row_count")
+                .unwrap(),
+            8_000
+        );
+        std::fs::write(&fixture.0, &document[..document.len() - 3]).unwrap();
+        assert!(!matches_file(&plan, &fixture.0, &id).unwrap_or(false));
+    }
+
     #[test]
     fn profile_arguments_are_relative_sorted_and_support_non_utf8() {
         use std::os::unix::ffi::OsStringExt;
